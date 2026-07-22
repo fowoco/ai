@@ -1,0 +1,31 @@
+# Git / IDE
+.git
+.idea
+.vscode
+
+# 로컬 가상환경·빌드 산출물
+.venv
+venv
+env
+*.egg-info
+dist
+build
+
+# 캐시·테스트 잔여물
+__pycache__
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+htmlcov
+tests
+
+# 시크릿·로컬 설정 (런타임 env로 주입)
+.env
+.env.local
+*.pem
+
+# 문서·스크립트 (이미지에 불필요)
+scripts
+*.md
+!README.md
