@@ -1,28 +1,122 @@
 # FOWOCO AI Agent Server
 
-AI Agent Workflow: Intent, Slot Filling, Ambiguity, Guardrail, Language, Response Agent
+FastAPI 기반 자연어 업무 처리 및 문서 생성·변환 서버다. 문서 처리는 한컴오피스,
+COM, `win32com`, `pywin32` 없이 Linux Docker 환경에서 동작한다.
 
-FastAPI 기반 AI 에이전트 서버 뼈대입니다.
+## 빠른 실행
 
-## 구조
+Docker와 Docker Compose가 설치된 환경에서 다음 명령 하나로 빌드하고 실행한다.
+
+```powershell
+docker compose up -d --build
+```
+
+실행 후 확인할 주소:
+
+- Swagger UI: <http://localhost:8000/docs>
+- OpenAPI JSON: <http://localhost:8000/openapi.json>
+- 문서 기능 조회: <http://localhost:8000/api/v1/documents/capabilities>
+
+상태와 로그는 Compose로 확인한다.
+
+```powershell
+docker compose ps
+docker compose logs -f ai
+```
+
+종료할 때는 다음 명령을 사용한다.
+
+```powershell
+docker compose down
+```
+
+`docker compose down`은 문서 스냅샷 볼륨을 보존한다. `docker compose down -v`는
+볼륨과 저장된 스냅샷까지 삭제하므로 데이터 초기화가 필요한 경우에만 사용한다.
+
+## 구조와 책임
 
 ```text
 app/
-  main.py              # 앱 진입점
-  api/                 # 라우터 뼈대 (엔드포인트 미구현)
-  agents/language/     # Agent B 자리 (구현 예정)
-  core/                # 설정·UTF-8 등 공통
+├─ agents/       자연어 의도 분석, 값 추출, 누락 정보 확인
+├─ api/          FastAPI Internal API, 요청·응답과 서비스 조립
+├─ documents/    HWP/HWPX/XML/PDF 처리, 편집, 변환, 스냅샷
+└─ core/         환경설정 등 공통 기반
 ```
 
-## 로컬 실행
+의존 방향은 다음 원칙을 따른다.
+
+```text
+Server → API → agents
+             └→ documents
+```
+
+- `agents`는 HWP/HWPX 파일 구조를 알지 않는다.
+- `documents`는 자연어를 해석하지 않고 구조화된 값과 파일만 처리한다.
+- `api`는 HTTP 계약을 담당하고 두 도메인의 서비스를 조립한다.
+
+상세 문서:
+
+- [Internal API 안내](app/api/README.md)
+- [문서 처리 아키텍처](app/documents/README.md)
+
+## 지원 변환
+
+입력 포맷은 확장자가 아니라 실제 파일 시그니처와 구조로 자동 판별한다.
+
+| 입력 | 지원 출력 |
+|---|---|
+| HWP 5.x | HWPX, XML, PDF |
+| HWPX | HWP 5.x, XML, PDF |
+| XML | HWP 5.x, HWPX, PDF |
+| PDF | 현재 출력 변환 없음 |
+
+HWPX→PDF 직접 렌더링이 실패하면 `HWPX → HWP → PDF` 경로를 자동으로 재시도한다.
+현재 포함된 네 가지 HWP/HWPX 양식에 대해 HWP·HWPX 직접 변환과 양쪽에서 만든 XML
+역변환을 조합한 Docker HTTP 검사 48건이 모두 통과한다.
+
+## 로컬 개발
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
-copy .env.example .env
-
 .\scripts\run.ps1
 ```
 
-- Docs: `http://localhost:8000/docs`
+Docker 없이 외부 변환 기능까지 사용하려면 Java/hwp2hwpx, rhwp, LibreOffice와
+H2Orestart import filter가 로컬 환경에 별도로 준비돼야 한다. 일반 개발과 실제 변환
+검증은 의존성이 고정된 Docker 사용을 권장한다.
+
+환경변수는 `FOWOCO_` 접두사를 사용한다.
+
+```text
+FOWOCO_DEBUG=false
+FOWOCO_DOCUMENT_UPLOAD_MAX_BYTES=52428800
+FOWOCO_DOCUMENT_CONVERSION_TIMEOUT_SECONDS=120
+FOWOCO_DOCUMENT_SNAPSHOT_DIR=/data/document-snapshots
+```
+
+호스트 포트를 변경하려면 Compose 실행 전에 설정한다.
+
+```powershell
+$env:FOWOCO_PORT=8080
+docker compose up -d --build
+```
+
+## 검증
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m ruff check app tests
+docker compose config --quiet
+```
+
+현재 자동화된 Python 테스트는 52개다. 문서 변환의 구조 검증과 별도로 신규 양식,
+특수 글꼴, 수식, 그리기 개체를 추가할 때는 PDF 시각 회귀 검증도 수행해야 한다.
+
+## 운영 참고
+
+- 업로드와 변환 중간 파일은 요청별 임시 디렉터리에 저장하고 응답 후 제거한다.
+- 스냅샷은 Docker의 `fowoco-document-data` 볼륨에 영속 저장한다.
+- 현재 파일 스냅샷 저장소는 단일 테넌트 기준이다.
+- 대용량 파일이나 높은 동시성이 필요하면 변환 작업을 별도 작업 큐로 분리한다.

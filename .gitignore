@@ -1,34 +1,83 @@
-# Python
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+.python-version
+.cache/
+.hypothesis/
+.nox/
+.tox/
+.ipynb_checkpoints/
+
+# Virtual environments
 .venv/
 venv/
 env/
+ENV/
+
+# Packaging and build output
 *.egg-info/
+pip-wheel-metadata/
 dist/
 build/
+wheelhouse/
+
+# Test, lint, type-check, and coverage output
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.pyright/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+test-results/
 
 # Env / secrets
 .env
+.env.*
+!.env.example
 .env.local
 *.pem
+*.key
+*.crt
+*.p12
+*.pfx
 
 # IDE / OS
 .idea/
 .vscode/
+.fleet/
+*.code-workspace
+*.swp
+*.swo
 .DS_Store
 Thumbs.db
+Desktop.ini
 
-# Runtime
+# Logs and local runtime data
 *.log
-logs/
-tmp/
-temp/
+/logs/
+/tmp/
+/temp/
+/data/
+/runtime/
+/uploads/
+/downloads/
+/outputs/
+/artifacts/
+/document-snapshots/
+*.pid
+*.sqlite
+*.sqlite3
+
+# Root-level documents used for manual conversion tests
+/*.hwp
+/*.hwpx
+/*.pdf
+/*.xml
+
+# Local Docker overrides
+compose.override.yml

@@ -1,0 +1,24 @@
+{
+  "template_id": "standard_labor_contract_v6",
+  "template_hash": "ab34ce13a47bcd912ae44bb6f411120be61117b63c8e517bb206bc8cb8c96411",
+  "fields": {
+    "enterprise_name": {"paragraph_index": 10, "require_empty": false, "replace_text": "업체명 Name of the enterprise", "replacement_format": "업체명 Name of the enterprise  {value}"},
+    "enterprise_phone": {"paragraph_index": 11, "require_empty": false, "replace_text": "전화번호 Phone number", "replacement_format": "전화번호 Phone number  {value}"},
+    "enterprise_address": {"paragraph_index": 12, "require_empty": false, "replace_text": "소재지 Location of the enterprise", "replacement_format": "소재지 Location of the enterprise  {value}"},
+    "employer_name": {"paragraph_index": 13, "require_empty": false, "replace_text": "성명 Name of the employer", "replacement_format": "성명 Name of the employer  {value}"},
+    "business_number": {"paragraph_index": 14, "require_empty": false, "replace_text": "사업자등록번호(주민등록번호)", "replacement_format": "사업자등록번호(주민등록번호)  {value}"},
+    "employee_name": {"paragraph_index": 19, "require_empty": false, "replace_text": "성명 Name of the employee", "replacement_format": "성명 Name of the employee  {value}"},
+    "employee_birthdate": {"paragraph_index": 20, "require_empty": false, "replace_text": "생년월일 Birthdate", "replacement_format": "생년월일 Birthdate  {value}"},
+    "employee_home_address": {"paragraph_index": 21, "require_empty": false, "replace_text": "본국주소 Address(Home Country)", "replacement_format": "본국주소 Address(Home Country)  {value}"},
+    "contract_months": {"paragraph_index": 24, "require_empty": false, "replace_text": "      ", "replacement_format": "{value}"},
+    "use_probation": {"type": "checkbox", "paragraph_index": 26, "require_empty": false},
+    "industry": {"paragraph_index": 38, "require_empty": false, "replace_text": "- 업종:", "replacement_format": "- 업종: {value}"},
+    "business_description": {"paragraph_index": 39, "require_empty": false, "replace_text": "- 사업내용:", "replacement_format": "- 사업내용: {value}"},
+    "job_description": {"paragraph_index": 40, "require_empty": false, "replace_text": "- 직무내용:", "replacement_format": "- 직무내용: {value}"},
+    "payment_direct": {"type": "checkbox", "paragraph_index": 92, "require_empty": false, "checkbox_occurrence": 0},
+    "payment_bank": {"type": "checkbox", "paragraph_index": 92, "require_empty": false, "checkbox_occurrence": 1},
+    "contract_date": {"paragraph_index": 123, "require_empty": false, "replace_text": "년        월        일", "replacement_format": "{value}"},
+    "employer_signature": {"type": "signature", "paragraph_index": 125, "width_mm": 34, "height_mm": 10},
+    "employee_signature": {"type": "signature", "paragraph_index": 128, "width_mm": 34, "height_mm": 10}
+  }
+}

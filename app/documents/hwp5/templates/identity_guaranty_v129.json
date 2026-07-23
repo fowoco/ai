@@ -1,0 +1,29 @@
+{
+  "template_id": "identity_guaranty_v129",
+  "template_hash": "b4a007fc2c0fe349638c0af3b0d02b0a09be21ab39c3a37b93a2e5b22418eacd",
+  "fields": {
+    "foreign_name": {"paragraph_index": 8, "require_empty": false, "replace_text": "명", "replacement_format": "명  {value}"},
+    "foreign_birthdate": {"paragraph_index": 10, "require_empty": false, "replace_text": "생년월일", "replacement_format": "생년월일  {value}"},
+    "foreign_male": {"type": "checkbox", "paragraph_index": 12, "require_empty": false, "checkbox_occurrence": 0},
+    "foreign_female": {"type": "checkbox", "paragraph_index": 12, "require_empty": false, "checkbox_occurrence": 1},
+    "foreign_nationality": {"paragraph_index": 13, "require_empty": false, "replace_text": "국적", "replacement_format": "국적  {value}"},
+    "foreign_passport": {"paragraph_index": 14, "require_empty": false, "replace_text": "여권번호", "replacement_format": "여권번호  {value}"},
+    "foreign_korea_address": {"paragraph_index": 15, "require_empty": false, "replace_text": "대한민국 주소", "replacement_format": "대한민국 주소  {value}"},
+    "foreign_phone": {"paragraph_index": 16, "require_empty": false, "replace_text": "전화번호", "replacement_format": "전화번호  {value}"},
+    "stay_purpose": {"paragraph_index": 17, "require_empty": false, "replace_text": "체류목적", "replacement_format": "체류목적  {value}"},
+    "guarantor_name": {"paragraph_index": 21, "require_empty": false, "replace_text": "성명", "replacement_format": "성명  {value}"},
+    "guarantor_nationality": {"paragraph_index": 23, "require_empty": false, "replace_text": "국적", "replacement_format": "국적  {value}"},
+    "guarantor_male": {"type": "checkbox", "paragraph_index": 25, "require_empty": false, "checkbox_occurrence": 0},
+    "guarantor_female": {"type": "checkbox", "paragraph_index": 25, "require_empty": false, "checkbox_occurrence": 1},
+    "guarantor_passport_or_birthdate": {"paragraph_index": 26, "require_empty": false, "replace_text": "여권번호 또는 생년월일", "replacement_format": "여권번호 또는 생년월일  {value}"},
+    "guarantor_phone": {"paragraph_index": 27, "require_empty": false, "replace_text": "전화번호", "replacement_format": "전화번호  {value}"},
+    "guarantor_address": {"paragraph_index": 28, "require_empty": false, "replace_text": "주소", "replacement_format": "주소  {value}"},
+    "relationship": {"paragraph_index": 29, "require_empty": false, "replace_text": "피보증인과의 관계", "replacement_format": "피보증인과의 관계  {value}"},
+    "workplace": {"paragraph_index": 30, "require_empty": false, "replace_text": "근무처", "replacement_format": "근무처  {value}"},
+    "position": {"paragraph_index": 31, "require_empty": false, "replace_text": "직위", "replacement_format": "직위  {value}"},
+    "workplace_address": {"paragraph_index": 32, "require_empty": false, "replace_text": "근무처 주소", "replacement_format": "근무처 주소  {value}"},
+    "guarantee_period": {"paragraph_index": 34, "require_empty": false, "replace_text": "나. 보증기간(보증기간의 최장기간은 4년으로 한다)", "replacement_format": "나. 보증기간: {value}"},
+    "guarantee_date": {"paragraph_index": 41, "require_empty": false, "replace_text": "년          월          일장", "replacement_format": "{value}"},
+    "guarantor_signature": {"type": "signature", "paragraph_index": 44, "width_mm": 28, "height_mm": 10}
+  }
+}

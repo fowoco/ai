@@ -1,0 +1,31 @@
+name: fowoco
+
+services:
+  ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fowoco-ai:latest
+    container_name: fowoco-ai
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${FOWOCO_PORT:-8000}:8000"
+    environment:
+      FOWOCO_DOCUMENT_SNAPSHOT_DIR: /data/document-snapshots
+    volumes:
+      - fowoco-document-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/openapi.json', timeout=5)"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  fowoco-document-data:
+    name: fowoco-document-data

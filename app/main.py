@@ -1,9 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app import __version__
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.documents.conversion import ConversionEngineUnavailableError
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -19,6 +20,18 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         default_response_class=UTF8JSONResponse,
     )
+
+    @app.exception_handler(ConversionEngineUnavailableError)
+    async def conversion_engine_unavailable(
+        request: Request,
+        exc: ConversionEngineUnavailableError,
+    ) -> JSONResponse:
+        del request
+        return UTF8JSONResponse(
+            status_code=503,
+            content={"detail": str(exc)},
+        )
+
     app.include_router(api_router, prefix="/api/v1")
     return app
 

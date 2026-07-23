@@ -16,6 +16,11 @@ dependencies = [
   "pydantic-settings>=2.7,<3",
   "python-dotenv>=1.0,<2",
   "httpx>=0.28,<1",
+  "python-multipart>=0.0.20,<1",
+  "olefile>=0.47,<1",
+  "ms-cfb==0.0.6",
+  "Pillow>=11.3,<12",
+  "hwp2hwpx==1.0.1",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +33,10 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["app*"]
+
+[tool.setuptools.package-data]
+"app.documents.hwp5.templates" = ["*.json", "*.hwp"]
+"app.documents.hwpx.templates" = ["*.hwpx"]
 
 [tool.pytest.ini_options]
 addopts = "-q"

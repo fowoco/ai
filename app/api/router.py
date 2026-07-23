@@ -1,4 +1,6 @@
 from fastapi import APIRouter
 
-# 기능 구현 시 routes/ 아래에 추가
+from app.api.routes.documents import router as documents_router
+
 api_router = APIRouter()
+api_router.include_router(documents_router)

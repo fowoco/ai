@@ -1,5 +1,8 @@
+import tempfile
 from functools import lru_cache
+from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,6 +11,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
+        env_prefix="FOWOCO_",
         extra="ignore",
     )
 
@@ -16,6 +20,18 @@ class Settings(BaseSettings):
     debug: bool = True
     host: str = "0.0.0.0"
     port: int = 8000
+    hwp_to_hwpx_enabled: bool = False
+    java_path: str = "java"
+    hwpx_to_hwp_enabled: bool = False
+    rhwp_path: str = "rhwp"
+    hwpx_pdf_enabled: bool = False
+    soffice_path: str = "soffice"
+    document_conversion_timeout_seconds: int = 120
+    document_upload_max_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
+    document_snapshot_dir: Path = Field(
+        default_factory=lambda: Path(tempfile.gettempdir())
+        / "fowoco-document-snapshots"
+    )
 
     # LLM — 미설정 시 템플릿 기반 stub 동작
     llm_provider: str | None = None

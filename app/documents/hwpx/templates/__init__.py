@@ -1,0 +1,2 @@
+"""Bundled HWPX templates."""
+
