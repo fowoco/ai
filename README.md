@@ -9,6 +9,7 @@
 - 추가: 확인된 셀 여러 개에 값을 붙여 새 HWPX로 저장
 - 추가: `rhwp` CLI를 통한 페이지별 SVG 렌더링과 Debug Overlay
 - 추가: 두 HWPX 버전의 구조·SVG 페이지 비교
+- 추가: 승인 대기 Edit Plan 생성과 승인 후 적용
 - 제한: 원본 덮어쓰기 금지, 허용 작업 폴더 밖 접근 금지, 출력 파일 재검증
 - 제한: `rhwp`는 `RHWP_COMMAND`로 지정하며 렌더링 출력 폴더는 새 경로여야 함
 - 미지원: `.hwp` 바이너리 직접 편집, 표·이미지·스타일의 의미 있는 편집, 원격 HTTP 배포
@@ -65,14 +66,16 @@ uv run pytest
 | `render_document` | `rhwp`로 페이지별 SVG와 Debug Overlay 생성 |
 | `compare_document_versions` | 문단·셀 구조와 페이지별 SVG SHA-256 비교 |
 | `fill_cells` | 확인된 셀 여러 개에 값을 입력하고 새 `.hwpx`로 저장 후 재검증 |
+| `create_edit_plan` | 셀 변경 계획을 만들고 승인 전 상태로 반환 |
+| `apply_edit_plan` | 승인·원본 지문·계획 무결성 확인 후 새 파일 생성 |
 | `replace_text` | 정확한 문자열을 새 `.hwpx` 파일에 치환 후 재검증 |
 | `validate_document` | ZIP/XML·필수 파트·구역 파일 검증 |
 
 ## 다음 단계
 
 1. 실제 HWPX 샘플 3종(단순 문서·표 포함·이미지 포함)으로 렌더링 검증
-2. 승인된 Edit Plan과 수정 전·후 픽셀 diff를 별도 Tool로 분리
-3. 문단 추가를 새 Tool로 분리
+2. 승인된 Edit Plan에 렌더링 결과 검증과 변경 차단을 연결
+3. 날짜·전화번호 정규화와 다중 필드 입력 계획을 추가
 4. 표 편집은 OWPML 구조와 참조 관계를 별도 학습한 뒤 설계
 5. HWP는 직접 편집이 아닌 HWP→HWPX 변환 어댑터부터 실험
 6. 로컬 검증이 끝난 뒤에만 Streamable HTTP·인증을 검토

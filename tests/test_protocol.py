@@ -8,14 +8,16 @@ import sys
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from test_hwpx import make_fixture
+from test_hwpx import make_fixture, make_table_fixture
 
 
 def test_stdio_server_lists_and_calls_tools(tmp_path: Path) -> None:
     source = tmp_path / "sample.hwpx"
     modified = tmp_path / "modified.hwpx"
+    plan_source = tmp_path / "plan-form.hwpx"
     make_fixture(source)
     make_fixture(modified, text="변경된 문서")
+    make_table_fixture(plan_source)
     asyncio.run(_exercise_server(tmp_path))
 
 
@@ -53,6 +55,8 @@ async def _exercise_server(root: Path) -> None:
                 "render_document",
                 "compare_document_versions",
                 "fill_cells",
+                "create_edit_plan",
+                "apply_edit_plan",
                 "replace_text",
                 "validate_document",
             } <= tool_names
@@ -84,3 +88,35 @@ async def _exercise_server(root: Path) -> None:
 
             assert compare_result.isError is not True
             assert compare_result.structuredContent["structure"]["changed_paragraphs"]
+
+            plan_result = await session.call_tool(
+                "create_edit_plan",
+                arguments={
+                    "path": "plan-form.hwpx",
+                    "edits": [
+                        {
+                            "target_id": "section0.table0.row0.cell1",
+                            "expected_text": "",
+                            "value": "계획 값",
+                            "label": "업체명",
+                        }
+                    ],
+                },
+            )
+
+            assert plan_result.isError is not True
+            plan = plan_result.structuredContent
+            assert plan["status"] == "WAITING_APPROVAL"
+
+            apply_result = await session.call_tool(
+                "apply_edit_plan",
+                arguments={
+                    "path": "plan-form.hwpx",
+                    "output_path": "planned.hwpx",
+                    "plan": plan,
+                    "approved": True,
+                },
+            )
+
+            assert apply_result.isError is not True
+            assert apply_result.structuredContent["status"] == "APPLIED"

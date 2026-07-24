@@ -9,6 +9,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from .compare import compare_manifests, compare_rendered_pages
 from .hwpx import (
     analyze_document as analyze_hwpx_document,
     DocumentError,
@@ -18,7 +19,12 @@ from .hwpx import (
     replace_text as replace_hwpx_text,
     validate_document as validate_file,
 )
-from .compare import compare_manifests, compare_rendered_pages
+from .plans import (
+    CellEditInput,
+    EditPlan,
+    create_edit_plan as build_edit_plan,
+    validate_edit_plan,
+)
 from .rhwp import render_svg
 
 
@@ -170,6 +176,49 @@ def fill_cells(path: str, output_path: str, edits: list[dict[str, str]]) -> dict
     input_path = _resolve_path(path, must_exist=True)
     destination = _resolve_output_path(output_path, input_path)
     return fill_hwpx_cells(input_path, destination, edits)
+
+
+@mcp.tool()
+def create_edit_plan(path: str, edits: list[CellEditInput]) -> dict[str, Any]:
+    """확인된 셀 변경을 파일을 만들지 않는 승인 대기 계획으로 반환합니다."""
+    input_path = _resolve_path(path, must_exist=True)
+    manifest = analyze_hwpx_document(input_path)
+    plan = build_edit_plan(input_path, manifest, edits)
+    logger.info("Edit Plan created: plan_id=%s operations=%d", plan.plan_id, len(plan.operations))
+    return plan.model_dump(exclude_none=True)
+
+
+@mcp.tool()
+def apply_edit_plan(
+    path: str,
+    output_path: str,
+    plan: EditPlan,
+    approved: bool = False,
+) -> dict[str, Any]:
+    """명시적 승인과 원본 재확인 후에만 편집 계획을 새 파일에 적용합니다."""
+    if not approved:
+        raise DocumentError("사용자 명시적 승인 없이는 Edit Plan을 적용할 수 없습니다.")
+    input_path = _resolve_path(path, must_exist=True)
+    validate_edit_plan(plan, input_path)
+    destination = _resolve_output_path(output_path, input_path)
+    edits = [
+        {
+            "target_id": operation.target_id,
+            "expected_text": operation.old_value,
+            "value": operation.new_value,
+        }
+        for operation in plan.operations
+    ]
+    result = fill_hwpx_cells(input_path, destination, edits)
+    result.update(
+        {
+            "plan_id": plan.plan_id,
+            "approved": True,
+            "status": "APPLIED",
+        }
+    )
+    logger.info("Edit Plan applied: plan_id=%s output=%s", plan.plan_id, destination)
+    return result
 
 
 @mcp.tool()
