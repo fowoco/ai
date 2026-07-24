@@ -13,7 +13,9 @@ from test_hwpx import make_fixture
 
 def test_stdio_server_lists_and_calls_tools(tmp_path: Path) -> None:
     source = tmp_path / "sample.hwpx"
+    modified = tmp_path / "modified.hwpx"
     make_fixture(source)
+    make_fixture(modified, text="변경된 문서")
     asyncio.run(_exercise_server(tmp_path))
 
 
@@ -49,6 +51,7 @@ async def _exercise_server(root: Path) -> None:
                 "extract_text",
                 "analyze_document",
                 "render_document",
+                "compare_document_versions",
                 "fill_cells",
                 "replace_text",
                 "validate_document",
@@ -69,3 +72,15 @@ async def _exercise_server(root: Path) -> None:
 
             assert render_result.isError is not True
             assert render_result.structuredContent["pages"] == 1
+
+            compare_result = await session.call_tool(
+                "compare_document_versions",
+                arguments={
+                    "original_path": "sample.hwpx",
+                    "modified_path": "modified.hwpx",
+                    "output_dir": "comparison",
+                },
+            )
+
+            assert compare_result.isError is not True
+            assert compare_result.structuredContent["structure"]["changed_paragraphs"]
