@@ -70,6 +70,13 @@ async def _exercise_server(root: Path) -> None:
             assert result.isError is not True
             assert result.structuredContent["valid"] is True
 
+            analyzed_result = await session.call_tool(
+                "analyze_document",
+                arguments={"path": "plan-form.hwpx"},
+            )
+            assert analyzed_result.isError is not True
+            assert analyzed_result.structuredContent["field_candidates"][0]["label"] == "업체명"
+
             render_result = await session.call_tool(
                 "render_document",
                 arguments={"path": "sample.hwpx", "output_dir": "rendered"},

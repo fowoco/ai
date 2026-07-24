@@ -564,11 +564,13 @@ MCP는 기능 연결을 담당한다. FastAPI는 현재 분석·계획·승인 �
 - 로컬 FastAPI Control Plane 최소 Endpoint
 - HWPX ZIP·XML 검사
 - 표·행·열·셀 구조 Manifest
+- 라벨 셀·인접 빈 셀 기반 입력 후보와 `requires_user_confirmation` 반환
 - `rhwp` CLI 호출 어댑터
 - `render_document` Tool의 페이지별 SVG·Debug Overlay 렌더링
 - `compare_document_versions` Tool의 구조·SVG SHA-256 비교
 - 승인 대기 `EditPlan` 생성과 원본 지문·계획 무결성 검증 후 적용
 - 날짜·전화번호 정규화 결과를 원본과 함께 반환
+- 표준근로계약서 대표 7개 입력 후보 확인
 - 승인된 셀 외 변경·문서 구조 변화·페이지 수 변화를 적용 후 차단
 - 원본 `rhwp` 레이아웃 경고 기준선 보존 및 신규 경고 차단
 - 확인된 셀 여러 개 값 입력
@@ -593,7 +595,7 @@ MCP는 기능 연결을 담당한다. FastAPI는 현재 분석·계획·승인 �
 
 1. 이미지 포함 HWPX 샘플과 이미지 삽입·교체 구조를 검증한다.
 2. 승인된 Edit Plan에 수정 전·후 렌더 비교와 예상 외 변경 차단을 연결한다.
-3. 날짜·전화번호 정규화와 표준근로계약서 7개 필드 입력을 추가한다.
+3. 표준근로계약서 7개 후보를 Agent 인터뷰 질문과 연결한다.
 4. FastAPI 파일 업로드·세션 Endpoint가 필요한지 실제 사용으로 검증한다.
 5. 결과에 따라 Python 편집기를 유지할지 `rhwp` 기반으로 교체할지 결정한다.
 
