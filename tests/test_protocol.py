@@ -27,6 +27,8 @@ async def _exercise_server(root: Path) -> None:
         "#!/usr/bin/env python3\n"
         "from pathlib import Path\n"
         "import sys\n"
+        "if sys.argv[1] == 'info':\n"
+        "    raise SystemExit(0)\n"
         "output = Path(sys.argv[sys.argv.index('--output') + 1])\n"
         "output.mkdir(parents=True, exist_ok=True)\n"
         "(output / 'page_001.svg').write_text('<svg />', encoding='utf-8')\n",

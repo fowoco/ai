@@ -13,16 +13,19 @@ def test_render_svg_returns_generated_pages(tmp_path: Path, monkeypatch) -> None
     output_dir.mkdir()
 
     def fake_run(command, **kwargs):
+        assert kwargs["check"] is False
+        if command[1] == "info":
+            assert command[:3] == ["rhwp", "info", str(source)]
+            return subprocess.CompletedProcess(
+                command, 0, stdout="LAYOUT_OVERFLOW: baseline\n", stderr=""
+            )
         assert command[:2] == ["rhwp", "export-svg"]
         assert command[2] == str(source)
         assert command[3:5] == ["--output", str(output_dir)]
         assert command[5] == "--debug-overlay"
-        assert kwargs["check"] is False
         (output_dir / "page_001.svg").write_text("<svg />", encoding="utf-8")
         (output_dir / "page_002.svg").write_text("<svg />", encoding="utf-8")
-        return subprocess.CompletedProcess(
-            command, 0, stdout="완료", stderr="LAYOUT_OVERFLOW: baseline\n"
-        )
+        return subprocess.CompletedProcess(command, 0, stdout="완료", stderr="")
 
     monkeypatch.setenv("RHWP_COMMAND", "rhwp")
     monkeypatch.setattr(rhwp.subprocess, "run", fake_run)
