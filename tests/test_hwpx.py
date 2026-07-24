@@ -103,6 +103,8 @@ def test_analyze_returns_table_cell_targets(tmp_path: Path) -> None:
     manifest = analyze_document(source)
 
     assert manifest["table_count"] == 1
+    assert manifest["field_candidates"][0]["label"] == "업체명"
+    assert manifest["field_candidates"][0]["target_id"] == "section0.table0.row0.cell1"
     assert manifest["sections"][0]["tables"][0]["row_count"] == 1
     cells = manifest["sections"][0]["tables"][0]["cells"]
     assert cells[0]["id"] == "section0.table0.row0.cell0"

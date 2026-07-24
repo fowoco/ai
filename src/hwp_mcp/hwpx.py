@@ -13,6 +13,8 @@ import zipfile
 from defusedxml import ElementTree as SafeET
 from defusedxml.common import DefusedXmlException
 
+from .fields import infer_field_candidates
+
 
 class DocumentError(ValueError):
     """사용자가 수정할 수 있는 문서 또는 경로 오류입니다."""
@@ -329,7 +331,7 @@ def analyze_document(path: Path) -> dict[str, Any]:
                 }
             )
 
-    return {
+    manifest = {
         "format": "hwpx",
         "valid": True,
         "sections": sections,
@@ -337,6 +339,8 @@ def analyze_document(path: Path) -> dict[str, Any]:
         "table_count": sum(section["table_count"] for section in sections),
         "image_count": sum(section["image_count"] for section in sections),
     }
+    manifest["field_candidates"] = infer_field_candidates(manifest)
+    return manifest
 
 
 def _safe_output_path(input_path: Path, output_path: Path) -> Path:
