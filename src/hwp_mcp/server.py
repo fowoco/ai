@@ -8,6 +8,7 @@ import sys
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import ValidationError
 
 from .compare import (
     compare_manifests,
@@ -204,6 +205,11 @@ def apply_edit_plan(
     """승인·재검증 후 적용하고 선택하면 rhwp 검토 결과까지 연결합니다."""
     if not approved:
         raise DocumentError("사용자 명시적 승인 없이는 Edit Plan을 적용할 수 없습니다.")
+    if not isinstance(plan, EditPlan):
+        try:
+            plan = EditPlan.model_validate(plan)
+        except ValidationError as exc:
+            raise DocumentError("Edit Plan 형식이 올바르지 않습니다.") from exc
     input_path = _resolve_path(path, must_exist=True)
     validate_edit_plan(plan, input_path)
     destination = _resolve_output_path(output_path, input_path)

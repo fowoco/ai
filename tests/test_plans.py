@@ -77,7 +77,9 @@ def test_plan_operations_can_be_applied_only_after_external_approval(
     with pytest.raises(DocumentError, match="명시적 승인"):
         apply_edit_plan("form.hwpx", "filled.hwpx", plan, approved=False)
 
-    result = apply_edit_plan("form.hwpx", "filled.hwpx", plan, approved=True)
+    result = apply_edit_plan(
+        "form.hwpx", "filled.hwpx", plan.model_dump(), approved=True
+    )
 
     assert result["validated"] is True
     assert "ABC" in extract_text(output)["text"]
