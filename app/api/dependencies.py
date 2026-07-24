@@ -3,7 +3,13 @@
 from functools import lru_cache
 
 from app.core.config import get_settings
-from app.documents import DocumentConversionService, Hwp5DocumentService, HwpxDocumentService
+from app.documents import (
+    DocumentConversionService,
+    DocumentEditingService,
+    DocumentRecordGenerationService,
+    Hwp5DocumentService,
+    HwpxDocumentService,
+)
 from app.documents.conversion.converters import (
     HwpToHwpxConverter,
     HwpToPdfConverter,
@@ -35,6 +41,23 @@ def get_document_snapshot_repository() -> DocumentSnapshotRepository:
     """Return the persistent package snapshot repository for this worker."""
 
     return DocumentSnapshotRepository(get_settings().document_snapshot_dir)
+
+
+@lru_cache
+def get_document_editing_service() -> DocumentEditingService:
+    """Return the format-dispatching document editor for this worker."""
+
+    return DocumentEditingService(
+        get_hwp5_document_service(),
+        get_hwpx_document_service(),
+    )
+
+
+@lru_cache
+def get_document_record_generation_service() -> DocumentRecordGenerationService:
+    """Return the TXT/DB-record rule-based document generator."""
+
+    return DocumentRecordGenerationService(get_hwpx_document_service())
 
 
 @lru_cache
@@ -89,6 +112,8 @@ def get_document_conversion_service() -> DocumentConversionService:
 
 __all__ = [
     "get_document_conversion_service",
+    "get_document_editing_service",
+    "get_document_record_generation_service",
     "get_document_snapshot_repository",
     "get_hwp5_document_service",
     "get_hwpx_document_service",

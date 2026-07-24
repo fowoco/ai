@@ -1,5 +1,40 @@
 # Documents
 
+## 레코드 기반 XML 자동 기입
+
+DB 연결 전에는 `app/documents/records`의 `TextRecordReader`가 UTF-8
+`key=value` TXT 파일을 DB 레코드 대신 읽는다. 읽은 값은 템플릿별 고정 규칙을
+거쳐 HWPX 내부 `Contents/section0.xml`의 지정 셀에 입력된다.
+
+```text
+테스트 TXT 또는 향후 DB Reader
+→ 공통 RecordReader 계약
+→ template_id별 XmlCellRule
+→ XML 테이블/행/열에 값 기입
+→ 중간 HWPX 패키지 저장
+→ API에서 HWP로 변환해 다운로드
+```
+
+규칙은 단순한 라벨 검색이 아니라 `table_index`, `row`, `column`과 기입 방식을
+사용한다. 기입 방식은 빈 셀 설정(`set`), 기존 라벨 뒤에 값 추가(`append`),
+기존 단위 앞에 값 추가(`prepend`), 값 다음 줄에 원문 안내문을 보존하는
+`prepend_line`, 셀 안의 표식 치환(`replace`)을 지원한다.
+따라서 한 양식 안에 `성명`, `전화번호`처럼 같은 라벨이 여러 번 있어도 서로
+다른 XML 셀에 연결할 수 있다.
+
+현재 다음 네 템플릿의 규칙과 테스트 TXT가 준비되어 있다.
+
+- `identity_guaranty_v129`
+- `employment_extension_application_v12_3`
+- `immigration_integrated_application_v34`
+- `standard_labor_contract_v6`
+
+DB를 연결할 때는 `RecordReader` 계약을 구현하는 DB 어댑터를 추가하면 된다.
+템플릿 규칙과 HWPX 생성 코드는 변경하지 않는다. `company.company_id`처럼 문서에
+매핑되지 않은 DB 컬럼은 무시하며, 실제로 매핑된 컬럼이 하나도 없으면 오류를
+반환한다. ERD 컬럼과 양식별 누락값은
+[ERD 기반 문서 레코드 매핑](records/README.md)에 정리되어 있다.
+
 `app/documents`는 자연어와 무관한 문서 도메인 계층이다. HWP 5.x 바이너리 편집,
 HWPX ZIP/XML 처리, 템플릿 식별, 포맷 변환, XML 왕복을 위한 스냅샷을 담당한다.
 
@@ -19,6 +54,10 @@ app/documents/
 │  ├─ errors.py                   변환 공통 오류
 │  ├─ converters/                 포맷별 변환 구현
 │  └─ engines/                    외부 프로세스 어댑터
+├─ editing/
+│  ├─ service.py                  HWP/HWPX 편집·생성 facade
+│  ├─ models.py                   템플릿·검사·편집 결과
+│  └─ exceptions.py               편집 도메인 오류
 ├─ hwp5/
 │  ├─ editor.py                   HWP 5.x 본문 레코드 편집
 │  ├─ compound_file.py            OLE/CFB 재구성
@@ -171,6 +210,29 @@ result = service.generate(
 
 HWPX 처리는 ZIP entry 경로, 중복 entry, 압축 해제 크기, 필수 패키지 파일을 검증한
 뒤 수행한다.
+
+## 통합 편집 facade
+
+API는 포맷별 서비스를 직접 분기하지 않고 `DocumentEditingService`를 사용한다.
+
+```text
+DocumentEditingService
+├─ HWP  → Hwp5DocumentService.fill()/generate()
+└─ HWPX → HwpxDocumentService.fill()/generate()
+```
+
+이 facade는 다음을 한 곳에서 처리한다.
+
+- 네 가지 템플릿의 HWP/HWPX 변형 조회
+- 업로드 파일 포맷과 원본 템플릿 식별
+- 입력 포맷을 유지하는 구조화 편집
+- 템플릿 기반 신규 생성
+- HWPX에서 요청한 동적 라벨이 실제로 모두 변경됐는지 검증
+- 포맷별 asset 지원 차이를 명시적 오류로 반환
+
+HWP 필드 맵의 `text`, `checkbox`, `photo`, `signature` 타입은 API 템플릿 상세에 그대로
+노출한다. HWPX는 아직 정적 필드 맵이 없고 표 라벨을 동적으로 찾으므로 템플릿 응답의
+필드 목록은 비어 있으며 `supports_dynamic_labels=true`다.
 
 ## 설정
 

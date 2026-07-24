@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app import __version__
+from app.api.openapi import OPENAPI_TAGS_METADATA
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.documents.conversion import ConversionEngineUnavailableError
@@ -19,6 +20,7 @@ def create_app() -> FastAPI:
         description="FOWOCO AI Agent Server",
         debug=settings.debug,
         default_response_class=UTF8JSONResponse,
+        openapi_tags=OPENAPI_TAGS_METADATA,
     )
 
     @app.exception_handler(ConversionEngineUnavailableError)

@@ -9,6 +9,7 @@ from app.api.dependencies import (
     get_hwp5_document_service,
     get_hwpx_document_service,
 )
+from app.api.openapi import DOCUMENT_CAPABILITIES_TAG
 from app.api.schemas.documents import (
     DocumentCapabilitiesResponse,
     DocumentConversionCapability,
@@ -21,7 +22,7 @@ from app.documents import (
     HwpxDocumentService,
 )
 
-router = APIRouter(tags=["documents"])
+router = APIRouter(tags=[DOCUMENT_CAPABILITIES_TAG])
 
 
 @router.get("/capabilities", response_model=DocumentCapabilitiesResponse)

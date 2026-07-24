@@ -16,8 +16,12 @@ def isolated_document_snapshots(
     monkeypatch.setenv("FOWOCO_DOCUMENT_SNAPSHOT_DIR", str(tmp_path / "snapshots"))
     get_settings.cache_clear()
     dependencies.get_document_snapshot_repository.cache_clear()
+    dependencies.get_document_editing_service.cache_clear()
+    dependencies.get_document_record_generation_service.cache_clear()
     dependencies.get_document_conversion_service.cache_clear()
     yield
     dependencies.get_document_conversion_service.cache_clear()
+    dependencies.get_document_record_generation_service.cache_clear()
+    dependencies.get_document_editing_service.cache_clear()
     dependencies.get_document_snapshot_repository.cache_clear()
     get_settings.cache_clear()

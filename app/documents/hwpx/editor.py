@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .errors import HwpxError
 from .package import HwpxPackage
-from .section_xml import HwpxSection
+from .section_xml import HwpxRecordAssignment, HwpxSection
 
 
 class HwpxDocument:
@@ -31,6 +31,12 @@ class HwpxDocument:
         options: Mapping[str, object],
     ) -> tuple[str, ...]:
         return self._section.apply_application_options(options)
+
+    def apply_record_assignments(
+        self,
+        assignments: tuple[HwpxRecordAssignment, ...],
+    ) -> tuple[str, ...]:
+        return self._section.apply_record_assignments(assignments)
 
     def section_xml(self) -> bytes:
         return self._section.to_bytes()

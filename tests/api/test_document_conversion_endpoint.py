@@ -47,7 +47,7 @@ class RecordingXmlConverter(RecordingConverter):
 @pytest.fixture(autouse=True)
 def isolate_api_dependencies(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
-        "app.api.routes.documents.convert.detect_document_format",
+        "app.api.routes.documents.uploads.detect_document_format",
         lambda source: DocumentFormat.HWP,
     )
     yield
@@ -65,15 +65,7 @@ def test_convert_openapi_exposes_only_simple_conversion_fields() -> None:
     assert "source_format" not in form_schema["properties"]
     assert "options" not in form_schema["properties"]
     assert set(form_schema["required"]) == {"file", "target_format"}
-
-    xml_request_schema = schema["paths"]["/api/v1/documents/convert/from-xml"]["post"][
-        "requestBody"
-    ]["content"]["multipart/form-data"]["schema"]
-    xml_component_name = xml_request_schema["$ref"].rsplit("/", 1)[-1]
-    xml_form_schema = schema["components"]["schemas"][xml_component_name]
-    assert set(xml_form_schema["required"]) == {"file", "target_format"}
-    assert "template_id" not in xml_form_schema["properties"]
-    assert "section" not in xml_form_schema["properties"]
+    assert "/api/v1/documents/convert/from-xml" not in schema["paths"]
 
 
 @pytest.mark.asyncio
@@ -131,7 +123,7 @@ async def test_convert_accepts_xml_input_with_automatic_snapshot_resolution(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "app.api.routes.documents.convert.detect_document_format",
+        "app.api.routes.documents.uploads.detect_document_format",
         lambda source: DocumentFormat.XML,
     )
 
@@ -146,34 +138,6 @@ async def test_convert_accepts_xml_input_with_automatic_snapshot_resolution(
     ) as client:
         response = await client.post(
             "/api/v1/documents/convert",
-            data={"target_format": "hwpx"},
-            files={"file": ("document.xml", b"<root/>", "application/xml")},
-        )
-
-    assert response.status_code == 200
-    assert response.content == b"converted:<root/>"
-    assert converter.options == {"document_name": "document"}
-
-
-@pytest.mark.asyncio
-async def test_convert_from_xml_passes_explicit_template_fields(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "app.api.routes.documents.convert.detect_document_format",
-        lambda source: DocumentFormat.XML,
-    )
-    converter = RecordingXmlConverter()
-    app.dependency_overrides[get_document_conversion_service] = lambda: (
-        DocumentConversionService((converter,))
-    )
-
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test",
-    ) as client:
-        response = await client.post(
-            "/api/v1/documents/convert/from-xml",
             data={"target_format": "hwpx"},
             files={"file": ("document.xml", b"<root/>", "application/xml")},
         )

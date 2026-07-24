@@ -1,5 +1,23 @@
 # Internal API
 
+## Swagger 태그 구성
+
+문서 API의 URL은 `/api/v1/documents` 아래에 유지하고 Swagger UI에서는 기능별로
+다음 여섯 그룹을 분리한다.
+
+| Swagger 태그 | 엔드포인트 |
+|---|---|
+| Document Capabilities | `GET /api/v1/documents/capabilities` |
+| Document Templates | `GET /api/v1/documents/templates`, `GET /api/v1/documents/templates/{template_id}` |
+| Document Inspection | `POST /api/v1/documents/inspect` |
+| Document Editing | `POST /api/v1/documents/edit` |
+| Document Generation | `POST /api/v1/documents/generate`, `POST /api/v1/documents/generate/from-txt` |
+| Document Conversion | `POST /api/v1/documents/convert` |
+
+포맷별 변환 URL은 별도로 만들지 않는다. HWP, HWPX, XML, PDF 사이의 지원되는
+모든 변환은 `POST /api/v1/documents/convert` 하나에서 입력 파일을 감지하고
+`target_format`에 따라 처리한다.
+
 `app/api`는 FastAPI 라우팅, 요청·응답 검증, 파일 전송, 문서 서비스 조립을 담당한다.
 실제 HWP/HWPX 편집이나 외부 변환 프로세스 실행 코드는 `app/documents`에 둔다.
 내부 문서 처리 방식은 [문서 처리 아키텍처](../documents/README.md)를 참고한다.
@@ -11,11 +29,149 @@
 | Swagger UI | `GET /docs` |
 | OpenAPI JSON | `GET /openapi.json` |
 | 문서 기능 조회 | `GET /api/v1/documents/capabilities` |
+| 템플릿 목록 | `GET /api/v1/documents/templates` |
+| 템플릿 상세 | `GET /api/v1/documents/templates/{template_id}` |
+| 문서 식별 | `POST /api/v1/documents/inspect` |
+| 문서 편집 | `POST /api/v1/documents/edit` |
+| 문서 생성 | `POST /api/v1/documents/generate` |
+| TXT 레코드 기반 문서 생성 | `POST /api/v1/documents/generate/from-txt` |
 | 범용 문서 변환 | `POST /api/v1/documents/convert` |
-| XML 변환 호환 경로 | `POST /api/v1/documents/convert/from-xml` |
 
-`/convert/from-xml`은 기존 클라이언트 호환을 위해 유지한다. 신규 호출은 입력 포맷을
-자동 감지하는 `/convert` 하나를 사용하면 된다.
+## 템플릿과 문서 식별
+
+`GET /documents/templates`는 같은 양식의 HWP/HWPX 변형을 하나의 `template_id` 아래에
+묶어서 반환한다. HWP 변형은 등록된 필드의 이름·종류·이미지 크기를 제공한다.
+HWPX 변형은 현재 표의 동적 라벨을 사용하므로 `supports_dynamic_labels=true`로
+표시한다.
+
+`POST /documents/inspect`는 `file` 하나를 받아 실제 포맷, 편집 지원 여부, SHA-256으로
+식별된 템플릿 ID를 반환한다. 등록 원본에서 이미 편집된 HWP/HWPX는 포맷은 감지되지만
+템플릿 ID는 `null`일 수 있다.
+
+## 문서 편집
+
+```http
+POST /api/v1/documents/edit
+Content-Type: multipart/form-data
+```
+
+| 필드 | 형식 | 필수 | 설명 |
+|---|---|---:|---|
+| `file` | binary | 예 | 편집할 HWP 또는 HWPX |
+| `payload` | JSON string | 예 | 템플릿, 값, 신청 옵션, asset 매핑 |
+| `assets` | binary[] | 아니요 | HWP 사진·서명 파일 |
+
+`payload` 예시:
+
+```json
+{
+  "template_id": "immigration_integrated_application_v34",
+  "values": {
+    "family_name": "HONG",
+    "given_names": "GILDONG",
+    "application_stay_extension": true
+  },
+  "assets": {
+    "photo": "photo.jpg",
+    "applicant_signature": "signature.png"
+  }
+}
+```
+
+```powershell
+curl.exe -X POST "http://localhost:8000/api/v1/documents/edit" `
+  -F "file=@application.hwp" `
+  -F 'payload={"template_id":"immigration_integrated_application_v34","values":{"family_name":"HONG"},"assets":{"photo":"photo.jpg"}}' `
+  -F "assets=@photo.jpg" `
+  --output edited.hwp
+```
+
+편집 결과는 입력과 같은 포맷이다. HWP는 텍스트·체크박스·사진·서명을 지원한다.
+HWPX는 `values`와 `application_options`의 동적 라벨 편집을 지원하지만 구조화된 이미지
+삽입은 아직 지원하지 않으며 asset 요청 시 HTTP 422를 반환한다.
+
+HWP는 바이너리 레코드 위치를 안전하게 사용하기 위해 등록된 원본 SHA-256과 템플릿
+맵이 일치해야 한다. `template_id`를 생략하면 원본 해시로 자동 식별한다.
+
+성공 응답에는 다음 헤더가 포함된다.
+
+- `X-Document-Template-Id`
+- `X-Changed-Field-Count`
+
+## 문서 생성
+
+`POST /documents/generate`는 원본 파일 없이 등록된 템플릿으로 HWP/HWPX를 생성한다.
+
+```json
+{
+  "template_id": "immigration_integrated_application_v34",
+  "format": "hwpx",
+  "values": {"성": "PARK", "명": "API"},
+  "application_options": {"외국인 등록": true}
+}
+```
+
+사진·서명이 필요한 HWP 생성은 `/edit`과 동일하게 `assets` 파일과
+`payload.assets`의 `필드명 → 파일명` 매핑을 사용한다.
+
+### 테스트 TXT 레코드로 HWP 생성
+
+DB 연결 전에는 `POST /api/v1/documents/generate/from-txt`로 네 개 고정 양식의
+규칙 기반 자동 기입을 테스트한다.
+
+```powershell
+curl.exe -X POST "http://localhost:8000/api/v1/documents/generate/from-txt" `
+  -F "template_id=immigration_integrated_application_v34" `
+  -F "file=@tests/fixtures/documents/records/immigration_integrated_application_v34.txt;type=text/plain" `
+  --output generated.hwp
+```
+
+TXT는 UTF-8이며 빈 줄과 `#` 주석을 제외하고 한 줄에 하나의 `key=value`를
+작성한다.
+
+```text
+company.name=주식회사 한빛정밀
+worker.legal_name=NGUYEN VAN AN
+worker.nationality=베트남
+worker.phone=010-1111-2222
+```
+
+`company.company_id`처럼 매핑 규칙에 없는 컬럼은 무시한다. `worker.legal_name`
+과 `worker.phone`은 암호화 컬럼을 복호화한 문서용 projection 별칭이다.
+서버는 HWPX 내부 XML에 값을 입력한 다음 COM 없이 HWP로 변환해 반환한다.
+PDF가 필요하면 반환된 HWP를 `/convert`에 전달한다.
+
+생성 응답의 다운로드 파일명은 `template_id.hwp`가 아니라 다음 공식 양식명을
+사용한다.
+
+- `통합신청서(신고서).hwp`
+- `[별지 제6호서식] 표준근로계약서(Standard Labor Contract)(외국인근로자의 고용 등에 관한 법률 시행규칙).hwp`
+- `[별지 제12호의3서식] 취업기간 만료자 취업활동 기간 연장신청서(외국인근로자의 고용 등에 관한 법률 시행규칙).hwp`
+- `신원보증서(한글).hwp`
+
+`GET /api/v1/documents/templates`와 개별 템플릿 조회 응답의 `display_name`도 같은
+공식 양식명을 반환한다. 내부 연동에는 기존의 안정적인 `template_id`를 계속
+사용한다.
+
+테스트 TXT는 ERD에서 조회 가능한 projection과 ERD에 없는 사용자·Agent 보완값을
+함께 담는다. 현재 scalar XML 규칙 전체가 적용되며 양식별 변경 필드 수는
+신원보증서 24개, 취업기간 연장신청서 21개, 통합신청서 40개,
+표준근로계약서 70개다. 신원보증서는 한자 이름, 성별 체크, 작성일과 하단 보증인
+이름까지 기입한다. 사진·서명 파일과 그 밖의 선택형 체크박스는 별도 asset·option
+기능이므로 이 개수에 포함되지 않는다.
+
+신원보증서의 추가 입력 키는 다음과 같다.
+
+```text
+foreign_name_hanja=阮文安
+foreign_male=true
+guarantor_name_hanja=金民洙
+guarantor_male=true
+guarantee_date=2026년 7월 24일
+```
+
+여성을 선택하려면 `foreign_female=true` 또는 `guarantor_female=true`를 사용한다.
+하단 보증인 이름은 기존 `guarantor_name` 값을 자동으로 한 번 더 사용한다.
 
 ## 범용 문서 변환
 
@@ -106,7 +262,7 @@ HWP는 LibreOffice로 바로 PDF 변환한다. HWPX→PDF가 문서 호환성 �
 | 상태 | 의미 |
 |---:|---|
 | 200 | 변환 성공 |
-| 400 | 파일 확장자 불일치 또는 XML 전용 경로에 잘못된 입력 |
+| 400 | 알려진 파일 확장자와 실제 감지 포맷이 일치하지 않음 |
 | 404 | XML이 참조하는 스냅샷을 찾을 수 없음 |
 | 409 | 같은 문서 이름이 서로 다른 양식 구조에 이미 연결됨 |
 | 413 | 업로드 크기 제한 초과 |
@@ -125,9 +281,14 @@ app/api/
 ├─ router.py                       `/api/v1` 하위 라우터 구성
 ├─ routes/documents/
 │  ├─ capabilities.py              등록된 기능 조회
+│  ├─ templates.py                 템플릿 목록·상세
+│  ├─ inspect.py                   포맷·템플릿 식별
+│  ├─ edit.py                      업로드 문서 편집
+│  ├─ generate.py                  템플릿 문서 생성
 │  └─ convert.py                   업로드·변환·다운로드
 └─ schemas/documents/
-   └─ capabilities.py              capability 응답 모델
+   ├─ capabilities.py              capability 응답 모델
+   └─ editing.py                   편집·생성·템플릿 모델
 ```
 
 새 API를 추가할 때 지킬 경계:

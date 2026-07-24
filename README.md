@@ -59,6 +59,25 @@ Server → API → agents
 - [Internal API 안내](app/api/README.md)
 - [문서 처리 아키텍처](app/documents/README.md)
 
+## 문서 API
+
+문서 API는 책임별로 분리한다.
+
+```text
+GET  /api/v1/documents/templates
+GET  /api/v1/documents/templates/{template_id}
+POST /api/v1/documents/inspect
+POST /api/v1/documents/edit
+POST /api/v1/documents/generate
+POST /api/v1/documents/generate/from-txt
+POST /api/v1/documents/convert
+```
+
+- `edit`: 업로드 HWP/HWPX를 같은 포맷으로 편집
+- `generate`: 등록 템플릿으로 새 HWP/HWPX 생성
+- `generate/from-txt`: DB 대신 테스트 TXT를 읽어 XML 자동기입 후 HWP 생성
+- `convert`: 내용 변경 없이 포맷 변환
+
 ## 지원 변환
 
 입력 포맷은 확장자가 아니라 실제 파일 시그니처와 구조로 자동 판별한다.
@@ -111,8 +130,8 @@ docker compose up -d --build
 docker compose config --quiet
 ```
 
-현재 자동화된 Python 테스트는 52개다. 문서 변환의 구조 검증과 별도로 신규 양식,
-특수 글꼴, 수식, 그리기 개체를 추가할 때는 PDF 시각 회귀 검증도 수행해야 한다.
+문서 변환의 구조 검증과 별도로 신규 양식, 특수 글꼴, 수식, 그리기 개체를 추가할
+때는 PDF 시각 회귀 검증도 수행해야 한다.
 
 ## 운영 참고
 

@@ -6,7 +6,9 @@ import io
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from .errors import HwpxError
 from .package import MAX_UNCOMPRESSED_BYTES
@@ -14,6 +16,28 @@ from .package import MAX_UNCOMPRESSED_BYTES
 HP_NAMESPACE = "http://www.hancom.co.kr/hwpml/2011/paragraph"
 HS_NAMESPACE = "http://www.hancom.co.kr/hwpml/2011/section"
 HP = f"{{{HP_NAMESPACE}}}"
+
+
+@dataclass(frozen=True)
+class HwpxRecordAssignment:
+    """외부 레코드 값을 특정 section XML 셀에 기입하는 명령."""
+
+    name: str
+    table_index: int
+    row: int
+    column: int
+    value: str
+    operation: Literal[
+        "set",
+        "append",
+        "prepend",
+        "prepend_line",
+        "replace",
+        "checkbox",
+    ] = "set"
+    marker: str | None = None
+    replacement_format: str | None = None
+    text_index: int | None = None
 
 
 def _normalise_label(value: str) -> tuple[str, str]:
@@ -47,6 +71,94 @@ def _get_or_create_text_element(cell: ET.Element) -> ET.Element:
     if text is None:
         text = ET.SubElement(run, f"{HP}t")
     return text
+
+
+def _find_cell(table: ET.Element, row: int, column: int) -> ET.Element | None:
+    for cell in table.iter(f"{HP}tc"):
+        address = cell.find(f"{HP}cellAddr")
+        if address is None:
+            continue
+        if (
+            int(address.attrib.get("rowAddr", -1)) == row
+            and int(address.attrib.get("colAddr", -1)) == column
+        ):
+            return cell
+    return None
+
+
+def _apply_record_assignment(
+    cell: ET.Element,
+    assignment: HwpxRecordAssignment,
+) -> bool:
+    text_elements = list(cell.iter(f"{HP}t"))
+    if assignment.operation == "set":
+        target = _get_or_create_text_element(cell)
+        target.text = assignment.value
+        for text_element in text_elements:
+            if text_element is not target:
+                text_element.text = ""
+        return True
+
+    nonempty = [element for element in text_elements if element.text]
+    target = nonempty[-1] if nonempty else _get_or_create_text_element(cell)
+    current = target.text or ""
+    if assignment.operation == "append":
+        separator = "" if not current or current.endswith((" ", "\t", "\n")) else "  "
+        target.text = f"{current}{separator}{assignment.value}"
+        return True
+    if assignment.operation == "prepend":
+        separator = "" if not current or assignment.value.endswith(" ") else " "
+        target.text = f"{assignment.value}{separator}{current}"
+        return True
+    if assignment.operation == "prepend_line":
+        target.text = assignment.value
+        line_break = ET.SubElement(target, f"{HP}lineBreak")
+        line_break.tail = current
+        return True
+    if assignment.operation not in {"replace", "checkbox"}:
+        raise HwpxError(
+            f"record rule {assignment.name!r} has unsupported operation "
+            f"{assignment.operation!r}"
+        )
+    if assignment.operation == "checkbox" and not _checkbox_enabled(
+        assignment.name,
+        assignment.value,
+    ):
+        return False
+    if not assignment.marker or assignment.replacement_format is None:
+        raise HwpxError(
+            f"record rule {assignment.name!r} needs marker and replacement_format"
+        )
+    replacement = assignment.replacement_format.format(value=assignment.value)
+    searchable_elements = text_elements
+    if assignment.text_index is not None:
+        try:
+            searchable_elements = [text_elements[assignment.text_index]]
+        except IndexError as exc:
+            raise HwpxError(
+                f"record rule {assignment.name!r} references missing text "
+                f"element {assignment.text_index}"
+            ) from exc
+    for text_element in searchable_elements:
+        text = text_element.text or ""
+        if assignment.marker in text:
+            text_element.text = text.replace(assignment.marker, replacement, 1)
+            return True
+    raise HwpxError(
+        f"record rule {assignment.name!r} marker was not found: "
+        f"{assignment.marker!r}"
+    )
+
+
+def _checkbox_enabled(name: str, value: str) -> bool:
+    normalized = value.strip().casefold()
+    if normalized in {"1", "true", "yes", "y", "on", "checked"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off", "unchecked"}:
+        return False
+    raise HwpxError(
+        f"record checkbox rule {name!r} needs a boolean value, got {value!r}"
+    )
 
 
 def _register_namespaces(xml_data: bytes) -> None:
@@ -180,6 +292,36 @@ class HwpxSection:
         self._dirty = self._dirty or bool(changed)
         return tuple(changed)
 
+    def apply_record_assignments(
+        self,
+        assignments: tuple[HwpxRecordAssignment, ...],
+    ) -> tuple[str, ...]:
+        """고정 양식용 규칙을 사용해 지정된 XML 셀을 수정한다."""
+
+        tables = list(self._root.iter(f"{HP}tbl"))
+        changed: list[str] = []
+        for assignment in assignments:
+            if not 0 <= assignment.table_index < len(tables):
+                raise HwpxError(
+                    f"record rule {assignment.name!r} references missing "
+                    f"table {assignment.table_index}"
+                )
+            cell = _find_cell(
+                tables[assignment.table_index],
+                assignment.row,
+                assignment.column,
+            )
+            if cell is None:
+                raise HwpxError(
+                    f"record rule {assignment.name!r} references missing cell "
+                    f"({assignment.row}, {assignment.column})"
+                )
+            if _apply_record_assignment(cell, assignment):
+                changed.append(assignment.name)
+
+        self._dirty = self._dirty or bool(changed)
+        return tuple(changed)
+
     def replace(self, xml_source: str | Path | bytes) -> None:
         if isinstance(xml_source, bytes):
             xml_data = xml_source
@@ -203,5 +345,6 @@ class HwpxSection:
 __all__ = [
     "HP_NAMESPACE",
     "HS_NAMESPACE",
+    "HwpxRecordAssignment",
     "HwpxSection",
 ]
