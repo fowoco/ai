@@ -10,14 +10,15 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from .hwpx import (
-    DocumentError,
     analyze_document as analyze_hwpx_document,
+    DocumentError,
     extract_text as extract_hwpx_text,
     fill_cells as fill_hwpx_cells,
     inspect_document as inspect_file,
     replace_text as replace_hwpx_text,
     validate_document as validate_file,
 )
+from .compare import compare_manifests, compare_rendered_pages
 from .rhwp import render_svg
 
 
@@ -125,6 +126,39 @@ def render_document(
     output_path = _resolve_render_dir(output_dir)
     try:
         return render_svg(input_path, output_path, debug_overlay=debug_overlay)
+    except Exception:
+        shutil.rmtree(output_path, ignore_errors=True)
+        raise
+
+
+@mcp.tool()
+def compare_document_versions(
+    original_path: str,
+    modified_path: str,
+    output_dir: str,
+    debug_overlay: bool = True,
+) -> dict[str, Any]:
+    """두 HWPX 파일의 구조와 페이지별 SVG 렌더 결과를 비교합니다."""
+    original = _resolve_path(original_path, must_exist=True)
+    modified = _resolve_path(modified_path, must_exist=True)
+    if original.suffix.lower() != ".hwpx" or modified.suffix.lower() != ".hwpx":
+        raise DocumentError("compare_document_versions는 .hwpx 파일만 지원합니다.")
+    output_path = _resolve_render_dir(output_dir)
+    original_output = output_path / "original"
+    modified_output = output_path / "modified"
+    original_output.mkdir()
+    modified_output.mkdir()
+    try:
+        original_render = render_svg(original, original_output, debug_overlay=debug_overlay)
+        modified_render = render_svg(modified, modified_output, debug_overlay=debug_overlay)
+        original_manifest = analyze_hwpx_document(original)
+        modified_manifest = analyze_hwpx_document(modified)
+        return {
+            "original_path": str(original),
+            "modified_path": str(modified),
+            "structure": compare_manifests(original_manifest, modified_manifest),
+            "visual": compare_rendered_pages(original_render, modified_render),
+        }
     except Exception:
         shutil.rmtree(output_path, ignore_errors=True)
         raise

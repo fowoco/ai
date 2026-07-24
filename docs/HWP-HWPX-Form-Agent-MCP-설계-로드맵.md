@@ -568,6 +568,7 @@ MCP는 기능 연결을 담당한다. FastAPI는 세션·미리보기·승인 �
 - 표·행·열·셀 구조 Manifest
 - `rhwp` CLI 호출 어댑터
 - `render_document` Tool의 페이지별 SVG·Debug Overlay 렌더링
+- `compare_document_versions` Tool의 구조·SVG SHA-256 비교
 - 확인된 셀 여러 개 값 입력
 - 본문 텍스트 추출
 - 제한적 문자열 치환
@@ -581,7 +582,7 @@ MCP는 기능 연결을 담당한다. FastAPI는 세션·미리보기·승인 �
 - FastAPI Control Plane
 - Agent 인터뷰 세션
 - Edit Plan 승인
-- 렌더링 비교
+- 픽셀 기반 렌더링 비교
 - PNG 렌더링
 - 양식 프로필
 - 다중 필드 입력
@@ -590,7 +591,7 @@ MCP는 기능 연결을 담당한다. FastAPI는 세션·미리보기·승인 �
 
 1. 단순 문서·이미지 포함 문서에도 `rhwp` 렌더링을 실행한다.
 2. 현재 Manifest와 `rhwp info` 구조 정보를 비교한다.
-3. 수정 전·후 SVG 구조 및 이미지 비교를 설계한다.
+3. 승인된 Edit Plan과 수정 전·후 픽셀 비교를 설계한다.
 4. 저장·재렌더링 가능성을 확인한다.
 5. 결과에 따라 Python 편집기를 유지할지 `rhwp` 기반으로 교체할지 결정한다.
 6. 결정 후 구조 기반 Edit Plan을 확장한다.

@@ -29,8 +29,8 @@ HWPX 파싱/편집 모듈 기반이 마련되었습니다. 다음 병목인 Rust
 
 - 1단계: 표준근로계약서 2페이지 SVG 렌더링 확인 완료
 - 2단계: 단순·이미지 포함 HWPX 샘플 추가 렌더링 검증
-- 3단계: 문단 추가 Tool 분리 및 FastAPI Control Plane 설계
-- 4단계: 수정 전·후 SVG 비교와 구조 diff 설계
+- 3단계: 문서 구조·SVG SHA-256 비교 Tool 완료
+- 4단계: 승인된 Edit Plan 및 픽셀 비교 설계
 
 ## Deferred
 
@@ -49,4 +49,5 @@ HWPX 파싱/편집 모듈 기반이 마련되었습니다. 다음 병목인 Rust
 
 - 단순·이미지 포함 HWPX 샘플의 `rhwp` 렌더링 검증.
 - 현재 Manifest와 `rhwp info` 결과 비교.
-- 수정 전·후 SVG 비교 방식 설계.
+- 승인된 Edit Plan 설계.
+- 픽셀 기반 렌더링 비교 방식 설계.

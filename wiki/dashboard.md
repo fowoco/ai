@@ -28,7 +28,8 @@ sources:
 - [x] `graphify` 지식 그래프 빌드 완료 (417 nodes, 552 edges)
 - [x] Project State 갱신 및 대시보드 동기화 완료
 - [x] `render_document` MCP Tool 및 `rhwp` CLI 어댑터 추가
-- [x] MCP STDIO 통합 테스트 `9 passed`
+- [x] `compare_document_versions` 구조·SVG 비교 Tool 추가
+- [x] MCP STDIO 통합 테스트 `10 passed`
 
 ## ⚠️ 결정 대기 (Decision Queue) & 리스크
 - **결정 대기**: `rhwp` 렌더링 엔진 연동 방식 선택 (Rust CLI vs Sidecar)
