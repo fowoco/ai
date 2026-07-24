@@ -116,11 +116,13 @@ async def _exercise_server(root: Path) -> None:
                     "output_path": "planned.hwpx",
                     "plan": plan,
                     "approved": True,
+                    "review_output_dir": "planned-review",
                 },
             )
 
             assert apply_result.isError is not True
             assert apply_result.structuredContent["status"] == "APPLIED"
+            assert apply_result.structuredContent["review"]["expected_changes"]["passed"] is True
 
             normalized_result = await session.call_tool(
                 "normalize_field_value",
