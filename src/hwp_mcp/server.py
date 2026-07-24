@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+import shutil
 import sys
 from typing import Any
 
@@ -17,6 +18,7 @@ from .hwpx import (
     replace_text as replace_hwpx_text,
     validate_document as validate_file,
 )
+from .rhwp import render_svg
 
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
@@ -73,6 +75,24 @@ def _resolve_output_path(raw_path: str, input_path: Path) -> Path:
     return resolved
 
 
+def _resolve_render_dir(raw_path: str) -> Path:
+    if not raw_path:
+        raise DocumentError("output_dir를 명시해야 합니다.")
+    root = _allowed_root()
+    candidate = Path(raw_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    resolved = candidate.resolve(strict=False)
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise DocumentError(f"허용된 작업 폴더 밖의 출력 경로입니다: {raw_path}") from exc
+    if resolved.exists():
+        raise DocumentError(f"새 출력 폴더를 지정해야 합니다: {resolved}")
+    resolved.mkdir(parents=True, exist_ok=False)
+    return resolved
+
+
 @mcp.tool()
 def inspect_document(path: str) -> dict[str, Any]:
     """로컬 HWPX 패키지를 검사하거나 HWP 레거시 형식을 미지원으로 보고합니다."""
@@ -92,6 +112,22 @@ def analyze_document(path: str) -> dict[str, Any]:
     """로컬 HWPX 파일의 표·셀·문단·이미지 후보를 반환합니다."""
     input_path = _resolve_path(path, must_exist=True)
     return analyze_hwpx_document(input_path)
+
+
+@mcp.tool()
+def render_document(
+    path: str, output_dir: str, debug_overlay: bool = True
+) -> dict[str, Any]:
+    """rhwp로 HWPX 페이지를 SVG로 렌더링합니다."""
+    input_path = _resolve_path(path, must_exist=True)
+    if input_path.suffix.lower() != ".hwpx":
+        raise DocumentError("render_document는 .hwpx 파일만 지원합니다.")
+    output_path = _resolve_render_dir(output_dir)
+    try:
+        return render_svg(input_path, output_path, debug_overlay=debug_overlay)
+    except Exception:
+        shutil.rmtree(output_path, ignore_errors=True)
+        raise
 
 
 @mcp.tool()
