@@ -35,8 +35,40 @@ def render_svg(
     if debug_overlay:
         command.append("--debug-overlay")
 
+    info_command = [*_command(), "info", str(input_path)]
+    info_completed = _run(info_command, timeout_seconds)
+    if info_completed.returncode != 0:
+        detail = (info_completed.stderr or info_completed.stdout).strip()
+        raise RhwpError(f"rhwp 문서 정보 확인에 실패했습니다: {detail or info_completed.returncode}")
+
+    completed = _run(command, timeout_seconds)
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
+        raise RhwpError(f"rhwp 렌더링에 실패했습니다: {detail or completed.returncode}")
+
+    files = sorted(output_dir.glob("*.svg"))
+    if not files:
+        raise RhwpError("rhwp가 SVG 페이지를 생성하지 않았습니다.")
+
+    layout_warnings = [
+        line.strip()
+        for line in (info_completed.stdout + "\n" + info_completed.stderr).splitlines()
+        if line.strip().startswith("LAYOUT_")
+    ]
+    return {
+        "renderer": "rhwp",
+        "format": "svg",
+        "output_dir": str(output_dir),
+        "files": [str(path) for path in files],
+        "pages": len(files),
+        "debug_overlay": debug_overlay,
+        "layout_warnings": layout_warnings,
+    }
+
+
+def _run(command: list[str], timeout_seconds: int) -> subprocess.CompletedProcess[str]:
     try:
-        completed = subprocess.run(
+        return subprocess.run(
             command,
             check=False,
             capture_output=True,
@@ -51,26 +83,3 @@ def render_svg(
         raise RhwpError(f"rhwp 실행 시간이 제한({timeout_seconds}초)을 초과했습니다.") from exc
     except OSError as exc:
         raise RhwpError(f"rhwp 실행에 실패했습니다: {exc}") from exc
-
-    if completed.returncode != 0:
-        detail = (completed.stderr or completed.stdout).strip()
-        raise RhwpError(f"rhwp 렌더링에 실패했습니다: {detail or completed.returncode}")
-
-    files = sorted(output_dir.glob("*.svg"))
-    if not files:
-        raise RhwpError("rhwp가 SVG 페이지를 생성하지 않았습니다.")
-
-    layout_warnings = [
-        line.strip()
-        for line in (completed.stderr or "").splitlines()
-        if line.strip().startswith("LAYOUT_")
-    ]
-    return {
-        "renderer": "rhwp",
-        "format": "svg",
-        "output_dir": str(output_dir),
-        "files": [str(path) for path in files],
-        "pages": len(files),
-        "debug_overlay": debug_overlay,
-        "layout_warnings": layout_warnings,
-    }
