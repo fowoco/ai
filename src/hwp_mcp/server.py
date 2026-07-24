@@ -9,7 +9,11 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from .compare import compare_manifests, compare_rendered_pages
+from .compare import (
+    compare_manifests,
+    compare_rendered_pages,
+    validate_expected_changes,
+)
 from .hwpx import (
     analyze_document as analyze_hwpx_document,
     DocumentError,
@@ -195,31 +199,80 @@ def apply_edit_plan(
     output_path: str,
     plan: EditPlan,
     approved: bool = False,
+    review_output_dir: str | None = None,
 ) -> dict[str, Any]:
-    """명시적 승인과 원본 재확인 후에만 편집 계획을 새 파일에 적용합니다."""
+    """승인·재검증 후 적용하고 선택하면 rhwp 검토 결과까지 연결합니다."""
     if not approved:
         raise DocumentError("사용자 명시적 승인 없이는 Edit Plan을 적용할 수 없습니다.")
     input_path = _resolve_path(path, must_exist=True)
     validate_edit_plan(plan, input_path)
     destination = _resolve_output_path(output_path, input_path)
-    edits = [
-        {
-            "target_id": operation.target_id,
-            "expected_text": operation.old_value,
-            "value": operation.new_value,
+    review_path: Path | None = None
+    try:
+        edits = [
+            {
+                "target_id": operation.target_id,
+                "expected_text": operation.old_value,
+                "value": operation.new_value,
+            }
+            for operation in plan.operations
+        ]
+        result = fill_hwpx_cells(input_path, destination, edits)
+        structure = compare_manifests(
+            analyze_hwpx_document(input_path), analyze_hwpx_document(destination)
+        )
+        expected_changes = validate_expected_changes(
+            structure, [operation.target_id for operation in plan.operations]
+        )
+        if not expected_changes["passed"]:
+            raise DocumentError(
+                "승인되지 않은 문서 변경이 감지되어 결과를 제공하지 않습니다."
+            )
+
+        review: dict[str, Any] = {
+            "structure": structure,
+            "expected_changes": expected_changes,
         }
-        for operation in plan.operations
-    ]
-    result = fill_hwpx_cells(input_path, destination, edits)
-    result.update(
-        {
-            "plan_id": plan.plan_id,
-            "approved": True,
-            "status": "APPLIED",
-        }
-    )
-    logger.info("Edit Plan applied: plan_id=%s output=%s", plan.plan_id, destination)
-    return result
+        if review_output_dir:
+            review_path = _resolve_render_dir(review_output_dir)
+            original_output = review_path / "original"
+            modified_output = review_path / "modified"
+            original_output.mkdir()
+            modified_output.mkdir()
+            original_render = render_svg(
+                input_path, original_output, debug_overlay=True
+            )
+            modified_render = render_svg(
+                destination, modified_output, debug_overlay=True
+            )
+            visual = compare_rendered_pages(original_render, modified_render)
+            if len(original_render["files"]) != len(modified_render["files"]):
+                raise DocumentError("수정 후 페이지 수가 달라져 결과를 제공하지 않습니다.")
+            review["visual"] = {
+                **visual,
+                "page_count_preserved": True,
+            }
+        else:
+            review["visual"] = {
+                "status": "NOT_REQUESTED",
+                "page_count_preserved": None,
+            }
+
+        result.update(
+            {
+                "plan_id": plan.plan_id,
+                "approved": True,
+                "status": "APPLIED",
+                "review": review,
+            }
+        )
+        logger.info("Edit Plan applied: plan_id=%s output=%s", plan.plan_id, destination)
+        return result
+    except Exception:
+        destination.unlink(missing_ok=True)
+        if review_path:
+            shutil.rmtree(review_path, ignore_errors=True)
+        raise
 
 
 @mcp.tool()

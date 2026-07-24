@@ -37,6 +37,29 @@ def compare_manifests(
     }
 
 
+def validate_expected_changes(
+    structure: dict[str, Any], expected_ids: list[str]
+) -> dict[str, Any]:
+    """승인된 셀 외의 변경과 예상 변경 누락을 확인합니다."""
+    expected = set(expected_ids)
+    actual_changes = {
+        change["id"]: change for change in structure["changed_cells"]
+    }
+    unexpected = [
+        actual_changes[item_id]
+        for item_id in sorted(set(actual_changes) - expected)
+    ]
+    missing = sorted(expected - set(actual_changes))
+    passed = structure["same_shape"] and not unexpected and not missing
+    return {
+        "passed": passed,
+        "expected_ids": sorted(expected),
+        "actual_ids": sorted(actual_changes),
+        "unexpected_changes": unexpected,
+        "missing_changes": missing,
+    }
+
+
 def _manifest_counts(manifest: dict[str, Any]) -> dict[str, int]:
     return {
         "paragraphs": manifest["paragraph_count"],
