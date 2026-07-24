@@ -57,6 +57,7 @@ async def _exercise_server(root: Path) -> None:
                 "fill_cells",
                 "create_edit_plan",
                 "apply_edit_plan",
+                "normalize_field_value",
                 "replace_text",
                 "validate_document",
             } <= tool_names
@@ -120,3 +121,16 @@ async def _exercise_server(root: Path) -> None:
 
             assert apply_result.isError is not True
             assert apply_result.structuredContent["status"] == "APPLIED"
+
+            normalized_result = await session.call_tool(
+                "normalize_field_value",
+                arguments={
+                    "request": {
+                        "field_type": "phone",
+                        "value": "01012345678",
+                    }
+                },
+            )
+
+            assert normalized_result.isError is not True
+            assert normalized_result.structuredContent["normalized"] == "010-1234-5678"
