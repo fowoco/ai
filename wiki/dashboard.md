@@ -16,7 +16,8 @@ sources:
 - [x] **Phase 0 일부**: Downloads HWPX 4종 구조 분석·SVG 렌더링
 - [ ] **Phase 0 잔여**: 이미지 포함 샘플과 레이아웃 기준선 상세 검증
 - [x] **Phase 1**: `inspect_document` 확장 및 표/셀/문단/이미지·입력 후보 모델 정의
-- [ ] **Phase 2**: Agent 인터뷰를 통한 사용자/근로자 정보 7개 필드 입력
+- [x] **Phase 2 일부**: 7개 후보·정규화·승인 Edit Plan 실제 적용 검증
+- [ ] **Phase 2 잔여**: Agent 인터뷰를 통한 사용자/근로자 정보 입력
 - [x] **Phase 3 일부**: Edit Plan 승인 대기·원본 지문 검증·새 파일 적용
 - [x] **Phase 3 일부**: 승인 외 셀 변경·페이지 수 변화 적용 후 차단
 - [ ] **Phase 3 잔여**: PNG 픽셀 기반 시각 diff 검증
