@@ -12,7 +12,8 @@ sources:
 # 프로젝트 대시보드 (Dashboard)
 
 ## 📌 남은 TODO & 마일스톤 (최우선)
-- [ ] **Phase 0 (진행 중)**: 표준근로계약서 HWPX 샘플 파일 준비 및 `rhwp` 렌더링/구조 파싱 연동 검증
+- [x] 표준근로계약서 HWPX 2페이지 `rhwp` SVG 렌더링 검증
+- [ ] **Phase 0 (진행 중)**: 단순·이미지 포함 샘플 렌더링 및 구조 비교
 - [ ] **Phase 1**: `inspect_document` 확장 및 표/셀/문단/이미지 후보 모델 정의
 - [ ] **Phase 2**: 사용자/근로자 정보 7개 필드 다중 입력 및 정규화
 - [ ] **Phase 3**: Edit Plan 승인, 수정 전/후 캡처 및 구조/이미지 시각 diff 검증
@@ -26,6 +27,8 @@ sources:
 - [x] `AGENT.project.md` 및 `SOUL.local.md` 설정 완료
 - [x] `graphify` 지식 그래프 빌드 완료 (417 nodes, 552 edges)
 - [x] Project State 갱신 및 대시보드 동기화 완료
+- [x] `render_document` MCP Tool 및 `rhwp` CLI 어댑터 추가
+- [x] MCP STDIO 통합 테스트 `9 passed`
 
 ## ⚠️ 결정 대기 (Decision Queue) & 리스크
 - **결정 대기**: `rhwp` 렌더링 엔진 연동 방식 선택 (Rust CLI vs Sidecar)

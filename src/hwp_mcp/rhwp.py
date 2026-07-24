@@ -1,0 +1,70 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+import shlex
+import subprocess
+from typing import Any
+
+from .hwpx import DocumentError
+
+
+DEFAULT_TIMEOUT_SECONDS = 120
+
+
+class RhwpError(DocumentError):
+    """rhwp 실행 또는 출력 검증 오류입니다."""
+
+
+def _command() -> list[str]:
+    configured = shlex.split(os.environ.get("RHWP_COMMAND", "rhwp"))
+    if not configured:
+        raise RhwpError("RHWP_COMMAND가 비어 있습니다.")
+    return configured
+
+
+def render_svg(
+    input_path: Path,
+    output_dir: Path,
+    *,
+    debug_overlay: bool = True,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """rhwp로 HWPX 페이지를 SVG로 렌더링합니다."""
+    command = [*_command(), "export-svg", str(input_path), "--output", str(output_dir)]
+    if debug_overlay:
+        command.append("--debug-overlay")
+
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except FileNotFoundError as exc:
+        raise RhwpError(
+            "rhwp 실행 파일을 찾지 못했습니다. RHWP_COMMAND를 설정하세요."
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RhwpError(f"rhwp 실행 시간이 제한({timeout_seconds}초)을 초과했습니다.") from exc
+    except OSError as exc:
+        raise RhwpError(f"rhwp 실행에 실패했습니다: {exc}") from exc
+
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
+        raise RhwpError(f"rhwp 렌더링에 실패했습니다: {detail or completed.returncode}")
+
+    files = sorted(output_dir.glob("*.svg"))
+    if not files:
+        raise RhwpError("rhwp가 SVG 페이지를 생성하지 않았습니다.")
+
+    return {
+        "renderer": "rhwp",
+        "format": "svg",
+        "output_dir": str(output_dir),
+        "files": [str(path) for path in files],
+        "pages": len(files),
+        "debug_overlay": debug_overlay,
+    }
