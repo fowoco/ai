@@ -1,0 +1,28 @@
+[project]
+name = "hwp-editor-mcp"
+version = "0.1.0"
+description = "A local MCP server for safe, narrow HWPX document inspection and text editing."
+requires-python = ">=3.10"
+dependencies = [
+  "defusedxml>=0.7.1",
+  "mcp[cli]>=1.27,<2",
+]
+
+[project.scripts]
+hwp-editor-mcp = "hwp_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hwp_mcp"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+]
