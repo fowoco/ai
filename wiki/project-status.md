@@ -28,7 +28,7 @@ HWPX 파싱/편집 모듈 기반이 마련되었습니다. 다음 병목인 Rust
 ## Priorities
 
 - 1단계: 표준근로계약서 2페이지 SVG 렌더링 확인 완료
-- 2단계: 단순·이미지 포함 HWPX 샘플 추가 렌더링 검증
+- 2단계: Downloads HWPX 4종 SVG 렌더링 확인 완료
 - 3단계: 문서 구조·SVG SHA-256 비교 Tool 완료
 - 4단계: 승인 대기 Edit Plan 생성·적용 경계 완료
 - 5단계: 날짜·전화번호 정규화 결과 Tool 완료
@@ -51,8 +51,9 @@ HWPX 파싱/편집 모듈 기반이 마련되었습니다. 다음 병목인 Rust
 
 ## Next actions
 
-- 단순·이미지 포함 HWPX 샘플의 `rhwp` 렌더링 검증.
+- 이미지 포함 HWPX 샘플의 `rhwp` 렌더링 검증.
 - 현재 Manifest와 `rhwp info` 결과 비교.
 - PNG 렌더러 확보 후 픽셀 기반 렌더 비교 연결.
 - FastAPI 파일 업로드·세션·인증은 로컬 MCP 흐름 검증 후 추가.
 - 7개 필드 입력을 Agent 인터뷰와 연결.
+- 원본 `rhwp` `LAYOUT_OVERFLOW` 경고 2건은 기준선으로 기록하고 신규 경고만 차단.

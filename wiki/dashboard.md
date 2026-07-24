@@ -13,7 +13,8 @@ sources:
 
 ## 📌 남은 TODO & 마일스톤 (최우선)
 - [x] 표준근로계약서 HWPX 2페이지 `rhwp` SVG 렌더링 검증
-- [ ] **Phase 0 (진행 중)**: 단순·이미지 포함 샘플 렌더링 및 구조 비교
+- [x] **Phase 0 일부**: Downloads HWPX 4종 구조 분석·SVG 렌더링
+- [ ] **Phase 0 잔여**: 이미지 포함 샘플과 레이아웃 기준선 상세 검증
 - [ ] **Phase 1**: `inspect_document` 확장 및 표/셀/문단/이미지 후보 모델 정의
 - [ ] **Phase 2**: 사용자/근로자 정보 7개 필드 다중 입력 및 정규화
 - [x] **Phase 3 일부**: Edit Plan 승인 대기·원본 지문 검증·새 파일 적용
@@ -34,6 +35,7 @@ sources:
 - [x] `create_edit_plan`·`apply_edit_plan` 승인 경계 추가
 - [x] `normalize_field_value` 날짜·전화번호 확인안 추가
 - [x] Edit Plan 적용 후 구조·SVG 렌더 검토와 결과 차단 연결
+- [x] 원본 `rhwp` 레이아웃 경고 기준선 보존·신규 경고 차단
 - [x] FastAPI Control Plane 최소 Endpoint 추가
 - [x] MCP STDIO·FastAPI 통합 테스트 `18 passed`
 

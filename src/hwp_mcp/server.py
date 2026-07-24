@@ -248,9 +248,20 @@ def apply_edit_plan(
             visual = compare_rendered_pages(original_render, modified_render)
             if len(original_render["files"]) != len(modified_render["files"]):
                 raise DocumentError("수정 후 페이지 수가 달라져 결과를 제공하지 않습니다.")
+            original_warnings = set(original_render.get("layout_warnings", []))
+            modified_warnings = set(modified_render.get("layout_warnings", []))
+            new_layout_warnings = sorted(modified_warnings - original_warnings)
+            if new_layout_warnings:
+                raise DocumentError(
+                    "수정 후 새 레이아웃 경고가 발생해 결과를 제공하지 않습니다."
+                )
             review["visual"] = {
                 **visual,
                 "page_count_preserved": True,
+                "original_layout_warnings": sorted(original_warnings),
+                "modified_layout_warnings": sorted(modified_warnings),
+                "new_layout_warnings": new_layout_warnings,
+                "layout_warnings_preserved": True,
             }
         else:
             review["visual"] = {

@@ -60,6 +60,11 @@ def render_svg(
     if not files:
         raise RhwpError("rhwp가 SVG 페이지를 생성하지 않았습니다.")
 
+    layout_warnings = [
+        line.strip()
+        for line in (completed.stderr or "").splitlines()
+        if line.strip().startswith("LAYOUT_")
+    ]
     return {
         "renderer": "rhwp",
         "format": "svg",
@@ -67,4 +72,5 @@ def render_svg(
         "files": [str(path) for path in files],
         "pages": len(files),
         "debug_overlay": debug_overlay,
+        "layout_warnings": layout_warnings,
     }

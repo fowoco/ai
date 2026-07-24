@@ -123,6 +123,7 @@ async def _exercise_server(root: Path) -> None:
             assert apply_result.isError is not True
             assert apply_result.structuredContent["status"] == "APPLIED"
             assert apply_result.structuredContent["review"]["expected_changes"]["passed"] is True
+            assert apply_result.structuredContent["review"]["visual"]["layout_warnings_preserved"] is True
 
             normalized_result = await session.call_tool(
                 "normalize_field_value",
