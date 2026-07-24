@@ -15,11 +15,11 @@ from defusedxml.common import DefusedXmlException
 
 
 class DocumentError(ValueError):
-    """Expected, user-correctable document or path error."""
+    """사용자가 수정할 수 있는 문서 또는 경로 오류입니다."""
 
 
 class UnsupportedFormatError(DocumentError):
-    """The requested operation is not supported for this document format."""
+    """요청한 작업을 해당 문서 형식에서 지원하지 않습니다."""
 
 
 HWPX_MIMETYPE_PREFIX = "application/hwp"
@@ -158,7 +158,7 @@ def _validate_archive(path: Path) -> ValidationReport:
 
 
 def validate_document(path: Path) -> dict[str, Any]:
-    """Validate a HWPX package without changing it."""
+    """변경 없이 HWPX 패키지를 검증합니다."""
     if _is_hwp(path):
         return {
             "valid": False,
@@ -172,7 +172,7 @@ def validate_document(path: Path) -> dict[str, Any]:
 
 
 def inspect_document(path: Path) -> dict[str, Any]:
-    """Return safe metadata and validation details for a document."""
+    """문서의 안전한 메타데이터와 검증 결과를 반환합니다."""
     if _is_hwp(path):
         return {
             "format": "hwp",
@@ -191,7 +191,7 @@ def inspect_document(path: Path) -> dict[str, Any]:
 
 
 def extract_text(path: Path) -> dict[str, Any]:
-    """Extract section and paragraph text from a valid HWPX package."""
+    """유효한 HWPX 패키지에서 구역과 문단 텍스트를 추출합니다."""
     _require_hwpx(path)
     report = _validate_archive(path)
     if not report.valid:
@@ -232,7 +232,7 @@ def _element_text(element: ET.Element) -> str:
 
 
 def analyze_document(path: Path) -> dict[str, Any]:
-    """Return a small structural manifest for form targeting."""
+    """양식 대상 지정을 위한 간단한 구조 Manifest를 반환합니다."""
     _require_hwpx(path)
     report = _validate_archive(path)
     if not report.valid:
@@ -420,7 +420,7 @@ def _find_cell(root: ET.Element, target_id: str) -> ET.Element:
 
 
 def fill_cells(path: Path, output_path: Path, edits: list[dict[str, str]]) -> dict[str, Any]:
-    """Append values to confirmed cells and write a new validated HWPX package."""
+    """확인된 셀에 값을 추가하고 검증된 새 HWPX 패키지를 작성합니다."""
     _require_hwpx(path)
     if not edits:
         raise DocumentError("edits는 비어 있을 수 없습니다.")
@@ -482,7 +482,7 @@ def fill_cells(path: Path, output_path: Path, edits: list[dict[str, str]]) -> di
                         text = ET.SubElement(run, run.tag.rsplit("}", 1)[0] + "}t")
                         text.text = edit["value"]
                         applied += 1
-                    # ponytail: append-only placement until a renderer proves safer field placement.
+                    # ponytail: 렌더러로 더 안전한 필드 배치를 확인하기 전까지 끝에 추가합니다.
                     data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
             entries.append((info, data))
 
@@ -497,7 +497,7 @@ def fill_cells(path: Path, output_path: Path, edits: list[dict[str, str]]) -> di
 
 
 def replace_text(path: Path, output_path: Path, old: str, new: str) -> dict[str, Any]:
-    """Replace exact text nodes and write a new validated HWPX package."""
+    """텍스트 노드를 정확히 치환하고 검증된 새 HWPX 패키지를 작성합니다."""
     _require_hwpx(path)
     if not old:
         raise DocumentError("old 텍스트는 비어 있을 수 없습니다.")

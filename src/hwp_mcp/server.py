@@ -25,8 +25,8 @@ logger = logging.getLogger("hwp-editor-mcp")
 mcp = FastMCP(
     "HWPX Editor",
     instructions=(
-        "Local-first HWPX inspection and narrow text editing. "
-        "Original files are never overwritten. HWP legacy binary editing is unsupported."
+        "로컬 우선 HWPX 검사와 제한적인 텍스트 편집을 제공합니다. "
+        "원본 파일은 절대 덮어쓰지 않습니다. HWP 레거시 바이너리 편집은 지원하지 않습니다."
     ),
     json_response=True,
 )
@@ -75,28 +75,28 @@ def _resolve_output_path(raw_path: str, input_path: Path) -> Path:
 
 @mcp.tool()
 def inspect_document(path: str) -> dict[str, Any]:
-    """Inspect a local HWPX package or report HWP legacy as unsupported."""
+    """로컬 HWPX 패키지를 검사하거나 HWP 레거시 형식을 미지원으로 보고합니다."""
     input_path = _resolve_path(path, must_exist=True)
     return inspect_file(input_path)
 
 
 @mcp.tool()
 def extract_text(path: str) -> dict[str, Any]:
-    """Extract section and paragraph text from a valid local HWPX file."""
+    """유효한 로컬 HWPX 파일에서 구역과 문단 텍스트를 추출합니다."""
     input_path = _resolve_path(path, must_exist=True)
     return extract_hwpx_text(input_path)
 
 
 @mcp.tool()
 def analyze_document(path: str) -> dict[str, Any]:
-    """Return tables, cells, paragraphs, and image candidates for a local HWPX file."""
+    """로컬 HWPX 파일의 표·셀·문단·이미지 후보를 반환합니다."""
     input_path = _resolve_path(path, must_exist=True)
     return analyze_hwpx_document(input_path)
 
 
 @mcp.tool()
 def fill_cells(path: str, output_path: str, edits: list[dict[str, str]]) -> dict[str, Any]:
-    """Append confirmed values to HWPX cells and write a new validated file."""
+    """확인된 값을 HWPX 셀에 추가하고 검증된 새 파일을 작성합니다."""
     input_path = _resolve_path(path, must_exist=True)
     destination = _resolve_output_path(output_path, input_path)
     return fill_hwpx_cells(input_path, destination, edits)
@@ -104,7 +104,7 @@ def fill_cells(path: str, output_path: str, edits: list[dict[str, str]]) -> dict
 
 @mcp.tool()
 def replace_text(path: str, output_path: str, old: str, new: str) -> dict[str, Any]:
-    """Replace exact HWPX text into a new output file and revalidate it."""
+    """HWPX 텍스트를 정확히 치환하고 새 출력 파일을 재검증합니다."""
     input_path = _resolve_path(path, must_exist=True)
     destination = _resolve_output_path(output_path, input_path)
     return replace_hwpx_text(input_path, destination, old, new)
@@ -112,7 +112,7 @@ def replace_text(path: str, output_path: str, old: str, new: str) -> dict[str, A
 
 @mcp.tool()
 def validate_document(path: str) -> dict[str, Any]:
-    """Validate HWPX ZIP/XML parts without changing the document."""
+    """문서를 변경하지 않고 HWPX ZIP/XML 파트를 검증합니다."""
     input_path = _resolve_path(path, must_exist=True)
     return validate_file(input_path)
 
