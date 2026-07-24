@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Brief"
+  short_description: "프로젝트 현황과 결정 지점을 사람 중심으로 브리핑"
+  default_prompt: "Use $brief to explain the current project state at the right depth."
