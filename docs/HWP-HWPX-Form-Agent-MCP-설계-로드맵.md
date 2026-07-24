@@ -268,18 +268,13 @@ FastMCP는 MCP Tool·Resource·Prompt를 선언하고 MCP Client와 연결하는
 
 ### 5.3 FastAPI 역할
 
-FastAPI는 일반 HTTP Control Plane으로 사용한다. FastAPI 자체가 MCP Server를 대체하지 않는다. [FastAPI 공식 문서](https://fastapi.tiangolo.com/)
+FastAPI는 일반 HTTP Control Plane으로 사용한다. FastAPI 자체가 MCP Server를 대체하지 않는다. 현재는 같은 MCP 기능을 호출하는 로컬 최소 골격까지 구현했다. [FastAPI 공식 문서](https://fastapi.tiangolo.com/)
 
 담당:
 
-- 파일 업로드
-- 세션 상태 조회
-- 인터뷰 진행 상태 조회
-- 미리보기 이미지 제공
-- 수정 계획 조회
-- 승인·적용 요청
-- 검증 보고서 제공
-- 향후 웹 UI·팀 서비스 연결
+- 현재: 상태 확인, 문서 분석, Edit Plan 생성, 승인·적용 요청
+- 예정: 파일 업로드, 세션 상태 조회, 인터뷰 진행 상태 조회
+- 예정: 미리보기 이미지·검증 보고서 제공, 웹 UI·팀 서비스 연결
 
 초기에는 로컬 실행만 허용한다. 원격 배포·인증은 로컬 검증 이후 추가한다.
 
@@ -473,7 +468,7 @@ RECEIVED
 - 개인정보를 양식 프로필에 저장하지 않음
 - 모든 적용 결과에 검증 보고서 연결
 
-MCP는 기능 연결을 담당한다. FastAPI는 세션·미리보기·승인 경로를 제공한다. 실제 허용·차단·검증은 Application Service와 실행 경계가 담당한다.
+MCP는 기능 연결을 담당한다. FastAPI는 현재 분석·계획·승인 적용 경로를 제공하고, 향후 세션·미리보기를 확장한다. 실제 허용·차단·검증은 공유 실행 경계가 담당한다.
 
 ## 11. 개발 단계
 
@@ -564,6 +559,7 @@ MCP는 기능 연결을 담당한다. FastAPI는 세션·미리보기·승인 �
 현재 구현:
 
 - 로컬 stdio MCP Server
+- 로컬 FastAPI Control Plane 최소 Endpoint
 - HWPX ZIP·XML 검사
 - 표·행·열·셀 구조 Manifest
 - `rhwp` CLI 호출 어댑터
@@ -577,26 +573,25 @@ MCP는 기능 연결을 담당한다. FastAPI는 세션·미리보기·승인 �
 - 제한적 문자열 치환
 - 원본 덮어쓰기 방지
 - 출력 파일 재검증
-- 테스트 `16 passed`
+- 테스트 `18 passed`
 - 공식 `rhwp v0.7.19`로 표준근로계약서 2페이지 렌더링 확인
 
 아직 구현하지 않은 것:
 
-- FastAPI Control Plane
 - Agent 인터뷰 세션
 - 렌더링 결과를 포함한 미리보기와 레이아웃 차단
 - 픽셀 기반 렌더링 비교 (PNG 렌더러 확보 전)
 - PNG 렌더링
 - 양식 프로필
 - 표준근로계약서 7개 필드 인터뷰 세션
-- FastAPI Control Plane
+- FastAPI 파일 업로드·세션·인증
 
 ## 14. 다음 작업
 
 1. 단순 문서·이미지 포함 문서에도 `rhwp` 렌더링을 실행한다.
 2. 승인된 Edit Plan에 수정 전·후 렌더 비교와 예상 외 변경 차단을 연결한다.
 3. 날짜·전화번호 정규화와 표준근로계약서 7개 필드 입력을 추가한다.
-4. FastAPI Control Plane이 필요한 시점과 최소 Endpoint를 검증한다.
+4. FastAPI 파일 업로드·세션 Endpoint가 필요한지 실제 사용으로 검증한다.
 5. 결과에 따라 Python 편집기를 유지할지 `rhwp` 기반으로 교체할지 결정한다.
 
 ## 참고 자료

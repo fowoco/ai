@@ -13,7 +13,7 @@
 - 추가: 날짜·전화번호 변환안을 별도로 확인하는 정규화 Tool
 - 제한: 원본 덮어쓰기 금지, 허용 작업 폴더 밖 접근 금지, 출력 파일 재검증
 - 제한: `rhwp`는 `RHWP_COMMAND`로 지정하며 렌더링 출력 폴더는 새 경로여야 함
-- 미지원: `.hwp` 바이너리 직접 편집, 표·이미지·스타일의 의미 있는 편집, 원격 HTTP 배포
+- 미지원: `.hwp` 바이너리 직접 편집, 표·이미지·스타일의 의미 있는 편집, 원격 HTTP 배포·인증
 
 HWP와 HWPX는 내부 구조가 다릅니다. HWPX는 ZIP/XML 기반이라 1차 대상으로 삼았고, HWP는 변환 어댑터를 별도 검토합니다.
 
@@ -28,6 +28,14 @@ HWP_MCP_ROOT="/path/to/allowed/documents" uv run hwp-editor-mcp
 ```
 
 `HWP_MCP_ROOT`를 지정하지 않으면 Server를 실행한 현재 폴더를 작업 루트로 사용합니다.
+
+FastAPI Control Plane은 같은 작업 루트를 사용합니다.
+
+```bash
+HWP_MCP_ROOT="/path/to/allowed/documents" uv run hwp-editor-api
+```
+
+현재 HTTP 범위는 `/health`, `/documents/analyze`, `/plans/create`, `/plans/apply`입니다. 파일 업로드·세션 저장·웹 인증은 아직 추가하지 않았습니다.
 
 ## MCP Client 등록 예시
 
@@ -72,6 +80,15 @@ uv run pytest
 | `normalize_field_value` | 날짜·전화번호 변환안을 반환하고 자동 적용하지 않음 |
 | `replace_text` | 정확한 문자열을 새 `.hwpx` 파일에 치환 후 재검증 |
 | `validate_document` | ZIP/XML·필수 파트·구역 파일 검증 |
+
+## FastAPI Endpoint
+
+| Endpoint | 동작 |
+|---|---|
+| `GET /health` | Control Plane 상태 확인 |
+| `POST /documents/analyze` | 허용 루트의 HWPX 구조 분석 |
+| `POST /plans/create` | 승인 대기 Edit Plan 생성 |
+| `POST /plans/apply` | 승인·검토 후 새 HWPX 생성 |
 
 ## 다음 단계
 

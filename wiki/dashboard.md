@@ -34,7 +34,8 @@ sources:
 - [x] `create_edit_plan`·`apply_edit_plan` 승인 경계 추가
 - [x] `normalize_field_value` 날짜·전화번호 확인안 추가
 - [x] Edit Plan 적용 후 구조·SVG 렌더 검토와 결과 차단 연결
-- [x] MCP STDIO 통합 테스트 `17 passed`
+- [x] FastAPI Control Plane 최소 Endpoint 추가
+- [x] MCP STDIO·FastAPI 통합 테스트 `18 passed`
 
 ## ⚠️ 결정 대기 (Decision Queue) & 리스크
 - **결정 대기**: `rhwp` 렌더링 엔진 연동 방식 선택 (Rust CLI vs Sidecar)
