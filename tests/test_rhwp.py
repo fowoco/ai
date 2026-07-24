@@ -20,7 +20,9 @@ def test_render_svg_returns_generated_pages(tmp_path: Path, monkeypatch) -> None
         assert kwargs["check"] is False
         (output_dir / "page_001.svg").write_text("<svg />", encoding="utf-8")
         (output_dir / "page_002.svg").write_text("<svg />", encoding="utf-8")
-        return subprocess.CompletedProcess(command, 0, stdout="완료", stderr="")
+        return subprocess.CompletedProcess(
+            command, 0, stdout="완료", stderr="LAYOUT_OVERFLOW: baseline\n"
+        )
 
     monkeypatch.setenv("RHWP_COMMAND", "rhwp")
     monkeypatch.setattr(rhwp.subprocess, "run", fake_run)
@@ -30,6 +32,7 @@ def test_render_svg_returns_generated_pages(tmp_path: Path, monkeypatch) -> None
     assert result["renderer"] == "rhwp"
     assert result["pages"] == 2
     assert result["debug_overlay"] is True
+    assert result["layout_warnings"] == ["LAYOUT_OVERFLOW: baseline"]
 
 
 def test_render_svg_rejects_empty_command(monkeypatch, tmp_path: Path) -> None:
