@@ -31,7 +31,8 @@ sources:
 - [x] `render_document` MCP Tool 및 `rhwp` CLI 어댑터 추가
 - [x] `compare_document_versions` 구조·SVG 비교 Tool 추가
 - [x] `create_edit_plan`·`apply_edit_plan` 승인 경계 추가
-- [x] MCP STDIO 통합 테스트 `13 passed`
+- [x] `normalize_field_value` 날짜·전화번호 확인안 추가
+- [x] MCP STDIO 통합 테스트 `16 passed`
 
 ## ⚠️ 결정 대기 (Decision Queue) & 리스크
 - **결정 대기**: `rhwp` 렌더링 엔진 연동 방식 선택 (Rust CLI vs Sidecar)

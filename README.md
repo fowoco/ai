@@ -10,6 +10,7 @@
 - 추가: `rhwp` CLI를 통한 페이지별 SVG 렌더링과 Debug Overlay
 - 추가: 두 HWPX 버전의 구조·SVG 페이지 비교
 - 추가: 승인 대기 Edit Plan 생성과 승인 후 적용
+- 추가: 날짜·전화번호 변환안을 별도로 확인하는 정규화 Tool
 - 제한: 원본 덮어쓰기 금지, 허용 작업 폴더 밖 접근 금지, 출력 파일 재검증
 - 제한: `rhwp`는 `RHWP_COMMAND`로 지정하며 렌더링 출력 폴더는 새 경로여야 함
 - 미지원: `.hwp` 바이너리 직접 편집, 표·이미지·스타일의 의미 있는 편집, 원격 HTTP 배포
@@ -68,6 +69,7 @@ uv run pytest
 | `fill_cells` | 확인된 셀 여러 개에 값을 입력하고 새 `.hwpx`로 저장 후 재검증 |
 | `create_edit_plan` | 셀 변경 계획을 만들고 승인 전 상태로 반환 |
 | `apply_edit_plan` | 승인·원본 지문·계획 무결성 확인 후 새 파일 생성 |
+| `normalize_field_value` | 날짜·전화번호 변환안을 반환하고 자동 적용하지 않음 |
 | `replace_text` | 정확한 문자열을 새 `.hwpx` 파일에 치환 후 재검증 |
 | `validate_document` | ZIP/XML·필수 파트·구역 파일 검증 |
 

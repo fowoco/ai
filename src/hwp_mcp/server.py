@@ -25,6 +25,7 @@ from .plans import (
     create_edit_plan as build_edit_plan,
     validate_edit_plan,
 )
+from .normalization import NormalizationRequest, normalize_field
 from .rhwp import render_svg
 
 
@@ -219,6 +220,12 @@ def apply_edit_plan(
     )
     logger.info("Edit Plan applied: plan_id=%s output=%s", plan.plan_id, destination)
     return result
+
+
+@mcp.tool()
+def normalize_field_value(request: NormalizationRequest) -> dict[str, Any]:
+    """날짜·전화번호 변환안을 반환하며 자동으로 문서에 적용하지 않습니다."""
+    return normalize_field(request).model_dump()
 
 
 @mcp.tool()
