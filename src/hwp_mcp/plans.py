@@ -53,11 +53,12 @@ class EditPlan(BaseModel):
 
 
 def create_edit_plan(
-    input_path: Path,
+    input_path: str | Path,
     manifest: dict[str, Any],
     edits: list[CellEditInput],
 ) -> EditPlan:
     """현재 문서와 일치하는 셀 변경 요청을 승인 대기 계획으로 만듭니다."""
+    input_path = Path(input_path)
     if not edits:
         raise EditPlanError("편집 계획에는 하나 이상의 변경이 필요합니다.")
 
@@ -126,8 +127,9 @@ def validate_edit_plan(plan: EditPlan, input_path: Path) -> None:
         raise EditPlanError("편집 계획의 무결성 검증에 실패했습니다.")
 
 
-def sha256_file(path: Path) -> str:
+def sha256_file(path: str | Path) -> str:
     """파일의 현재 지문을 계산합니다."""
+    path = Path(path)
     digest = hashlib.sha256()
     with path.open("rb") as source:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):

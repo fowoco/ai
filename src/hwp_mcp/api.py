@@ -10,6 +10,7 @@ from .plans import CellEditInput, EditPlan
 from .server import (
     analyze_document as analyze_mcp_document,
     apply_edit_plan as apply_mcp_edit_plan,
+    compare_document_versions as compare_mcp_versions,
     create_edit_plan as create_mcp_edit_plan,
 )
 
@@ -40,6 +41,17 @@ class ApplyPlanRequest(BaseModel):
     review_output_dir: str | None = Field(default=None, max_length=4096)
 
 
+class CompareRequest(BaseModel):
+    """두 문서의 시각/구조 비교 요청입니다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    original_path: str = Field(min_length=1, max_length=4096)
+    modified_path: str = Field(min_length=1, max_length=4096)
+    output_dir: str = Field(min_length=1, max_length=4096)
+    debug_overlay: bool = True
+
+
 def create_app() -> FastAPI:
     """MCP와 같은 로컬 기능을 HTTP로 노출하는 얇은 Control Plane을 만듭니다."""
     app = FastAPI(title="HWPX Editor Control Plane", version="0.1.0")
@@ -65,6 +77,16 @@ def create_app() -> FastAPI:
             request.plan,
             request.approved,
             request.review_output_dir,
+        )
+
+    @app.post("/compare/versions")
+    def compare_versions(request: CompareRequest) -> dict[str, Any]:
+        return _call(
+            compare_mcp_versions,
+            request.original_path,
+            request.modified_path,
+            request.output_dir,
+            request.debug_overlay,
         )
 
     return app

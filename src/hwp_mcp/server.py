@@ -14,6 +14,8 @@ from .compare import (
     compare_manifests,
     compare_rendered_pages,
     validate_expected_changes,
+    svg_to_png,
+    generate_visual_diff,
 )
 from .hwpx import (
     analyze_document as analyze_hwpx_document,
@@ -100,9 +102,7 @@ def _resolve_render_dir(raw_path: str) -> Path:
         resolved.relative_to(root)
     except ValueError as exc:
         raise DocumentError(f"허용된 작업 폴더 밖의 출력 경로입니다: {raw_path}") from exc
-    if resolved.exists():
-        raise DocumentError(f"새 출력 폴더를 지정해야 합니다: {resolved}")
-    resolved.mkdir(parents=True, exist_ok=False)
+    resolved.mkdir(parents=True, exist_ok=True)
     return resolved
 
 
@@ -158,18 +158,40 @@ def compare_document_versions(
     output_path = _resolve_render_dir(output_dir)
     original_output = output_path / "original"
     modified_output = output_path / "modified"
-    original_output.mkdir()
-    modified_output.mkdir()
+    original_output.mkdir(parents=True, exist_ok=True)
+    modified_output.mkdir(parents=True, exist_ok=True)
     try:
         original_render = render_svg(original, original_output, debug_overlay=debug_overlay)
         modified_render = render_svg(modified, modified_output, debug_overlay=debug_overlay)
         original_manifest = analyze_hwpx_document(original)
         modified_manifest = analyze_hwpx_document(modified)
+
+        # SVG -> PNG 캡처 생성 및 Visual Diff 빨간 하이라이트 박스 이미지 배출
+        visual_res = compare_rendered_pages(original_render, modified_render)
+        diff_dir = output_path / "diffs"
+        diff_dir.mkdir(parents=True, exist_ok=True)
+        visual_diff_reports = []
+
+        for page in visual_res.get("pages", []):
+            orig_svg = page.get("original")
+            mod_svg = page.get("modified")
+            p_num = page.get("page", 1)
+            if orig_svg and mod_svg and Path(orig_svg).exists() and Path(mod_svg).exists():
+                orig_png = original_output / f"page_{p_num:03d}.png"
+                mod_png = modified_output / f"page_{p_num:03d}.png"
+                diff_png = diff_dir / f"page_{p_num:03d}_diff.png"
+                svg_to_png(orig_svg, orig_png)
+                svg_to_png(mod_svg, mod_png)
+                v_diff = generate_visual_diff(orig_png, mod_png, diff_png)
+                visual_diff_reports.append(v_diff)
+
+        visual_res["visual_diffs"] = visual_diff_reports
+
         return {
             "original_path": str(original),
             "modified_path": str(modified),
             "structure": compare_manifests(original_manifest, modified_manifest),
-            "visual": compare_rendered_pages(original_render, modified_render),
+            "visual": visual_res,
         }
     except Exception:
         shutil.rmtree(output_path, ignore_errors=True)

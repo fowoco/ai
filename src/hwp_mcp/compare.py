@@ -131,3 +131,57 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def svg_to_png(svg_path: str | Path, output_png_path: str | Path) -> Path:
+    """SVG 파일을 PNG 캡처 이미지로 렌더링합니다."""
+    import resvg_py
+
+    svg_path = Path(svg_path)
+    output_png_path = Path(output_png_path)
+    output_png_path.parent.mkdir(parents=True, exist_ok=True)
+
+    svg_text = svg_path.read_text(encoding="utf-8", errors="ignore")
+    png_bytes = resvg_py.svg_to_bytes(svg_text)
+    output_png_path.write_bytes(png_bytes)
+    return output_png_path
+
+
+def generate_visual_diff(
+    orig_png_path: str | Path, mod_png_path: str | Path, diff_png_path: str | Path
+) -> dict[str, Any]:
+    """두 PNG 캡처를 비교하고 변경 영역에 빨간색 하이라이트 박스를 그린 차이 이미지를 작성합니다."""
+    from PIL import Image, ImageDraw, ImageChops
+
+    orig_path = Path(orig_png_path)
+    mod_path = Path(mod_png_path)
+    diff_path = Path(diff_png_path)
+    diff_path.parent.mkdir(parents=True, exist_ok=True)
+
+    img1 = Image.open(orig_path).convert("RGB")
+    img2 = Image.open(mod_path).convert("RGB")
+
+    diff = ImageChops.difference(img1, img2)
+    bbox = diff.getbbox()
+
+    if bbox:
+        highlight = img2.copy()
+        draw = ImageDraw.Draw(highlight)
+        padding = 6
+        x0 = max(0, bbox[0] - padding)
+        y0 = max(0, bbox[1] - padding)
+        x1 = min(img2.width, bbox[2] + padding)
+        y1 = min(img2.height, bbox[3] + padding)
+        draw.rectangle([x0, y0, x1, y1], outline="red", width=3)
+        highlight.save(diff_path)
+        has_diff = True
+    else:
+        img2.save(diff_path)
+        has_diff = False
+
+    return {
+        "has_diff": has_diff,
+        "diff_bbox": list(bbox) if bbox else None,
+        "diff_png_path": str(diff_path),
+    }
+
