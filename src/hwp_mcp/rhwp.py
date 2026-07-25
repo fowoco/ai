@@ -17,10 +17,18 @@ class RhwpError(DocumentError):
 
 
 def _command() -> list[str]:
-    configured = shlex.split(os.environ.get("RHWP_COMMAND", "rhwp"))
-    if not configured:
-        raise RhwpError("RHWP_COMMAND가 비어 있습니다.")
-    return configured
+    env_cmd = os.environ.get("RHWP_COMMAND")
+    if env_cmd is not None:
+        configured = shlex.split(env_cmd)
+        if not configured:
+            raise RhwpError("RHWP_COMMAND가 비어 있습니다.")
+        return configured
+
+    cargo_rhwp = Path.home() / ".cargo/bin/rhwp"
+    if cargo_rhwp.exists():
+        return [str(cargo_rhwp)]
+
+    return ["rhwp"]
 
 
 def render_svg(
@@ -31,6 +39,7 @@ def render_svg(
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
     """rhwp로 HWPX 페이지를 SVG로 렌더링합니다."""
+    output_dir.mkdir(parents=True, exist_ok=True)
     command = [*_command(), "export-svg", str(input_path), "--output", str(output_dir)]
     if debug_overlay:
         command.append("--debug-overlay")
@@ -76,6 +85,7 @@ def render_svg(
     }
 
 
+
 def _run(command: list[str], timeout_seconds: int) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
@@ -93,3 +103,4 @@ def _run(command: list[str], timeout_seconds: int) -> subprocess.CompletedProces
         raise RhwpError(f"rhwp 실행 시간이 제한({timeout_seconds}초)을 초과했습니다.") from exc
     except OSError as exc:
         raise RhwpError(f"rhwp 실행에 실패했습니다: {exc}") from exc
+

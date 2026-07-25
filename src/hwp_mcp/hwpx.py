@@ -13,7 +13,7 @@ import zipfile
 from defusedxml import ElementTree as SafeET
 from defusedxml.common import DefusedXmlException
 
-from .fields import infer_field_candidates
+from .fields import infer_field_candidates, infer_field_segments
 
 
 class DocumentError(ValueError):
@@ -60,12 +60,13 @@ def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def _is_hwp(path: Path) -> bool:
-    return path.suffix.lower() == ".hwp"
+def _is_hwp(path: str | Path) -> bool:
+    return Path(path).suffix.lower() == ".hwp"
 
 
-def _is_hwpx(path: Path) -> bool:
-    return path.suffix.lower() == ".hwpx"
+def _is_hwpx(str_or_path: str | Path) -> bool:
+    return Path(str_or_path).suffix.lower() == ".hwpx"
+
 
 
 def _require_hwpx(path: Path) -> None:
@@ -159,8 +160,9 @@ def _validate_archive(path: Path) -> ValidationReport:
     return ValidationReport(not errors, "hwpx", len(names) if "names" in locals() else 0, sections, errors)
 
 
-def validate_document(path: Path) -> dict[str, Any]:
+def validate_document(path: str | Path) -> dict[str, Any]:
     """변경 없이 HWPX 패키지를 검증합니다."""
+    path = Path(path)
     if _is_hwp(path):
         return {
             "valid": False,
@@ -173,8 +175,9 @@ def validate_document(path: Path) -> dict[str, Any]:
     return _validate_archive(path).as_dict()
 
 
-def inspect_document(path: Path) -> dict[str, Any]:
+def inspect_document(path: str | Path) -> dict[str, Any]:
     """문서의 안전한 메타데이터와 검증 결과를 반환합니다."""
+    path = Path(path)
     if _is_hwp(path):
         return {
             "format": "hwp",
@@ -233,8 +236,9 @@ def _element_text(element: ET.Element) -> str:
     return "".join(child.text or "" for child in element.iter() if _local_name(child.tag) == "t")
 
 
-def analyze_document(path: Path) -> dict[str, Any]:
+def analyze_document(path: str | Path) -> dict[str, Any]:
     """양식 대상 지정을 위한 간단한 구조 Manifest를 반환합니다."""
+    path = Path(path)
     _require_hwpx(path)
     report = _validate_archive(path)
     if not report.valid:
@@ -340,6 +344,7 @@ def analyze_document(path: Path) -> dict[str, Any]:
         "image_count": sum(section["image_count"] for section in sections),
     }
     manifest["field_candidates"] = infer_field_candidates(manifest)
+    manifest["field_segments"] = infer_field_segments(manifest)
     return manifest
 
 
@@ -423,8 +428,10 @@ def _find_cell(root: ET.Element, target_id: str) -> ET.Element:
         raise DocumentError(f"셀 대상을 찾지 못했습니다: {target_id}") from exc
 
 
-def fill_cells(path: Path, output_path: Path, edits: list[dict[str, str]]) -> dict[str, Any]:
+def fill_cells(path: str | Path, output_path: str | Path, edits: list[dict[str, str]]) -> dict[str, Any]:
     """확인된 셀에 값을 추가하고 검증된 새 HWPX 패키지를 작성합니다."""
+    path = Path(path)
+    output_path = Path(output_path)
     _require_hwpx(path)
     if not edits:
         raise DocumentError("edits는 비어 있을 수 없습니다.")
@@ -438,10 +445,12 @@ def fill_cells(path: Path, output_path: Path, edits: list[dict[str, str]]) -> di
     by_section: dict[str, list[dict[str, str]]] = {}
     for edit in edits:
         target_id = edit.get("target_id", "")
-        expected_text = edit.get("expected_text", "")
-        value = edit.get("value", "")
+        expected_text = edit.get("expected_text", edit.get("old_value", ""))
+        value = edit.get("value", edit.get("new_value", ""))
+        edit["expected_text"] = expected_text
+        edit["value"] = value
         if not target_id or "expected_text" not in edit or not value:
-            raise DocumentError("각 edit에 target_id, expected_text, value가 필요합니다.")
+            raise DocumentError("각 edit에 target_id, expected_text(또는 old_value), value(또는 new_value)가 필요합니다.")
         if len(value) > MAX_REPLACEMENT_LENGTH:
             raise DocumentError(f"입력값은 {MAX_REPLACEMENT_LENGTH}자 이하이어야 합니다.")
         match = CELL_ID_RE.fullmatch(target_id)
@@ -473,20 +482,42 @@ def fill_cells(path: Path, output_path: Path, edits: list[dict[str, str]]) -> di
                             raise DocumentError(
                                 f"셀 내용이 예상과 다릅니다: {target_id}: {current_text!r}"
                             )
-                        paragraphs = [
-                            element for element in cell.iter() if _local_name(element.tag) == "p"
-                        ]
-                        if not paragraphs:
-                            raise DocumentError(f"셀에 문단이 없습니다: {target_id}")
-                        paragraph = paragraphs[-1]
-                        runs = [element for element in paragraph if _local_name(element.tag) == "run"]
-                        char_pr_id = runs[-1].attrib.get("charPrIDRef", "0") if runs else "0"
-                        run = ET.SubElement(paragraph, paragraph.tag.rsplit("}", 1)[0] + "}run")
-                        run.set("charPrIDRef", char_pr_id)
-                        text = ET.SubElement(run, run.tag.rsplit("}", 1)[0] + "}t")
-                        text.text = edit["value"]
+                        # ponytail: anchor나 기존 텍스트가 있으면 덧붙이지 않고 t 노드를 직접 치환합니다.
+                        anchor = edit.get("anchor")
+                        t_elems = [e for e in cell.iter() if _local_name(e.tag) == "t"]
+                        replaced = False
+
+                        if anchor:
+                            for t in t_elems:
+                                if t.text and anchor in t.text:
+                                    t.text = t.text.replace(anchor, edit["value"])
+                                    replaced = True
+                                    break
+                        elif t_elems:
+                            # 텍스트 노드가 있고 셀에 이전 값이 있으면 교체/덧붙임 판단
+                            target_t = t_elems[-1]
+                            if not target_t.text:
+                                target_t.text = edit["value"]
+                                replaced = True
+                            elif edit["expected_text"] and edit["expected_text"] in target_t.text:
+                                target_t.text = target_t.text.replace(edit["expected_text"], edit["value"])
+                                replaced = True
+
+                        if not replaced:
+                            paragraphs = [
+                                element for element in cell.iter() if _local_name(element.tag) == "p"
+                            ]
+                            if not paragraphs:
+                                raise DocumentError(f"셀에 문단이 없습니다: {target_id}")
+                            paragraph = paragraphs[-1]
+                            runs = [element for element in paragraph if _local_name(element.tag) == "run"]
+                            char_pr_id = runs[-1].attrib.get("charPrIDRef", "0") if runs else "0"
+                            run = ET.SubElement(paragraph, paragraph.tag.rsplit("}", 1)[0] + "}run")
+                            run.set("charPrIDRef", char_pr_id)
+                            text = ET.SubElement(run, run.tag.rsplit("}", 1)[0] + "}t")
+                            text.text = edit["value"]
+
                         applied += 1
-                    # ponytail: 렌더러로 더 안전한 필드 배치를 확인하기 전까지 끝에 추가합니다.
                     data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
             entries.append((info, data))
 
