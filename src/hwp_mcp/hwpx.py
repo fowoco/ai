@@ -494,14 +494,21 @@ def fill_cells(path: str | Path, output_path: str | Path, edits: list[dict[str, 
                                     replaced = True
                                     break
                         elif t_elems:
-                            # 텍스트 노드가 있고 셀에 이전 값이 있으면 교체/덧붙임 판단
-                            target_t = t_elems[-1]
-                            if not target_t.text:
-                                target_t.text = edit["value"]
-                                replaced = True
-                            elif edit["expected_text"] and edit["expected_text"] in target_t.text:
-                                target_t.text = target_t.text.replace(edit["expected_text"], edit["value"])
-                                replaced = True
+                            # 체크박스 정교화: [ ]남 M [ ]여 F 형태에서 첫번째 [ ] -> [V] 정교 교체
+                            if edit["value"] in ("[V]", "[■]", "V"):
+                                for t in t_elems:
+                                    if t.text and "[ ]" in t.text:
+                                        t.text = t.text.replace("[ ]", "[V]", 1)
+                                        replaced = True
+                                        break
+                            if not replaced:
+                                target_t = t_elems[-1]
+                                if not target_t.text:
+                                    target_t.text = edit["value"]
+                                    replaced = True
+                                elif edit["expected_text"] and edit["expected_text"] in target_t.text:
+                                    target_t.text = target_t.text.replace(edit["expected_text"], edit["value"])
+                                    replaced = True
 
                         if not replaced:
                             paragraphs = [

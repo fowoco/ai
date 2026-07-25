@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .hwpx import DocumentError
 
 
-FieldType = Literal["date", "phone"]
+FieldType = Literal["date", "phone", "checkbox"]
 
 
 class NormalizationRequest(BaseModel):
@@ -32,9 +32,11 @@ class NormalizationResult(BaseModel):
 
 
 def normalize_field(request: NormalizationRequest) -> NormalizationResult:
-    """전화번호·날짜를 문서 입력 후보로 변환하되 원본은 보존합니다."""
+    """전화번호·날짜·체크박스를 문서 입력 후보로 변환하되 원본은 보존합니다."""
     if request.field_type == "date":
         normalized = _normalize_date(request.value)
+    elif request.field_type == "checkbox":
+        normalized = _normalize_checkbox(request.value)
     else:
         normalized = _normalize_phone(request.value)
     return NormalizationResult(
@@ -44,6 +46,15 @@ def normalize_field(request: NormalizationRequest) -> NormalizationResult:
         changed=request.value != normalized,
         status="NORMALIZED" if request.value != normalized else "UNCHANGED",
     )
+
+
+def _normalize_checkbox(value: str) -> str:
+    cleaned = value.strip().upper()
+    if cleaned in ("V", "[V]", "■", "[■]", "TRUE", "YES", "예", "선택", "남", "남성", "여", "여성", "CHECKED"):
+        return "[V]"
+    if cleaned in ("FALSE", "NO", "아니오", "미선택", "UNCHECKED", "[ ]", "□"):
+        return "[ ]"
+    return "[V]"
 
 
 def _normalize_date(value: str) -> str:
