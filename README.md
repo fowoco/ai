@@ -18,6 +18,42 @@
 
 HWP와 HWPX는 내부 구조가 다릅니다. HWPX는 ZIP/XML 기반이라 1차 대상으로 삼았고, HWP는 변환 어댑터를 별도 검토합니다.
 
+## 워크플로우
+
+현재 구현은 원본을 보존하면서, 분석 → 수정 계획 → 사용자 승인 → 새 파일 생성 → 결과 검증 순서로 동작합니다.
+
+```mermaid
+flowchart LR
+    U["사용자\nHWPX 파일·요구사항 전달"] --> A["Host Agent\n필요한 질문·값 수집"]
+    A --> M["MCP Server\nSTDIO"]
+    M --> I["문서 검사·구조 분석"]
+    I --> C["필드 후보·셀 ID·현재 값 반환"]
+    C --> A
+    A --> P["Edit Plan 생성\n수정 대상·입력값 정리"]
+    P --> Q{"사용자 승인?"}
+    Q -- "아니오" --> A
+    Q -- "예" --> V["원본 지문·계획 무결성 확인"]
+    V --> W["새 HWPX 생성\n원본 파일은 보존"]
+    W --> R["구조·XML·페이지 수·레이아웃 경고 검토"]
+    R --> S{"검증 통과?"}
+    S -- "아니오" --> F["결과 파일 삭제\n실패 원인 반환"]
+    S -- "예" --> O["수정본 경로·검토 결과 반환"]
+
+    classDef user fill:#fff4e8,stroke:#c9632d,color:#2f2a26
+    classDef agent fill:#e8f0ea,stroke:#789c87,color:#2f2a26
+    classDef mcp fill:#e8eef5,stroke:#607d9a,color:#2f2a26
+    classDef guard fill:#fbe4d6,stroke:#c9632d,color:#2f2a26
+    classDef result fill:#f1eee8,stroke:#8a8178,color:#2f2a26
+
+    class U user
+    class A agent
+    class M,I,C,P mcp
+    class Q,V,R,S guard
+    class W,F,O result
+```
+
+대화 상태와 사용자 인터뷰는 Host Agent가 담당합니다. MCP Server는 문서 분석, 수정 계획 생성, 승인된 계획의 적용, 결과 검증을 담당합니다.
+
 ## 실행
 
 Python 3.10+과 `uv`가 필요합니다.

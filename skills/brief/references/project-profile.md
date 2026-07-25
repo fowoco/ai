@@ -166,3 +166,4 @@ unknown frontmatter key와 section:
 - 현재 파일 기준 `brief 30s`, `5m`, `detail`
 
 Hub refresh는 tracked Markdown을 쓰지 않는다. 승인된 profile write가 끝난 뒤에만 state refresh를 실행한다.
+

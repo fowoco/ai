@@ -115,20 +115,20 @@
     "AGENT.md": {
       "compilerVersion": 1,
       "mode": "0644",
-      "sha256": "e7b73460b284ca76a3a9f1e1beca2ad07a6299d5da463fca30ae0fd9adb800e6",
+      "sha256": "7db6901da3add25b5293a33c51b8921948327f9df525efaf4bc250e1ec957b10",
       "sources": {
         ".project-scaffold/policy/base.md": "1b5b94a33caf5f8e0f06ca82d3d673531e6b199a2ba379c734c749f443e2f204",
-        "AGENT.project.md": "e8678990405c2fbe200f3dcefb782a4f7419f641b78f04a22a422b5d7eb0beb4"
+        "AGENT.project.md": "44cf3e069f3be8ee69e4b4bb48f95066f040b964822ed29e93a677e0fd43cd57"
       },
       "type": "generated-file"
     },
     "AGENTS.md": {
       "compilerVersion": 1,
       "mode": "0644",
-      "sha256": "e7b73460b284ca76a3a9f1e1beca2ad07a6299d5da463fca30ae0fd9adb800e6",
+      "sha256": "7db6901da3add25b5293a33c51b8921948327f9df525efaf4bc250e1ec957b10",
       "sources": {
         ".project-scaffold/policy/base.md": "1b5b94a33caf5f8e0f06ca82d3d673531e6b199a2ba379c734c749f443e2f204",
-        "AGENT.project.md": "e8678990405c2fbe200f3dcefb782a4f7419f641b78f04a22a422b5d7eb0beb4"
+        "AGENT.project.md": "44cf3e069f3be8ee69e4b4bb48f95066f040b964822ed29e93a677e0fd43cd57"
       },
       "type": "generated-file"
     },
