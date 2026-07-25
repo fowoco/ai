@@ -494,11 +494,12 @@ def fill_cells(path: str | Path, output_path: str | Path, edits: list[dict[str, 
                                     replaced = True
                                     break
                         elif t_elems:
-                            # 체크박스 정교화: [ ]남 M [ ]여 F 형태에서 첫번째 [ ] -> [V] 정교 교체
+                            # 체크박스 정교화: [  ] 또는 [ ] (공백 1~2칸) 패턴을 [V]로 정교 교체
                             if edit["value"] in ("[V]", "[■]", "V"):
+                                import re
                                 for t in t_elems:
-                                    if t.text and "[ ]" in t.text:
-                                        t.text = t.text.replace("[ ]", "[V]", 1)
+                                    if t.text and re.search(r"\[\s+\]", t.text):
+                                        t.text = re.sub(r"\[\s+\]", "[V]", t.text, count=1)
                                         replaced = True
                                         break
                             if not replaced:
