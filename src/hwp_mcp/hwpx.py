@@ -635,6 +635,9 @@ def _apply_typed_operation(root: ET.Element, operation: dict[str, Any]) -> None:
             raise DocumentError("날짜 세그먼트 값은 YYYY-MM-DD 형식이어야 합니다.")
         mode = operation.get("constraints", {}).get("mode")
         if len(cells) == 1:
+            if mode == "empty_cell":
+                _set_empty_cell_text(cells[0], value)
+                return
             if mode != "inline":
                 raise DocumentError("1개 날짜 세그먼트는 inline mode여야 합니다.")
             anchor = operation.get("anchor", "")

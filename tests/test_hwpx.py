@@ -39,14 +39,14 @@ def make_fixture(path: Path, text: str = "안녕하세요 MCP") -> None:
         archive.writestr("Contents/section0.xml", section)
 
 
-def make_table_fixture(path: Path) -> None:
+def make_table_fixture(path: Path, label: str = "업체명") -> None:
     header = f'''<?xml version="1.0" encoding="UTF-8"?>
 <hh:head xmlns:hh="{NS['hh']}" secCnt="1" />'''.encode()
     section = f'''<?xml version="1.0" encoding="UTF-8"?>
 <hs:sec xmlns:hs="{NS['hs']}" xmlns:hp="{NS['hp']}">
   <hp:tbl>
     <hp:tr>
-      <hp:tc><hp:cellAddr colAddr="0" rowAddr="0" /><hp:cellSpan colSpan="1" rowSpan="1" /><hp:p><hp:run><hp:t>업체명</hp:t></hp:run></hp:p></hp:tc>
+      <hp:tc><hp:cellAddr colAddr="0" rowAddr="0" /><hp:cellSpan colSpan="1" rowSpan="1" /><hp:p><hp:run><hp:t>{label}</hp:t></hp:run></hp:p></hp:tc>
       <hp:tc><hp:cellAddr colAddr="1" rowAddr="0" /><hp:cellSpan colSpan="1" rowSpan="1" /><hp:p><hp:run><hp:t></hp:t></hp:run></hp:p></hp:tc>
     </hp:tr>
   </hp:tbl>
