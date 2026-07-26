@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .fields import Disposition
 from .hwpx import DocumentError
 
 
@@ -15,14 +16,17 @@ class EditPlanError(DocumentError):
 
 
 class CellEditInput(BaseModel):
-    """사용자가 확인한 셀 하나의 변경 요청입니다."""
+    """사용자가 확인한 typed field 변경 요청입니다."""
 
     model_config = ConfigDict(extra="forbid")
 
+    field_id: str | None = Field(default=None, min_length=1, max_length=240)
     target_id: str = Field(min_length=1, max_length=200)
     expected_text: str = Field(max_length=10_000)
     value: str = Field(min_length=1, max_length=10_000)
     label: str | None = Field(default=None, max_length=200)
+    anchor: str | None = Field(default=None, min_length=1, max_length=10_000)
+    expected_match_count: Literal[1] = 1
 
 
 class EditOperation(BaseModel):
@@ -30,11 +34,24 @@ class EditOperation(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    operation: Literal["set_cell_text"]
+    operation: Literal[
+        "replace_text_range",
+        "write_character_grid",
+        "set_checkbox",
+        "set_date_segments",
+        "set_amount",
+        "set_signature_placeholder",
+    ]
+    field_id: str = Field(min_length=1, max_length=240)
     target_id: str = Field(min_length=1, max_length=200)
     label: str | None = Field(default=None, max_length=200)
     old_value: str = Field(max_length=10_000)
     new_value: str = Field(min_length=1, max_length=10_000)
+    anchor: str | None = Field(default=None, min_length=1, max_length=10_000)
+    expected_match_count: Literal[1] = 1
+    xml_segments: list[str] = Field(min_length=1, max_length=100)
+    constraints: dict[str, Any] = Field(default_factory=dict)
+    postcondition: Literal["value_once"] = "value_once"
     confidence: Literal["confirmed"]
 
 
@@ -43,11 +60,12 @@ class EditPlan(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal[1] = 1
+    version: Literal[2] = 2
     plan_id: str = Field(min_length=64, max_length=64)
     input_path: str = Field(min_length=1, max_length=4096)
     document_sha256: str = Field(min_length=64, max_length=64)
     operations: list[EditOperation] = Field(min_length=1, max_length=100)
+    dispositions: dict[str, Disposition]
     approval_required: Literal[True] = True
     status: Literal["WAITING_APPROVAL"] = "WAITING_APPROVAL"
 
@@ -56,48 +74,96 @@ def create_edit_plan(
     input_path: str | Path,
     manifest: dict[str, Any],
     edits: list[CellEditInput],
+    dispositions: dict[str, Disposition] | None = None,
 ) -> EditPlan:
-    """현재 문서와 일치하는 셀 변경 요청을 승인 대기 계획으로 만듭니다."""
+    """모든 field disposition과 typed operation을 승인 대기 계획으로 만듭니다."""
     input_path = Path(input_path)
     if not edits:
         raise EditPlanError("편집 계획에는 하나 이상의 변경이 필요합니다.")
 
-    current_cells = {
-        cell["id"]: cell["text"]
-        for section in manifest["sections"]
-        for table in section["tables"]
-        for cell in table["cells"]
-    }
+    registry = manifest.get("field_registry", [])
+    registry_by_id = {field["field_id"]: field for field in registry}
+    dispositions = dispositions or {}
+    missing_dispositions = sorted(set(registry_by_id) - set(dispositions))
+    if missing_dispositions:
+        raise EditPlanError(
+            "모든 field에 disposition이 필요합니다: "
+            + ", ".join(missing_dispositions[:5])
+        )
+    unknown_dispositions = sorted(set(dispositions) - set(registry_by_id))
+    if unknown_dispositions:
+        raise EditPlanError(
+            "registry에 없는 disposition 대상입니다: "
+            + ", ".join(unknown_dispositions[:5])
+        )
+
+    for field_id, disposition in dispositions.items():
+        kind = registry_by_id[field_id].get("kind")
+        if kind == "official_region" and disposition != "intentionally_blank":
+            raise EditPlanError(f"official_region은 intentionally_blank여야 합니다: {field_id}")
+        if kind == "signable_region" and disposition != "manual_after_export":
+            if disposition == "future_e_signature":
+                raise EditPlanError("전자서명은 아직 지원하지 않습니다.")
+            raise EditPlanError(
+                f"signable_region은 manual_after_export여야 합니다: {field_id}"
+            )
+        if disposition in {"manual_after_export", "future_e_signature"}:
+            if kind != "signable_region":
+                raise EditPlanError(
+                    f"서명 disposition은 signable_region에만 허용됩니다: {field_id}"
+                )
+
     operations: list[EditOperation] = []
-    seen_targets: set[str] = set()
+    seen_fields: set[str] = set()
     for edit in edits:
-        if edit.target_id in seen_targets:
-            raise EditPlanError(f"같은 셀을 중복 수정할 수 없습니다: {edit.target_id}")
-        seen_targets.add(edit.target_id)
-        if edit.target_id not in current_cells:
-            raise EditPlanError(f"편집 대상 셀을 찾지 못했습니다: {edit.target_id}")
-        current_text = current_cells[edit.target_id]
+        matches = (
+            [registry_by_id[edit.field_id]]
+            if edit.field_id and edit.field_id in registry_by_id
+            else [field for field in registry if field["target_id"] == edit.target_id]
+        )
+        if len(matches) != 1:
+            raise EditPlanError(
+                f"편집 대상 field를 정확히 하나 찾지 못했습니다: {edit.field_id or edit.target_id}"
+            )
+        field = matches[0]
+        field_id = field["field_id"]
+        if field_id in seen_fields:
+            raise EditPlanError(f"같은 field를 중복 수정할 수 없습니다: {field_id}")
+        seen_fields.add(field_id)
+        if dispositions[field_id] != "provided":
+            raise EditPlanError(
+                f"편집 field의 disposition은 provided여야 합니다: {field_id}"
+            )
+        if field.get("kind") in {"official_region", "signable_region"}:
+            raise EditPlanError(f"자동 편집할 수 없는 field입니다: {field_id}")
+        current_text = field["current_text"]
         if current_text != edit.expected_text:
             raise EditPlanError(
-                f"셀 내용이 예상과 다릅니다: {edit.target_id}: {current_text!r}"
+                f"field 내용이 예상과 다릅니다: {field_id}: {current_text!r}"
             )
         operations.append(
             EditOperation(
-                operation="set_cell_text",
-                target_id=edit.target_id,
-                label=edit.label,
+                operation=_operation_for_field(field),
+                field_id=field_id,
+                target_id=field["target_id"],
+                label=edit.label or field["label"],
                 old_value=current_text,
                 new_value=edit.value,
+                anchor=edit.anchor or field.get("constraints", {}).get("anchor"),
+                expected_match_count=edit.expected_match_count,
+                xml_segments=field.get("xml_segments") or [field["target_id"]],
+                constraints=field.get("constraints", {}),
                 confidence="confirmed",
             )
         )
 
     document_sha256 = sha256_file(input_path)
     payload = {
-        "version": 1,
+        "version": 2,
         "input_path": str(input_path),
         "document_sha256": document_sha256,
         "operations": [operation.model_dump(exclude_none=True) for operation in operations],
+        "dispositions": dispositions,
     }
     plan_id = hashlib.sha256(_canonical_json(payload)).hexdigest()
     return EditPlan(
@@ -105,6 +171,7 @@ def create_edit_plan(
         input_path=str(input_path),
         document_sha256=document_sha256,
         operations=operations,
+        dispositions=dispositions,
     )
 
 
@@ -121,6 +188,7 @@ def validate_edit_plan(plan: EditPlan, input_path: Path) -> None:
         "input_path": plan.input_path,
         "document_sha256": plan.document_sha256,
         "operations": [operation.model_dump(exclude_none=True) for operation in plan.operations],
+        "dispositions": plan.dispositions,
     }
     expected_plan_id = hashlib.sha256(_canonical_json(payload)).hexdigest()
     if plan.plan_id != expected_plan_id:
@@ -141,3 +209,18 @@ def _canonical_json(value: dict[str, Any]) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
         "utf-8"
     )
+
+
+def _operation_for_field(field: dict[str, Any]) -> str:
+    kind = field.get("kind")
+    if kind == "character_grid":
+        return "write_character_grid"
+    if kind in {"checkbox", "checkbox_group"}:
+        return "set_checkbox"
+    if kind == "date_segments":
+        return "set_date_segments"
+    if field.get("type") == "amount":
+        return "set_amount"
+    if kind == "signable_region":
+        return "set_signature_placeholder"
+    return "replace_text_range"

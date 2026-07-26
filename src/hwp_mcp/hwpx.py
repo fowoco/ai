@@ -540,6 +540,206 @@ def fill_cells(path: str | Path, output_path: str | Path, edits: list[dict[str, 
     }
 
 
+def apply_typed_edits(
+    path: str | Path,
+    output_path: str | Path,
+    operations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """사전조건이 있는 typed operation만 적용해 새 HWPX를 작성합니다."""
+    input_path = Path(path)
+    destination = Path(output_path)
+    _require_hwpx(input_path)
+    if not operations:
+        raise DocumentError("operations는 비어 있을 수 없습니다.")
+    if len(operations) > 100:
+        raise DocumentError("한 번에 최대 100개 field까지 수정할 수 있습니다.")
+    destination = _safe_output_path(input_path, destination)
+    report = _validate_archive(input_path)
+    if not report.valid:
+        raise DocumentError("유효하지 않은 HWPX입니다: " + " | ".join(report.errors))
+
+    by_section: dict[str, list[dict[str, Any]]] = {}
+    seen_fields: set[str] = set()
+    for operation in operations:
+        field_id = operation.get("field_id", "")
+        segments = operation.get("xml_segments") or [operation.get("target_id", "")]
+        if not field_id or field_id in seen_fields:
+            raise DocumentError(f"field_id가 없거나 중복되었습니다: {field_id}")
+        seen_fields.add(field_id)
+        matches = [CELL_ID_RE.fullmatch(segment) for segment in segments]
+        if not matches or any(match is None for match in matches):
+            raise DocumentError(f"지원하지 않는 XML segment입니다: {segments}")
+        section_ids = {match.group(1) for match in matches if match}
+        if len(section_ids) != 1:
+            raise DocumentError(f"한 operation은 한 section 안에 있어야 합니다: {field_id}")
+        by_section.setdefault(section_ids.pop(), []).append(operation)
+
+    entries: list[tuple[zipfile.ZipInfo, bytes]] = []
+    applied = 0
+    with zipfile.ZipFile(input_path, "r") as source:
+        for info in source.infolist():
+            data = source.read(info.filename)
+            if SECTION_RE.match(info.filename):
+                section_id = Path(info.filename).stem
+                section_operations = by_section.get(section_id, [])
+                if section_operations:
+                    namespaces = _read_namespaces(data)
+                    _register_namespaces(namespaces)
+                    root = _parse_xml(data, info.filename)
+                    for operation in section_operations:
+                        _apply_typed_operation(root, operation)
+                        applied += 1
+                    data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+            entries.append((info, data))
+
+    if applied != len(operations):
+        raise DocumentError("일부 typed operation의 section을 찾지 못했습니다.")
+    validation = _write_entries(entries, destination)
+    return {
+        "format": "hwpx",
+        "output_path": str(destination),
+        "applied": applied,
+        "validated": True,
+        "validation": validation,
+    }
+
+
+def _apply_typed_operation(root: ET.Element, operation: dict[str, Any]) -> None:
+    operation_name = operation.get("operation")
+    segments = operation.get("xml_segments") or [operation.get("target_id")]
+    cells = [_find_cell(root, segment) for segment in segments]
+    value = operation.get("new_value", "")
+    if not value or len(value) > MAX_REPLACEMENT_LENGTH:
+        raise DocumentError("typed operation의 new_value가 비어 있거나 너무 깁니다.")
+
+    if operation_name == "write_character_grid":
+        separators = {
+            separator.get("value", "")
+            for separator in operation.get("constraints", {}).get("separators", [])
+        }
+        characters = [char for char in value if char not in separators]
+        if len(characters) != len(cells):
+            raise DocumentError(
+                f"문자칸 수와 입력 문자 수가 다릅니다: {len(cells)} != {len(characters)}"
+            )
+        for cell, character in zip(cells, characters):
+            if _element_text(cell):
+                raise DocumentError("비어 있지 않은 문자칸은 수정할 수 없습니다.")
+            _set_empty_cell_text(cell, character)
+        return
+
+    if operation_name == "set_date_segments":
+        match = re.fullmatch(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})", value)
+        if match is None:
+            raise DocumentError("날짜 세그먼트 값은 YYYY-MM-DD 형식이어야 합니다.")
+        if len(cells) == 1 and operation.get("constraints", {}).get("mode") == "inline":
+            anchor = operation.get("anchor", "")
+            token = operation.get("constraints", {}).get("replacement_token", anchor)
+            replacement = anchor.replace(
+                token,
+                f"{match.group(1)}년 {match.group(2)}월 {match.group(3)}일",
+                1,
+            )
+            _replace_anchor(
+                cells[0],
+                anchor,
+                replacement,
+                1,
+            )
+            return
+        if len(cells) != 3:
+            raise DocumentError("날짜 세그먼트는 inline 또는 3개 XML segment여야 합니다.")
+        anchors = operation.get("constraints", {}).get("anchors", ["yyyy", "mm", "dd"])
+        if len(anchors) != 3:
+            raise DocumentError("날짜 세그먼트 anchor가 올바르지 않습니다.")
+        for cell, anchor, component in zip(cells, anchors, match.groups()):
+            _replace_anchor(cell, anchor, component, 1)
+        return
+
+    cell = cells[0]
+    if operation_name == "set_checkbox":
+        _set_checkbox(cell, operation.get("anchor"))
+        return
+    if operation_name == "set_signature_placeholder":
+        raise DocumentError("서명란은 manual_after_export만 지원합니다.")
+    if operation_name not in {"replace_text_range", "set_amount"}:
+        raise DocumentError(f"지원하지 않는 typed operation입니다: {operation_name}")
+
+    anchor = operation.get("anchor")
+    expected_count = operation.get("expected_match_count", 1)
+    if operation_name == "set_amount" and anchor:
+        token = operation.get("constraints", {}).get("replacement_token", anchor)
+        replacement_token = re.sub(r"\(\s+\)", f"({value})", token, count=1)
+        _replace_anchor(
+            cell,
+            anchor,
+            anchor.replace(token, replacement_token, 1),
+            expected_count,
+        )
+        return
+    if anchor:
+        _replace_anchor(cell, anchor, value, expected_count)
+    elif not _element_text(cell):
+        _set_empty_cell_text(cell, value)
+    else:
+        _replace_anchor(cell, operation.get("old_value", ""), value, expected_count)
+
+
+def _text_elements(cell: ET.Element) -> list[ET.Element]:
+    return [element for element in cell.iter() if _local_name(element.tag) == "t"]
+
+
+def _set_empty_cell_text(cell: ET.Element, value: str) -> None:
+    texts = _text_elements(cell)
+    if not texts:
+        raise DocumentError("입력 대상 셀에 기존 <t> 노드가 없습니다.")
+    if any(element.text for element in texts):
+        raise DocumentError("빈 셀 사전조건이 일치하지 않습니다.")
+    texts[-1].text = value
+
+
+def _replace_anchor(
+    cell: ET.Element,
+    anchor: str,
+    value: str,
+    expected_match_count: int,
+) -> None:
+    if not anchor:
+        raise DocumentError("비어 있지 않은 셀 편집에는 anchor가 필요합니다.")
+    texts = _text_elements(cell)
+    count = sum((element.text or "").count(anchor) for element in texts)
+    if count != expected_match_count:
+        raise DocumentError(
+            f"anchor는 정확히 {expected_match_count}회 일치해야 합니다: {count}회"
+        )
+    for element in texts:
+        if anchor in (element.text or ""):
+            element.text = (element.text or "").replace(anchor, value, 1)
+            return
+
+
+def _set_checkbox(cell: ET.Element, anchor: str | None) -> None:
+    unchecked = re.compile(r"\[\s*\]")
+    texts = _text_elements(cell)
+    if anchor:
+        matches = [element for element in texts if anchor in (element.text or "")]
+        count = sum((element.text or "").count(anchor) for element in matches)
+        if count != 1 or not matches or unchecked.search(anchor) is None:
+            raise DocumentError("checkbox anchor는 미선택 marker를 포함해 정확히 1회 일치해야 합니다.")
+        matches[0].text = (matches[0].text or "").replace(
+            anchor, unchecked.sub("[V]", anchor, count=1), 1
+        )
+        return
+
+    marker_count = sum(len(unchecked.findall(element.text or "")) for element in texts)
+    if marker_count != 1:
+        raise DocumentError(f"checkbox marker는 정확히 1개여야 합니다: {marker_count}개")
+    for element in texts:
+        if unchecked.search(element.text or ""):
+            element.text = unchecked.sub("[V]", element.text or "", count=1)
+            return
+
+
 def replace_text(path: Path, output_path: Path, old: str, new: str) -> dict[str, Any]:
     """텍스트 노드를 정확히 치환하고 검증된 새 HWPX 패키지를 작성합니다."""
     _require_hwpx(path)
