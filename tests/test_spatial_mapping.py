@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from hwp_mcp.hwpx import analyze_document
+from hwp_mcp.hwpx import _analyze_xml_document
 from hwp_mcp.fields import infer_field_candidates_spatial
 
 
@@ -9,7 +9,7 @@ def test_spatial_geometry_infers_under_label_cells() -> None:
     if not sample_path.exists():
         return
 
-    manifest = analyze_document(sample_path)
+    manifest = _analyze_xml_document(sample_path)
     spatial_candidates = infer_field_candidates_spatial(manifest)
 
     # 1. 성 Surname 하단 빈 셀 추론 확인 (row14.cell0)

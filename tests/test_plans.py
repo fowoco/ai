@@ -4,11 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from hwp_mcp.hwpx import DocumentError, analyze_document
+from hwp_mcp.hwpx import DocumentError
 from hwp_mcp.plans import CellEditInput, EditPlanError, create_edit_plan, validate_edit_plan
 from hwp_mcp.server import apply_edit_plan
 
 from test_hwpx import make_table_fixture
+from analysis_helpers import make_grounded_manifest
 
 
 def test_create_plan_does_not_create_output(tmp_path: Path) -> None:
@@ -17,7 +18,7 @@ def test_create_plan_does_not_create_output(tmp_path: Path) -> None:
 
     plan = create_edit_plan(
         source,
-        analyze_document(source),
+        make_grounded_manifest(source),
         [
             CellEditInput(
                 target_id="section0.table0.row0.cell1",
@@ -43,7 +44,7 @@ def test_plan_rejects_stale_document(tmp_path: Path) -> None:
     make_table_fixture(source)
     plan = create_edit_plan(
         source,
-        analyze_document(source),
+        make_grounded_manifest(source),
         [
             CellEditInput(
                 target_id="section0.table0.row0.cell1",
@@ -68,7 +69,7 @@ def test_plan_operations_can_be_applied_only_after_external_approval(
     monkeypatch.setenv("HWP_MCP_ROOT", str(tmp_path))
     plan = create_edit_plan(
         source,
-        analyze_document(source),
+        make_grounded_manifest(source),
         [
             CellEditInput(
                 target_id="section0.table0.row0.cell1",

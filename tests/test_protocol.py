@@ -45,7 +45,10 @@ def _make_stacked_table_fixture(path: Path) -> None:
         archive.writestr("Contents/section0.xml", section)
 
 
-@pytest.mark.parametrize("vision_mode", ["pass", "invalid", "unsupported", "overflow"])
+@pytest.mark.parametrize(
+    "vision_mode",
+    ["pass", "invalid", "unsupported", "overflow", "mismatch"],
+)
 def test_stdio_server_lists_and_calls_tools(
     tmp_path: Path,
     vision_mode: str,
@@ -71,6 +74,7 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
         "import zipfile\n"
         "from xml.etree import ElementTree as ET\n"
         f"force_overflow = {vision_mode == 'overflow'!r}\n"
+        f"force_mismatch = {vision_mode == 'mismatch'!r}\n"
         "if sys.argv[1] == 'info':\n"
         "    raise SystemExit(0)\n"
         "source = Path(sys.argv[2])\n"
@@ -79,6 +83,8 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
         "with zipfile.ZipFile(source) as archive:\n"
         "    root = ET.fromstring(archive.read('Contents/section0.xml'))\n"
         "cells = [node for node in root.iter() if node.tag.rsplit('}', 1)[-1] == 'tc']\n"
+        "if force_mismatch:\n"
+        "    cells = cells[:-1]\n"
         "texts = [''.join(node.text or '' for node in cell.iter() if node.tag.rsplit('}', 1)[-1] == 't') for cell in cells]\n"
         "clips = []\n"
         "groups = []\n"
@@ -143,7 +149,9 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
             write_stream,
             **session_kwargs,
         ) as session:
-            await session.initialize()
+            initialize_result = await session.initialize()
+            assert "analysis_contract.version: 2" in (initialize_result.instructions or "")
+            assert "hwp_mcp.hwpx" in (initialize_result.instructions or "")
             tools = await session.list_tools()
             tool_names = {tool.name for tool in tools.tools}
             assert {
@@ -176,10 +184,32 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
                 arguments={"path": "plan-form.hwpx"},
             )
             assert analyzed_result.isError is not True
-            assert analyzed_result.structuredContent["field_candidates"][0]["label"] == "업체명"
+            assert "field_candidates" not in analyzed_result.structuredContent
+            assert "field_segments" not in analyzed_result.structuredContent
             assert analyzed_result.structuredContent["svg_analysis"]["method"] == "rhwp_svg_geometry"
+            if vision_mode == "mismatch":
+                assert analyzed_result.structuredContent["svg_analysis"]["status"] == "NEEDS_HUMAN"
+                assert analyzed_result.structuredContent["analysis_contract"] == {
+                    "version": 2,
+                    "stage": "XML_SVG_NEEDS_HUMAN",
+                    "registry_source": None,
+                    "interview_ready": False,
+                }
+                assert analyzed_result.structuredContent["field_registry"] == []
+                return
             assert analyzed_result.structuredContent["svg_analysis"]["status"] == "MAPPED"
+            assert analyzed_result.structuredContent["analysis_contract"] == {
+                "version": 2,
+                "stage": "XML_SVG_MAPPED",
+                "registry_source": "rhwp_svg",
+                "interview_ready": True,
+            }
+            assert "xml_field_candidates" not in analyzed_result.structuredContent
             assert analyzed_result.structuredContent["field_registry"][0]["visual_regions"]
+            assert all(
+                field["constraints"]["visual_source"] == "rhwp_svg"
+                for field in analyzed_result.structuredContent["field_registry"]
+            )
             field_id = analyzed_result.structuredContent["field_registry"][0]["field_id"]
             stacked_result = await session.call_tool(
                 "analyze_document",

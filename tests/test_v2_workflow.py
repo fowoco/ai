@@ -8,7 +8,7 @@ import pytest
 
 from hwp_mcp.compare import generate_visual_diff
 from hwp_mcp.fields import infer_all_fields
-from hwp_mcp.hwpx import DocumentError, analyze_document, apply_typed_edits
+from hwp_mcp.hwpx import DocumentError, _analyze_xml_document, apply_typed_edits
 from hwp_mcp.plans import (
     CellEditInput,
     EditPlanError,
@@ -24,6 +24,7 @@ from hwp_mcp.workspace import (
 )
 
 from test_hwpx import NS, make_table_fixture
+from analysis_helpers import make_grounded_manifest
 
 
 def _make_grid_fixture(path: Path) -> None:
@@ -57,7 +58,7 @@ def test_registry_v2_detects_grid_without_specific_label(tmp_path: Path) -> None
     source = tmp_path / "grid.hwpx"
     _make_grid_fixture(source)
 
-    registry = infer_all_fields(analyze_document(source))
+    registry = infer_all_fields(_analyze_xml_document(source))
     grids = [field for field in registry if field["kind"] == "character_grid"]
 
     assert len(grids) == 1
@@ -78,7 +79,7 @@ def test_registry_embedded_field_anchors_are_unique() -> None:
     if sample is None:
         return
 
-    registry = analyze_document(sample)["field_registry"]
+    registry = _analyze_xml_document(sample)["xml_field_candidates"]
     embedded = [
         field
         for field in registry
@@ -95,7 +96,7 @@ def test_registry_embedded_field_anchors_are_unique() -> None:
 def test_plan_requires_a_disposition_for_every_registry_field(tmp_path: Path) -> None:
     source = tmp_path / "form.hwpx"
     make_table_fixture(source)
-    manifest = analyze_document(source)
+    manifest = make_grounded_manifest(source)
 
     with pytest.raises(EditPlanError, match="disposition"):
         create_edit_plan(
@@ -122,12 +123,15 @@ def test_only_confirmed_visual_candidate_can_extend_registry(
     workspace = prepare_workspace(source)
     write_json(
         workspace["analysis_dir"] / "field-registry.json",
-        analyze_document(source)["field_registry"],
+        make_grounded_manifest(source)["field_registry"],
     )
     update_workflow_state(
         workspace["workspace_dir"],
         status="ANALYZED",
         svg_analysis_status="MAPPED",
+        analysis_contract_version=2,
+        registry_source="rhwp_svg",
+        interview_ready=True,
     )
 
     result = confirm_visual_candidates(
@@ -160,13 +164,19 @@ def test_only_confirmed_visual_candidate_can_extend_registry(
         field["field_id"] == "vision.confirmed.field"
         for field in result["field_registry"]
     )
+    confirmed = next(
+        field
+        for field in result["field_registry"]
+        if field["field_id"] == "vision.confirmed.field"
+    )
+    assert confirmed["constraints"]["visual_source"] == "human_confirmed_svg"
 
 
 def test_typed_character_grid_writes_one_character_per_cell(tmp_path: Path) -> None:
     source = tmp_path / "grid.hwpx"
     output = tmp_path / "grid-edited.hwpx"
     _make_grid_fixture(source)
-    manifest = analyze_document(source)
+    manifest = make_grounded_manifest(source)
     field = next(
         item for item in manifest["field_registry"] if item["kind"] == "character_grid"
     )
@@ -189,7 +199,7 @@ def test_typed_character_grid_writes_one_character_per_cell(tmp_path: Path) -> N
         output,
         [operation.model_dump() for operation in plan.operations],
     )
-    edited = analyze_document(output)
+    edited = _analyze_xml_document(output)
     cells = edited["sections"][0]["tables"][0]["cells"]
 
     assert result["applied"] == 1

@@ -1,6 +1,7 @@
 import pytest
-from hwp_mcp.hwpx import analyze_document, apply_typed_edits
+from hwp_mcp.hwpx import _analyze_xml_document, apply_typed_edits
 from hwp_mcp.plans import create_edit_plan, CellEditInput
+from analysis_helpers import make_grounded_manifest
 
 def test_replace_text_in_segment_precise(tmp_path):
     sample_path = "samples/별지_제6호서식_표준근로계약서(Standard_Labor_Contract)(외국인근로자의_고용_등에_관한_법률_시행규칙).hwpx"
@@ -8,7 +9,7 @@ def test_replace_text_in_segment_precise(tmp_path):
     if not os.path.exists(sample_path):
         pytest.skip("Sample HWPX not found")
 
-    manifest = analyze_document(sample_path)
+    manifest = make_grounded_manifest(sample_path)
     output_path = tmp_path / "edited_contract.hwpx"
 
     field = next(
@@ -51,5 +52,5 @@ def test_replace_text_in_segment_precise(tmp_path):
     assert result["applied"] > 0
     assert output_path.exists()
 
-    edited_manifest = analyze_document(output_path)
+    edited_manifest = _analyze_xml_document(output_path)
     assert edited_manifest["valid"] is True

@@ -34,6 +34,9 @@ All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to th
 
 `analyze_document` 결과에 `field_registry`가 포함됩니다. 이것은 XML 후보를 `rhwp` SVG의 `cell-clip` 좌표와 결합한 **채울 수 있는 필드의 목록**입니다.
 
+- 반드시 MCP `analyze_document` Tool을 호출합니다. shell에서 `hwp_mcp.hwpx` 내부 함수를 import해 인터뷰 목록을 만들지 않습니다.
+- 인터뷰 전 `analysis_contract.version: 2`, `stage: XML_SVG_MAPPED`, `registry_source: rhwp_svg`, `interview_ready: true`를 모두 확인합니다.
+- 위 계약이 없거나 `xml_field_candidates`만 보이면 구 MCP 서버·캐시 또는 내부 XML 분석 결과입니다. 인터뷰를 중단하고 MCP 서버를 재연결한 뒤 다시 분석합니다.
 - XML cell 수와 SVG cell clip 수가 다르면 `svg_analysis.status: NEEDS_HUMAN`이며 인터뷰로 진행하지 않습니다.
 - 라벨 아래 칸은 SVG 수평 겹침과 수직 인접 관계를 우선하고, 아래 칸이 없을 때만 오른쪽 인접 칸을 사용합니다.
 - 각 field의 `visual_regions`와 `constraints.visual_source: rhwp_svg`가 실제 페이지 bbox 근거입니다.

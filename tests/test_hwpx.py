@@ -7,7 +7,7 @@ import pytest
 
 from hwp_mcp.hwpx import (
     DocumentError,
-    analyze_document,
+    _analyze_xml_document,
     extract_text,
     fill_cells,
     inspect_document,
@@ -100,7 +100,7 @@ def test_analyze_returns_table_cell_targets(tmp_path: Path) -> None:
     source = tmp_path / "form.hwpx"
     make_table_fixture(source)
 
-    manifest = analyze_document(source)
+    manifest = _analyze_xml_document(source)
 
     assert manifest["table_count"] == 1
     assert manifest["field_candidates"][0]["label"] == "업체명"
