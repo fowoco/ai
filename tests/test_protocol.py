@@ -99,7 +99,7 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
         "    text_length = 150 if force_overflow and value == '계획 값' else max(len(value) * 8, 1)\n"
         "    text = f'<text transform=\"translate({x + 5},{y + 20})\" font-size=\"12\" textLength=\"{text_length}\">{rendered}</text>' if value else ''\n"
         "    groups.append(f'<g clip-path=\"url(#cell-clip-{index})\">{text}</g>')\n"
-        "svg = '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"30\"><defs>' + ''.join(clips) + '</defs>' + ''.join(groups) + '</svg>'\n"
+        "svg = '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"900\"><defs>' + ''.join(clips) + '</defs>' + ''.join(groups) + '</svg>'\n"
         "(output / 'page_001.svg').write_text(svg, encoding='utf-8')\n",
         encoding="utf-8",
     )
@@ -116,7 +116,11 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
 
     async def sample_vision(_context, params):
         content = params.messages[0].content_as_list
-        assert len([item for item in content if isinstance(item, ImageContent)]) == 3
+        assert len([item for item in content if isinstance(item, ImageContent)]) == 6
+        assert any(
+            isinstance(item, TextContent) and "detail band" in item.text
+            for item in content
+        )
         response = (
             '{"verdict":"PASS","summary":"의도한 셀에만 입력됨","fields":[]}'
             if vision_mode == "invalid"
