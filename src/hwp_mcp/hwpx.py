@@ -13,7 +13,7 @@ import zipfile
 from defusedxml import ElementTree as SafeET
 from defusedxml.common import DefusedXmlException
 
-from .fields import infer_field_candidates, infer_field_segments
+from .fields import infer_field_candidates, infer_field_segments, infer_all_fields
 
 
 class DocumentError(ValueError):
@@ -345,6 +345,7 @@ def analyze_document(path: str | Path) -> dict[str, Any]:
     }
     manifest["field_candidates"] = infer_field_candidates(manifest)
     manifest["field_segments"] = infer_field_segments(manifest)
+    manifest["field_registry"] = infer_all_fields(manifest)
     return manifest
 
 

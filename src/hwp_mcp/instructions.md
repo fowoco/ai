@@ -2,7 +2,7 @@
 
 ## 🚨 MANDATORY AGENT CONVENTIONS & INTERVIEW PROTOCOL
 
-All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to the following Core Principles and 4-Step Interactive Interview Template.
+All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to the following Core Principles and Field Registry-driven Interview Protocol.
 
 ---
 
@@ -27,69 +27,66 @@ All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to th
 
 ---
 
-## 3. Mandatory 4-Step Sequential Complete Interview Template
+## 3. XML Field Registry — 필수 체크리스트 기반 인터뷰
 
-When assisting a user with filling out an HWPX form, use the following 4-step sequence.
-**CRITICAL: You MUST ask about ALL fields detected by `analyze_document`, not just common ones.
-Run `analyze_document` first, then cross-reference ALL detected empty cells against this template.**
+### 🔑 핵심 원칙
 
-### 📝 [Step 1] 신청/신고 종류 선택 (Application Type Checkboxes)
+`analyze_document` 결과에 `field_registry`가 포함됩니다. 이것은 XML에서 **기계적으로 추출한 모든 채울 수 있는 필드의 완전한 목록**입니다.
 
-Present ALL available checkboxes from the document. For `통합신청서`:
-1. `[ ] 외국인 등록` (Foreign Resident Registration)
-2. `[ ] 체류자격 외 활동허가` (희망 자격: ___)
-3. `[ ] 등록증 재발급` (Reissuance of Registration Card)
-4. `[ ] 근무처 변경·추가허가 / 신고` (Change/Addition of Workplace)
-5. `[ ] 체류기간 연장허가` (Extension of Sojourn Period)
-6. `[ ] 재입국허가 (단수/복수)` (Reentry Permit)
-7. `[ ] 체류자격 변경허가` (희망 자격: ___)
-8. `[ ] 체류지 변경신고` (Alteration of Residence)
-9. `[ ] 체류자격 부여` (희망 자격: ___)
-10. `[ ] 등록사항 변경신고` (Change of Information on Registration)
+**CRITICAL RULE: LLM은 `field_registry`의 모든 필드를 인터뷰에서 빠짐없이 소화해야 합니다.**
+- `field_registry`에 있는 필드를 건너뛰면 안 됩니다.
+- `field_registry`에 없는 필드를 임의로 추가하면 안 됩니다.
+- `required: false`인 필드도 "해당사항이 있으시면 알려주세요" 형태로 반드시 물어봐야 합니다.
 
-### 👤 [Step 2] 인적사항 및 여권정보 (Personal & Passport Details)
+### 📋 Field Registry 구조
 
-Ask for ALL of:
-1. **성명** (Name): 성(Surname) / 명(Given Names)
-2. **생년월일** (DOB): YYYY.MM.DD
-3. **성별** (Sex): 남(M) 또는 여(F)
-4. **국적** (Nationality)
-5. **외국인등록번호** (Foreign Reg. No.) — 소지자만
-6. **여권번호** (Passport No.)
-7. **여권 발급일자** (Passport Issue Date)
-8. **여권 유효기간** (Passport Expiry Date)
+```json
+{
+  "field_id": "section0.table0.row15.cell5.checkbox_group",
+  "target_id": "section0.table0.row15.cell5",
+  "label": "남 M / 여 F",
+  "type": "checkbox_group",
+  "category": "step2_personal",  // step1~step4
+  "row": 15,
+  "column": 5,
+  "current_text": "[ ]남 M[ ]여 F",
+  "required": true,
+  "options": ["남 M", "여 F"]  // checkbox_group만
+}
+```
 
-### 🏠 [Step 3] 주소·연락처·근무처·학력·체류 (Address, Contact, Work, School, Stay)
+**필드 타입**: `checkbox`, `checkbox_group`, `text`, `date`, `phone`, `number`, `amount`, `signature`, `placeholder`
 
-Ask for ALL of:
-1. **대한민국 내 주소** (Address in Korea)
-2. **전화번호** (Telephone No.)
-3. **휴대전화** (Cell Phone No.)
-4. **본국 주소** (Home Country Address)
-5. **본국 전화번호** (Home Country Phone)
-6. **재학 여부** (School Status): 미취학 / 초 / 중 / 고
-7. **학교 이름** (Name of School) — 해당자
-8. **학교 종류** (Type of School): 교육청 인가 / 비인가·대안학교
-9. **원 근무처** (Current Workplace) / 사업자등록번호 / 전화번호
-10. **예정 근무처** (New Workplace) / 사업자등록번호 / 전화번호 — 해당자
-11. **연 소득금액** (Annual Income, 만원)
-12. **직업** (Occupation)
-13. **재입국 신청 기간** (Intended Period of Reentry) — 재입국 신청자만
-14. **전자우편** (E-Mail)
+### 📝 4단계 순차 인터뷰 (Field Registry 기반)
 
-### 🖋️ [Step 4] 계좌·서명·신청일 (Account, Signature, Date)
+1. **Step 1** (`category: step1_application`): `field_registry`에서 추출된 **모든 체크박스와 플레이스홀더** 제시
+2. **Step 2** (`category: step2_personal`): 인적사항 — 성명, 생년월일, 성별, 국적, 여권정보 등
+3. **Step 3** (`category: step3_address`): 주소·연락처·근무처·학력·재입국·이메일 등
+4. **Step 4** (`category: step4_signature`): 계좌·서명·신청일
 
-Ask for:
-1. **반환용 계좌번호** (Refund Bank Account) — 외국인등록/재발급 신청자만
-2. **신청일** (Date of Application)
-3. **신청인 서명 동의** (Signature Consent)
+각 단계에서:
+1. `field_registry`를 `category`로 필터링
+2. 해당 카테고리의 **모든 필드**를 가독성 좋은 표 또는 번호 목록으로 제시
+3. `required: true`는 필수, `required: false`는 "(해당 시)" 표기
+4. `checkbox_group`은 `options` 중에서 선택하도록 안내
+5. 사용자 답변 수집 후 다음 단계로 진행
 
-**NOTE**: `공용란 (For Official Use Only)` (row35~42) is for government officials only. Do NOT ask the user about these fields.
+### ⚠️ 자동 제외
+
+`field_registry`는 이미 **공용란(For Official Use Only)** 영역을 자동 제외합니다. 공용란에 대한 질문을 하지 마세요.
 
 ---
 
-## 4. Visual Verification Protocol
+## 4. SVG Visual Verification Checklist (더블 체크)
 
-- After applying the approved EditPlan, always run `compare_document_versions` with the official Rust `rhwp` engine.
-- Provide the generated visual highlight diff PNG (`renders/diffs/page_001_diff.png`) to the user for visual confirmation.
-- Agent MUST visually inspect the diff image and flag any anomalies before presenting to the user.
+`analyze_document` → SVG 렌더링 후, **`field_registry`를 필수 체크리스트로 사용하여** 시각 더블체크를 수행합니다:
+
+1. `field_registry`의 각 필드가 SVG 렌더링에서 올바른 위치에 있는지 확인
+2. registry에 있는데 SVG에서 안 보이면 → 경고 발생
+3. SVG에서 보이는데 registry에 없으면 → 추가 검토
+
+### 적용 후 Visual Diff
+
+- `compare_document_versions`로 원본 vs 수정본 SVG 렌더링 비교
+- `renders/diffs/page_001_diff.png` 생성 및 사용자에게 제공
+- Agent가 diff 이미지를 직접 검사하고 이상 징후를 사전 탐지
