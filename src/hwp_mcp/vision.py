@@ -43,6 +43,9 @@ def parse_vision_decision(text: str, expected_field_ids: list[str]) -> VisionDec
         raise DocumentError("Vision 응답에 중복 field_id가 있습니다.")
     if set(actual_ids) != set(expected_field_ids):
         raise DocumentError("Vision 응답이 모든 편집 field를 정확히 판정하지 않았습니다.")
+    reasons = {field.reason.strip() for field in decision.fields}
+    if len(decision.fields) > 1 and len(reasons) == 1:
+        raise DocumentError("Vision 응답이 모든 field에 같은 reason을 반복했습니다.")
 
     field_verdicts = {field.verdict for field in decision.fields}
     expected_verdict = (
@@ -95,6 +98,8 @@ def build_vision_prompt(
         "각 페이지의 원본 PNG, 수정 PNG, diff PNG를 순서대로 비교하라. "
         "입력값의 물리적 위치, 셀 경계 침범/중첩, checkbox 제자리 치환, "
         "placeholder 잔존/중복, character_grid 문자별 배치를 확인하라. "
+        "각 reason에는 해당 field 라벨과 원본 대비 위치 관계를 적고, "
+        "여러 field에 같은 reason을 반복하지 마라. "
         "불확실하면 PASS하지 말고 NEEDS_HUMAN으로 판정하라. "
         "아래 JSON 객체만 반환하라: "
         '{"verdict":"PASS|FAIL|NEEDS_HUMAN","summary":"...",'

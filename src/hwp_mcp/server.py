@@ -171,17 +171,27 @@ def analyze_document(path: str) -> dict[str, Any]:
             xml_field_candidates,
             svg_analysis,
         )
-        field_registry = attach_svg_regions(field_registry, svg_analysis)
-        ungrounded_field_ids = [
+        ambiguous_field_ids = [
             field["field_id"]
             for field in field_registry
-            if not field.get("visual_regions")
-            or field.get("constraints", {}).get("visual_source") != "rhwp_svg"
+            if field.get("constraints", {}).get("ambiguous_target_labels")
         ]
-        if ungrounded_field_ids:
+        if ambiguous_field_ids:
             svg_analysis["status"] = "NEEDS_HUMAN"
-            svg_analysis["ungrounded_field_ids"] = ungrounded_field_ids
+            svg_analysis["ambiguous_field_ids"] = ambiguous_field_ids
             field_registry = []
+        else:
+            field_registry = attach_svg_regions(field_registry, svg_analysis)
+            ungrounded_field_ids = [
+                field["field_id"]
+                for field in field_registry
+                if not field.get("visual_regions")
+                or field.get("constraints", {}).get("visual_source") != "rhwp_svg"
+            ]
+            if ungrounded_field_ids:
+                svg_analysis["status"] = "NEEDS_HUMAN"
+                svg_analysis["ungrounded_field_ids"] = ungrounded_field_ids
+                field_registry = []
     interview_ready = svg_analysis["status"] == "MAPPED"
     manifest["analysis_stage"] = (
         "XML_SVG_MAPPED" if interview_ready else "XML_SVG_NEEDS_HUMAN"
