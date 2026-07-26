@@ -42,6 +42,13 @@ async def _assert_workflow(client: AsyncClient, tmp_path: Path) -> None:
     analyze = await client.post("/documents/analyze", json={"path": "form.hwpx"})
     assert analyze.status_code == 200
     assert analyze.json()["table_count"] == 1
+    field_id = analyze.json()["field_registry"][0]["field_id"]
+    confirmed = await client.post(
+        "/documents/visual-candidates/confirm",
+        json={"path": "form.hwpx", "candidates": []},
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json()["alignment_status"] == "CONSISTENT"
 
     plan = await client.post(
         "/plans/create",
@@ -54,6 +61,7 @@ async def _assert_workflow(client: AsyncClient, tmp_path: Path) -> None:
                     "value": "ABC",
                 }
             ],
+            "dispositions": {field_id: "provided"},
         },
     )
     assert plan.status_code == 200
@@ -63,34 +71,44 @@ async def _assert_workflow(client: AsyncClient, tmp_path: Path) -> None:
         "/plans/apply",
         json={
             "path": "form.hwpx",
-            "output_path": "filled.hwpx",
             "plan": plan.json(),
             "approved": False,
         },
     )
     assert blocked.status_code == 400
-    assert not (tmp_path / "filled.hwpx").exists()
+    assert not any(tmp_path.glob("*/attempts/*/modified.hwpx"))
 
     applied = await client.post(
         "/plans/apply",
         json={
             "path": "form.hwpx",
-            "output_path": "filled.hwpx",
             "plan": plan.json(),
             "approved": True,
         },
     )
     assert applied.status_code == 200
-    assert applied.json()["status"] == "APPLIED"
+    assert applied.json()["status"] == "PENDING_VISION_REVIEW"
+    assert not any(tmp_path.glob("*/final/*.hwpx"))
 
     compare = await client.post(
         "/compare/versions",
         json={
             "original_path": "form.hwpx",
-            "modified_path": "filled.hwpx",
+            "modified_path": str(Path(applied.json()["output_path"]).relative_to(tmp_path)),
             "output_dir": "diffs_api_test",
             "debug_overlay": True,
         },
     )
     assert compare.status_code == 200
     assert "visual" in compare.json()
+
+    finalized = await client.post(
+        "/documents/finalize",
+        json={
+            "path": "form.hwpx",
+            "plan_id": plan.json()["plan_id"],
+        },
+    )
+    assert finalized.status_code == 400
+    assert "Vision PASS" in finalized.json()["detail"]
+    assert not any(tmp_path.glob("*/final/*.hwpx"))

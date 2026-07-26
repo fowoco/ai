@@ -1,7 +1,5 @@
 import pytest
-import zipfile
-from defusedxml import ElementTree as SafeET
-from hwp_mcp.hwpx import analyze_document, fill_cells
+from hwp_mcp.hwpx import analyze_document, apply_typed_edits
 from hwp_mcp.plans import create_edit_plan, CellEditInput
 
 def test_replace_text_in_segment_precise(tmp_path):
@@ -13,30 +11,42 @@ def test_replace_text_in_segment_precise(tmp_path):
     manifest = analyze_document(sample_path)
     output_path = tmp_path / "edited_contract.hwpx"
 
-    field_candidates = manifest.get("field_candidates", [])
-    edits = []
-    if field_candidates:
-        cand = field_candidates[0]
-        edits.append(CellEditInput(
-            target_id=cand["target_id"],
-            expected_text=cand["current_value"],
-            value="주식회사 에이블컴퍼니",
-        ))
-    else:
-        # Fallback cell edit
-        edits.append(CellEditInput(
-            target_id="section0.table0.row0.cell1",
+    field = next(
+        item
+        for item in manifest["field_registry"]
+        if item["kind"] == "text_field" and item["current_text"] == ""
+    )
+    edits = [
+        CellEditInput(
+            field_id=field["field_id"],
+            target_id=field["target_id"],
             expected_text="",
             value="주식회사 에이블컴퍼니",
-        ))
+        )
+    ]
+    dispositions = {
+        item["field_id"]: (
+            "manual_after_export"
+            if item["kind"] == "signable_region"
+            else "provided"
+            if item["field_id"] == field["field_id"]
+            else "not_applicable"
+        )
+        for item in manifest["field_registry"]
+    }
 
     raw_plan = create_edit_plan(
         input_path=sample_path,
         manifest=manifest,
         edits=edits,
+        dispositions=dispositions,
     )
     
-    result = fill_cells(sample_path, output_path, [op.model_dump() for op in raw_plan.operations])
+    result = apply_typed_edits(
+        sample_path,
+        output_path,
+        [op.model_dump() for op in raw_plan.operations],
+    )
 
     assert result["applied"] > 0
     assert output_path.exists()

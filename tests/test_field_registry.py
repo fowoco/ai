@@ -23,13 +23,17 @@ def test_registry_detects_all_field_types() -> None:
 
 
 def test_registry_excludes_official_use() -> None:
-    """공용란(For Official Use Only) 이하 행은 registry에서 자동 제외."""
+    """공용란 내부 입력 후보는 제외하고 비편집 official_region 하나만 보존."""
     if not SAMPLE.exists():
         return
     manifest = analyze_document(SAMPLE)
     registry = manifest["field_registry"]
-    for f in registry:
-        assert f["row"] < 35, f"공용란 행 {f['row']}이 registry에 포함됨: {f['label']}"
+    official = [field for field in registry if field["kind"] == "official_region"]
+    assert len(official) == 1
+    assert official[0]["constraints"]["editable"] is False
+    for field in registry:
+        if field["kind"] != "official_region":
+            assert field["row"] < 35, f"공용란 입력 후보가 포함됨: {field['label']}"
 
 
 def test_registry_detects_sex_checkbox_group() -> None:
@@ -94,6 +98,12 @@ def test_registry_categories_are_valid() -> None:
         return
     manifest = analyze_document(SAMPLE)
     registry = manifest["field_registry"]
-    valid = {"step1_application", "step2_personal", "step3_address", "step4_signature"}
+    valid = {
+        "step1_application",
+        "step2_personal",
+        "step3_address",
+        "step4_signature",
+        "official",
+    }
     for f in registry:
         assert f["category"] in valid, f"필드 {f['field_id']}의 category가 {f['category']}"

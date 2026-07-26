@@ -9,10 +9,11 @@ All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to th
 ## 1. Document Workspace Auto-Isolation Principle
 
 - NEVER save generated files directly under `samples/` root or arbitrary paths.
-- All operations MUST automatically create and use the document STEM workspace directory: `samples/[doc_stem]/`
-  - Copy original into workspace: `samples/[doc_stem]/original.hwpx`
-  - Modified File: `samples/[doc_stem]/modified_[user_name].hwpx`
-  - Render Outputs: `samples/[doc_stem]/renders/` (contains `original/`, `modified/`, `diffs/`)
+- All safe workflow operations MUST use `<source-parent>/<safe-stem>-<sha256-prefix>/`.
+  - Copy original into workspace: `original.hwpx` (never move the source)
+  - Modified File: `attempts/<plan-id>/modified.hwpx`
+  - Render Outputs: `attempts/<plan-id>/{original,modified,diffs}/`
+  - Final File: `final/<safe-stem>_verified.hwpx`, created only after Vision `PASS`
 - File naming convention: `page_001.svg`, `page_001.png`, `page_001_diff.png` (3-digit 1-indexed).
 
 ---
@@ -37,6 +38,8 @@ All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to th
 - `field_registry`에 있는 필드를 건너뛰면 안 됩니다.
 - `field_registry`에 없는 필드를 임의로 추가하면 안 됩니다.
 - `required: false`인 필드도 "해당사항이 있으시면 알려주세요" 형태로 반드시 물어봐야 합니다.
+- 계획 생성 전 모든 field에 `provided | not_applicable | intentionally_blank | manual_after_export` 중 하나를 지정해야 합니다.
+- `signable_region`은 현재 `manual_after_export`만 허용합니다.
 
 ### 📋 Field Registry 구조
 
@@ -55,7 +58,7 @@ All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to th
 }
 ```
 
-**필드 타입**: `checkbox`, `checkbox_group`, `text`, `date`, `phone`, `number`, `amount`, `signature`, `placeholder`
+**Primitive kind**: `text_field`, `character_grid`, `checkbox`, `checkbox_group`, `placeholder`, `date_segments`, `signable_region`
 
 ### 📝 4단계 순차 인터뷰 (Field Registry 기반)
 
@@ -71,9 +74,9 @@ All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to th
 4. `checkbox_group`은 `options` 중에서 선택하도록 안내
 5. 사용자 답변 수집 후 다음 단계로 진행
 
-### ⚠️ 자동 제외
+### ⚠️ 공용란
 
-`field_registry`는 이미 **공용란(For Official Use Only)** 영역을 자동 제외합니다. 공용란에 대한 질문을 하지 마세요.
+공용란 내부 입력 후보는 제외되고 하나의 `official_region`으로 보존됩니다. 질문하거나 편집하지 말고 `intentionally_blank`로 처리하세요. 공동이용 동의서의 서명란은 공용란 앞의 `signable_region`으로 유지됩니다.
 
 ---
 
@@ -88,5 +91,20 @@ All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to th
 ### 적용 후 Visual Diff
 
 - `compare_document_versions`로 원본 vs 수정본 SVG 렌더링 비교
-- `renders/diffs/page_001_diff.png` 생성 및 사용자에게 제공
+- `attempts/<plan-id>/diffs/page_001_diff.png` 생성 및 사용자에게 제공
 - Agent가 diff 이미지를 직접 검사하고 이상 징후를 사전 탐지
+
+## 5. Finalization Gate
+
+```text
+ANALYZED → READY_FOR_INTERVIEW → WAITING_APPROVAL
+→ PENDING_VISION_REVIEW → VERIFIED_FINAL
+```
+
+- `apply_edit_plan`은 최종본을 만들지 않습니다.
+- 원본 hash, 승인 대상 외 변경, field postcondition, 페이지 수, 신규 layout warning, PNG component diff를 자동 검증합니다.
+- `review_document_vision`은 원본·수정·diff PNG와 registry를 MCP client의 멀티모달 sampling에 전달합니다.
+- sampling 응답은 모든 편집 field의 `PASS | FAIL | NEEDS_HUMAN` JSON 판정을 포함해야 합니다.
+- sampling 미지원·응답 누락·형식 오류는 자동 `PASS`하지 않고 `NEEDS_HUMAN`입니다.
+- `finalize_document`는 호출자가 제출한 판정을 받지 않으며, 서버가 저장한 Vision `PASS`에서만 final HWPX를 복사합니다.
+- `FAIL` 또는 `NEEDS_HUMAN`은 attempt와 verification report를 보존하고 final 파일을 만들지 않습니다.

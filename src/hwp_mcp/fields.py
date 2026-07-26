@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FieldCandidate(BaseModel):
@@ -259,6 +261,23 @@ RegistryFieldType = Literal[
     "checkbox", "checkbox_group", "text", "date", "phone",
     "number", "amount", "signature", "placeholder",
 ]
+RegistryFieldKind = Literal[
+    "text_field",
+    "character_grid",
+    "checkbox",
+    "checkbox_group",
+    "placeholder",
+    "date_segments",
+    "signable_region",
+    "official_region",
+]
+Disposition = Literal[
+    "provided",
+    "not_applicable",
+    "intentionally_blank",
+    "manual_after_export",
+    "future_e_signature",
+]
 
 
 class RegistryField(BaseModel):
@@ -276,6 +295,11 @@ class RegistryField(BaseModel):
     current_text: str
     required: bool = True
     options: list[str] | None = None  # checkbox_group의 선택지
+    kind: RegistryFieldKind | None = None
+    xml_segments: list[str] = Field(default_factory=list)
+    visual_regions: list[str] = Field(default_factory=list)
+    constraints: dict[str, Any] = Field(default_factory=dict)
+    disposition: Disposition | None = None
 
 
 def infer_all_fields(manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -284,17 +308,12 @@ def infer_all_fields(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     체크박스, 빈 셀, 하단 빈 셀, 플레이스홀더를 모두 탐지하고
     공용란(관용구)은 자동 제외합니다.
     """
-    import re
-    from pathlib import Path
-
     registry: list[RegistryField] = []
-    seen_ids: set[str] = set()
-
-    # 공용란 시작 행 감지
-    official_start_row: int | None = None
 
     for section in manifest.get("sections", []):
         for table in section.get("tables", []):
+            seen_ids: set[str] = set()
+            official_start_row: int | None = None
             cells = table.get("cells", [])
             cells_by_row: dict[int, list[dict[str, Any]]] = {}
             for cell in cells:
@@ -307,6 +326,203 @@ def infer_all_fields(manifest: dict[str, Any]) -> list[dict[str, Any]]:
                     row = cell.get("row", 9999)
                     if official_start_row is None or row < official_start_row:
                         official_start_row = row
+
+            if official_start_row is not None:
+                official_cells = [
+                    cell
+                    for cell in cells
+                    if cell.get("row", 0) >= official_start_row
+                ]
+                marker = min(
+                    official_cells,
+                    key=lambda cell: (cell.get("row", 0), cell.get("column", 0)),
+                )
+                registry.append(
+                    RegistryField(
+                        field_id=f"{table.get('id', '')}.official_region",
+                        target_id=marker.get("id", ""),
+                        label=marker.get("text", "").strip()[:60] or "공용란",
+                        type="text",
+                        kind="official_region",
+                        category="official",
+                        row=official_start_row,
+                        column=marker.get("column", 0),
+                        current_text="\n".join(
+                            cell.get("text", "") for cell in official_cells
+                        ),
+                        required=False,
+                        xml_segments=[cell.get("id", "") for cell in official_cells],
+                        constraints={"editable": False},
+                    )
+                )
+
+            # Pass 0.5: 라벨 뒤에 이어지는 4개 이상의 빈 칸은 문자칸입니다.
+            for row, row_cells in cells_by_row.items():
+                if official_start_row is not None and row >= official_start_row:
+                    continue
+                ordered = sorted(row_cells, key=lambda cell: cell.get("column", 0))
+                index = 0
+                while index < len(ordered):
+                    if ordered[index].get("text", "").strip():
+                        index += 1
+                        continue
+                    start = index
+                    while index < len(ordered) and not ordered[index].get("text", "").strip():
+                        index += 1
+                    slots = ordered[start:index]
+                    if start == 0 or len(slots) < 4:
+                        continue
+                    label_cell = ordered[start - 1]
+                    label = label_cell.get("text", "").strip()
+                    if not label or label.startswith("■"):
+                        continue
+                    segment_ids = [cell.get("id", "") for cell in slots]
+                    target_id = segment_ids[0]
+                    registry.append(
+                        RegistryField(
+                            field_id=f"{target_id}.character_grid",
+                            target_id=target_id,
+                            label=label[:60],
+                            type="number",
+                            kind="character_grid",
+                            category=_categorize_row(row),
+                            row=row,
+                            column=slots[0].get("column", 0),
+                            current_text="",
+                            required=_is_required_field(label),
+                            xml_segments=segment_ids,
+                            constraints={"slot_count": len(segment_ids), "separators": []},
+                        )
+                    )
+                    seen_ids.update(segment_ids)
+
+            # Pass 0.6: yyyy/mm/dd가 나뉜 셀은 하나의 날짜 세그먼트입니다.
+            for row, row_cells in cells_by_row.items():
+                if official_start_row is not None and row >= official_start_row:
+                    continue
+                ordered = sorted(row_cells, key=lambda cell: cell.get("column", 0))
+                anchors = ("yyyy", "mm", "dd")
+                positions = [
+                    next(
+                        (
+                            index
+                            for index, cell in enumerate(ordered)
+                            if anchor in cell.get("text", "").lower()
+                        ),
+                        None,
+                    )
+                    for anchor in anchors
+                ]
+                if any(position is None for position in positions):
+                    continue
+                segment_cells = [ordered[int(position)] for position in positions]
+                label = next(
+                    (
+                        cell.get("text", "").strip()
+                        for cell in ordered[: int(positions[0])]
+                        if cell.get("text", "").strip()
+                    ),
+                    "날짜",
+                )
+                segment_ids = [cell.get("id", "") for cell in segment_cells]
+                target_id = segment_ids[0]
+                registry.append(
+                    RegistryField(
+                        field_id=f"{target_id}.date_segments",
+                        target_id=target_id,
+                        label=label[:60],
+                        type="date",
+                        kind="date_segments",
+                        category=_categorize_row(row),
+                        row=row,
+                        column=segment_cells[0].get("column", 0),
+                        current_text=" / ".join(
+                            cell.get("text", "") for cell in segment_cells
+                        ),
+                        required=_is_required_field(label),
+                        xml_segments=segment_ids,
+                        constraints={"anchors": list(anchors)},
+                    )
+                )
+                seen_ids.update(segment_ids)
+
+            # Pass 1: 체크박스 필드 탐지
+            for cell in cells:
+                row = cell.get("row", 0)
+                if official_start_row is not None and row >= official_start_row:
+                    continue
+                text = cell.get("text", "")
+                cell_id = cell.get("id", "")
+                column = cell.get("column", 0)
+
+                for match in re.finditer(
+                    r"(?:\d{4}\s*)?년\s+(?:\d{1,2}\s*)?월\s+(?:\d{1,2}\s*)?일",
+                    text,
+                ):
+                    anchor = _contextual_anchor(text, match.start(), match.end())
+                    registry.append(
+                        RegistryField(
+                            field_id=f"{cell_id}.date_inline_{match.start()}",
+                            target_id=cell_id,
+                            label="날짜 입력 영역",
+                            type="date",
+                            kind="date_segments",
+                            category=_categorize_row(row),
+                            row=row,
+                            column=column,
+                            current_text=text,
+                            required=True,
+                            xml_segments=[cell_id],
+                            constraints={
+                                "mode": "inline",
+                                "anchor": anchor,
+                                "replacement_token": match.group(0),
+                            },
+                        )
+                    )
+
+                for match in re.finditer(
+                    r"\(서명\s*또는\s*인\)|서명\s*또는\s*인|\((?:signature|seal)\)|\(날인\)",
+                    text,
+                    flags=re.IGNORECASE,
+                ):
+                    registry.append(
+                        RegistryField(
+                            field_id=f"{cell_id}.signable_{match.start()}",
+                            target_id=cell_id,
+                            label=match.group(0),
+                            type="signature",
+                            kind="signable_region",
+                            category=_categorize_row(row),
+                            row=row,
+                            column=column,
+                            current_text=text,
+                            required=True,
+                            xml_segments=[cell_id],
+                            constraints={"anchor": match.group(0)},
+                        )
+                    )
+
+                for match in re.finditer(r"\(\s{3,}\)\s*(?:원|won)", text, re.IGNORECASE):
+                    anchor = _contextual_anchor(text, match.start(), match.end())
+                    registry.append(
+                        RegistryField(
+                            field_id=f"{cell_id}.amount_{match.start()}",
+                            target_id=cell_id,
+                            label="금액 입력 영역",
+                            type="amount",
+                            category=_categorize_row(row),
+                            row=row,
+                            column=column,
+                            current_text=text,
+                            required=True,
+                            xml_segments=[cell_id],
+                            constraints={
+                                "anchor": anchor,
+                                "replacement_token": match.group(0),
+                            },
+                        )
+                    )
 
             # Pass 1: 체크박스 필드 탐지
             for cell in cells:
@@ -390,6 +606,7 @@ def infer_all_fields(manifest: dict[str, Any]) -> list[dict[str, Any]]:
                         row=row, column=col,
                         current_text=text,
                         required=False,
+                        constraints={"anchor": placeholder_match.group(0)},
                     ))
                     seen_ids.add(cell_id)
 
@@ -464,7 +681,36 @@ def infer_all_fields(manifest: dict[str, Any]) -> list[dict[str, Any]]:
                             seen_ids.add(target_id)
                             break
 
-    return [f.model_dump() for f in registry]
+    for field in registry:
+        if field.kind is None:
+            field.kind = _kind_for_type(field.type)
+        if not field.xml_segments:
+            field.xml_segments = [field.target_id]
+    return [field.model_dump() for field in registry]
+
+
+def _kind_for_type(field_type: RegistryFieldType) -> RegistryFieldKind:
+    if field_type == "checkbox_group":
+        return "checkbox_group"
+    if field_type == "checkbox":
+        return "checkbox"
+    if field_type == "placeholder":
+        return "placeholder"
+    if field_type == "date":
+        return "date_segments"
+    if field_type == "signature":
+        return "signable_region"
+    return "text_field"
+
+
+def _contextual_anchor(text: str, start: int, end: int) -> str:
+    """반복 placeholder 주위 문맥을 넓혀 정확히 한 번만 나타나는 anchor를 만듭니다."""
+    padding = 16
+    while True:
+        anchor = text[max(0, start - padding) : min(len(text), end + padding)]
+        if text.count(anchor) == 1 or (start - padding <= 0 and end + padding >= len(text)):
+            return anchor
+        padding *= 2
 
 
 def _categorize_row(row: int) -> str:
@@ -485,7 +731,7 @@ def _guess_field_type(label: str) -> RegistryFieldType:
         return "phone"
     if any(kw in label_lower for kw in ("날짜", "일자", "date", "기간", "유효", "생년월일")):
         return "date"
-    if any(kw in label_lower for kw in ("서명", "signature", "seal", "인")):
+    if any(kw in label_lower for kw in ("서명", "signature", "seal", "날인")):
         return "signature"
     if any(kw in label_lower for kw in ("소득", "금액", "만원", "amount", "income")):
         return "amount"
@@ -506,4 +752,3 @@ def _known_label(text: str) -> str | None:
         if label in text and not text.startswith("■"):
             return label
     return None
-
