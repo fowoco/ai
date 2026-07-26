@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import math
+from pathlib import Path
 from typing import Any, Literal
 
+from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .hwpx import DocumentError
@@ -25,6 +28,79 @@ class VisionDecision(BaseModel):
     verdict: VisionVerdict
     summary: str = Field(min_length=1, max_length=2000)
     fields: list[FieldVisionDecision] = Field(min_length=1, max_length=100)
+
+
+def create_vision_detail_crops(
+    *,
+    page_number: int,
+    original_path: str | Path,
+    modified_path: str | Path,
+    diff_path: str | Path,
+    field_regions: dict[str, list[int]],
+    output_dir: str | Path,
+    max_band_height: int = 420,
+    max_bands: int = 3,
+    overlap: int = 24,
+) -> list[dict[str, Any]]:
+    """큰 페이지에서 편집 field가 있는 가로 band만 상세 비교 이미지로 만듭니다."""
+    paths = {
+        "original": Path(original_path),
+        "modified": Path(modified_path),
+        "diff": Path(diff_path),
+    }
+    with (
+        Image.open(paths["original"]) as original,
+        Image.open(paths["modified"]) as modified,
+        Image.open(paths["diff"]) as diff,
+    ):
+        sizes = {original.size, modified.size, diff.size}
+        if len(sizes) != 1:
+            raise DocumentError("Vision 상세 crop 원본·수정·diff 크기가 다릅니다.")
+        width, height = original.size
+        if height <= max_band_height or not field_regions:
+            return []
+
+        row_count = min(max_bands, math.ceil(height / max_band_height))
+        band_height = math.ceil(height / row_count)
+        touched_rows: set[int] = set()
+        for region in field_regions.values():
+            if len(region) != 4:
+                raise DocumentError("Vision 상세 crop field region이 올바르지 않습니다.")
+            top = min(max(0, region[1]), height - 1)
+            bottom = min(max(top, region[3] - 1), height - 1)
+            touched_rows.update(
+                range(top // band_height, bottom // band_height + 1)
+            )
+
+        destination = Path(output_dir)
+        destination.mkdir(parents=True, exist_ok=True)
+        details = []
+        images = {
+            "original": original,
+            "modified": modified,
+            "diff": diff,
+        }
+        for row in sorted(touched_rows):
+            box = (
+                0,
+                max(0, row * band_height - overlap),
+                width,
+                min(height, (row + 1) * band_height + overlap),
+            )
+            item: dict[str, Any] = {
+                "page": page_number,
+                "band": row + 1,
+                "bbox": list(box),
+            }
+            for kind, image in images.items():
+                output_path = (
+                    destination
+                    / f"page_{page_number:03d}_band_{row + 1:03d}_{kind}.png"
+                )
+                image.crop(box).save(output_path)
+                item[kind] = str(output_path)
+            details.append(item)
+        return details
 
 
 def parse_vision_decision(text: str, expected_field_ids: list[str]) -> VisionDecision:
@@ -96,6 +172,8 @@ def build_vision_prompt(
     return (
         "당신은 HWPX 양식 편집 결과의 최종 시각 검토자다. "
         "각 페이지의 원본 PNG, 수정 PNG, diff PNG를 순서대로 비교하라. "
+        "이어지는 detail band는 같은 페이지의 확대 가로 구간이다. "
+        "전체 페이지에서 위치를 확인하고 detail band에서 글자와 경계를 재확인하라. "
         "입력값의 물리적 위치, 셀 경계 침범/중첩, checkbox 제자리 치환, "
         "placeholder 잔존/중복, character_grid 문자별 배치를 확인하라. "
         "각 reason에는 해당 field 라벨과 원본 대비 위치 관계를 적고, "

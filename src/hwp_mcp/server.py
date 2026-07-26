@@ -45,7 +45,11 @@ from .plans import (
 )
 from .normalization import NormalizationRequest, normalize_field
 from .rhwp import render_svg
-from .vision import build_vision_prompt, parse_vision_decision
+from .vision import (
+    build_vision_prompt,
+    create_vision_detail_crops,
+    parse_vision_decision,
+)
 from .workspace import (
     finalize_attempt,
     prepare_workspace,
@@ -654,8 +658,14 @@ async def review_document_vision(
     verification = json.loads(verification_path.read_text(encoding="utf-8"))
     operations = plan["operations"]
     expected_field_ids = [operation["field_id"] for operation in operations]
+    expected_field_id_set = set(expected_field_ids)
     registry_path = workspace["analysis_dir"] / "field-registry.json"
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
+    edited_registry = [
+        field
+        for field in registry
+        if field["field_id"] in expected_field_id_set
+    ]
 
     prompt = build_vision_prompt(
         plan_id=plan_id,
@@ -677,6 +687,7 @@ async def review_document_vision(
     ]
     if not page_sets[0] or len({len(paths) for paths in page_sets}) != 1:
         raise DocumentError("Vision 검토용 원본·수정·diff PNG 구성이 일치하지 않습니다.")
+    detail_bands = []
     for page_index, paths in enumerate(zip(*page_sets), start=1):
         content.append(
             TextContent(
@@ -694,6 +705,39 @@ async def review_document_vision(
                     mimeType="image/png",
                 )
             )
+        page_details = create_vision_detail_crops(
+            page_number=page_index,
+            original_path=paths[0],
+            modified_path=paths[1],
+            diff_path=paths[2],
+            field_regions=_field_regions_for_page(
+                edited_registry,
+                page_index,
+            ),
+            output_dir=attempt_dir / "vision-details",
+        )
+        detail_bands.extend(page_details)
+        for detail in page_details:
+            content.append(
+                TextContent(
+                    type="text",
+                    text=(
+                        f"page {page_index} detail band {detail['band']}: "
+                        "original, modified, diff 순서; "
+                        f"bbox={detail['bbox']}"
+                    ),
+                )
+            )
+            for kind in ("original", "modified", "diff"):
+                data = Path(detail[kind]).read_bytes()
+                total_image_bytes += len(data)
+                content.append(
+                    ImageContent(
+                        type="image",
+                        data=base64.b64encode(data).decode("ascii"),
+                        mimeType="image/png",
+                    )
+                )
     if total_image_bytes > 30 * 1024 * 1024:
         return _record_vision_needs_human(
             workspace["workspace_dir"],
@@ -732,6 +776,7 @@ async def review_document_vision(
         "original_sha256": state["original_sha256"],
         "modified_sha256": sha256_file(attempt_dir / "modified.hwpx"),
         "model": sampled.model,
+        "detail_bands": detail_bands,
         **decision.model_dump(),
     }
     review_path = attempt_dir / "vision-review.json"
