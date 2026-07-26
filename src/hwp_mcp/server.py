@@ -27,7 +27,7 @@ from .compare import (
     validate_typed_postconditions,
 )
 from .hwpx import (
-    analyze_document as analyze_hwpx_document,
+    _analyze_xml_document,
     apply_typed_edits,
     DocumentError,
     extract_text as extract_hwpx_text,
@@ -57,13 +57,12 @@ from .workspace import (
 
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 logger = logging.getLogger("hwp-editor-mcp")
+ANALYSIS_CONTRACT_VERSION = 2
+MCP_INSTRUCTIONS = Path(__file__).with_name("instructions.md").read_text(encoding="utf-8")
 
 mcp = FastMCP(
     "HWPX Editor",
-    instructions=(
-        "로컬 우선 HWPX 검사와 제한적인 텍스트 편집을 제공합니다. "
-        "원본 파일은 절대 덮어쓰지 않습니다. HWP 레거시 바이너리 편집은 지원하지 않습니다."
-    ),
+    instructions=MCP_INSTRUCTIONS,
     json_response=True,
 )
 
@@ -125,6 +124,17 @@ def _resolve_render_dir(raw_path: str) -> Path:
     return resolved
 
 
+def _require_visual_analysis_contract(state: dict[str, Any]) -> None:
+    if (
+        state.get("analysis_contract_version") != ANALYSIS_CONTRACT_VERSION
+        or state.get("registry_source") != "rhwp_svg"
+        or state.get("interview_ready") is not True
+    ):
+        raise DocumentError(
+            "현재 rhwp SVG 분석 계약이 없습니다. 최신 MCP 서버에서 analyze_document를 다시 실행하세요."
+        )
+
+
 @mcp.tool()
 def inspect_document(path: str) -> dict[str, Any]:
     """로컬 HWPX 패키지를 검사하거나 HWP 레거시 형식을 미지원으로 보고합니다."""
@@ -145,21 +155,45 @@ def analyze_document(path: str) -> dict[str, Any]:
     input_path = _resolve_path(path, must_exist=True)
     workspace = prepare_workspace(input_path)
     original_path = workspace["original_path"]
-    manifest = analyze_hwpx_document(original_path)
+    manifest = _analyze_xml_document(original_path)
+    xml_field_candidates = manifest.pop("xml_field_candidates")
+    manifest.pop("field_candidates", None)
+    manifest.pop("field_segments", None)
     original_render_dir = workspace["analysis_dir"] / "original"
     if original_render_dir.exists():
         shutil.rmtree(original_render_dir)
     render = render_svg(original_path, original_render_dir, debug_overlay=True)
     svg_analysis = analyze_svg_geometry(render["files"], manifest)
-    manifest["field_registry"] = reconcile_registry_with_svg(
-        manifest,
-        manifest["field_registry"],
-        svg_analysis,
+    field_registry: list[dict[str, Any]] = []
+    if svg_analysis["status"] == "MAPPED":
+        field_registry = reconcile_registry_with_svg(
+            manifest,
+            xml_field_candidates,
+            svg_analysis,
+        )
+        field_registry = attach_svg_regions(field_registry, svg_analysis)
+        ungrounded_field_ids = [
+            field["field_id"]
+            for field in field_registry
+            if not field.get("visual_regions")
+            or field.get("constraints", {}).get("visual_source") != "rhwp_svg"
+        ]
+        if ungrounded_field_ids:
+            svg_analysis["status"] = "NEEDS_HUMAN"
+            svg_analysis["ungrounded_field_ids"] = ungrounded_field_ids
+            field_registry = []
+    interview_ready = svg_analysis["status"] == "MAPPED"
+    manifest["analysis_stage"] = (
+        "XML_SVG_MAPPED" if interview_ready else "XML_SVG_NEEDS_HUMAN"
     )
-    manifest["field_registry"] = attach_svg_regions(
-        manifest["field_registry"],
-        svg_analysis,
-    )
+    manifest["field_registry"] = field_registry
+    analysis_contract = {
+        "version": ANALYSIS_CONTRACT_VERSION,
+        "stage": manifest["analysis_stage"],
+        "registry_source": "rhwp_svg" if interview_ready else None,
+        "interview_ready": interview_ready,
+    }
+    manifest["analysis_contract"] = analysis_contract
     png_paths = []
     for index, svg_path in enumerate(render["files"], start=1):
         png_path = original_render_dir / f"page_{index:03d}.png"
@@ -170,6 +204,7 @@ def analyze_document(path: str) -> dict[str, Any]:
         "manifest": manifest,
         "render": render,
         "svg_analysis": svg_analysis,
+        "analysis_contract": analysis_contract,
         "png_paths": png_paths,
     }
     analysis_id = hashlib.sha256(
@@ -186,6 +221,9 @@ def analyze_document(path: str) -> dict[str, Any]:
         workspace["workspace_dir"],
         status="ANALYZED",
         analysis_id=analysis_id,
+        analysis_contract_version=analysis_contract["version"],
+        registry_source=analysis_contract["registry_source"],
+        interview_ready=analysis_contract["interview_ready"],
         alignment_status=(
             "NEEDS_REVIEW"
             if svg_analysis["status"] == "MAPPED"
@@ -206,6 +244,7 @@ def analyze_document(path: str) -> dict[str, Any]:
         "original_path": str(original_path),
         "render": render,
         "svg_analysis": svg_analysis,
+        "analysis_contract": analysis_contract,
         "png_paths": png_paths,
     }
 
@@ -246,8 +285,8 @@ def compare_document_versions(
     try:
         original_render = render_svg(original, original_output, debug_overlay=debug_overlay)
         modified_render = render_svg(modified, modified_output, debug_overlay=debug_overlay)
-        original_manifest = analyze_hwpx_document(original)
-        modified_manifest = analyze_hwpx_document(modified)
+        original_manifest = _analyze_xml_document(original)
+        modified_manifest = _analyze_xml_document(modified)
 
         # SVG -> PNG 캡처 생성 및 Visual Diff 빨간 하이라이트 박스 이미지 배출
         visual_res = compare_rendered_pages(original_render, modified_render)
@@ -309,7 +348,8 @@ def confirm_visual_candidates(
         raise DocumentError("ANALYZED 상태에서만 visual candidate를 확정할 수 있습니다.")
     if state.get("svg_analysis_status") != "MAPPED":
         raise DocumentError("rhwp SVG cell geometry가 XML 구조와 매핑되지 않았습니다.")
-    manifest = analyze_hwpx_document(workspace["original_path"])
+    _require_visual_analysis_contract(state)
+    manifest = _analyze_xml_document(workspace["original_path"])
     registry_path = workspace["analysis_dir"] / "field-registry.json"
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
     known_cells = {
@@ -344,10 +384,14 @@ def confirm_visual_candidates(
                 segment not in known_cells for segment in field.xml_segments
             ):
                 raise DocumentError("confirmed visual candidate의 XML segment를 찾지 못했습니다.")
+            if not field.visual_regions:
+                raise DocumentError("confirmed visual candidate에는 SVG visual region이 필요합니다.")
             if any(item["field_id"] == field.field_id for item in registry):
                 raise DocumentError(f"중복 field_id입니다: {field.field_id}")
-            registry.append(field.model_dump())
-            normalized_candidate["field"] = field.model_dump()
+            field_payload = field.model_dump()
+            field_payload["constraints"]["visual_source"] = "human_confirmed_svg"
+            registry.append(field_payload)
+            normalized_candidate["field"] = field_payload
         normalized.append(normalized_candidate)
     write_json(workspace["analysis_dir"] / "visual-candidates.json", normalized)
     write_json(workspace["analysis_dir"] / "field-registry.json", registry)
@@ -376,6 +420,7 @@ def create_edit_plan(
     state = read_workflow_state(workspace["workspace_dir"])
     if state["status"] != "READY_FOR_INTERVIEW":
         raise DocumentError("analyze_document와 시각 후보 확인 후 계획을 만드세요.")
+    _require_visual_analysis_contract(state)
     if len(state.get("attempts", [])) >= 2:
         update_workflow_state(
             workspace["workspace_dir"],
@@ -383,7 +428,10 @@ def create_edit_plan(
         )
         raise DocumentError("XML/SVG 조정 2회를 소진해 사람 검토가 필요합니다.")
     original_path = workspace["original_path"]
-    manifest = analyze_hwpx_document(original_path)
+    manifest_path = workspace["analysis_dir"] / "manifest.json"
+    if not manifest_path.exists():
+        raise DocumentError("저장된 XML/SVG 분석 manifest가 없습니다. analyze_document를 다시 실행하세요.")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     registry_path = workspace["analysis_dir"] / "field-registry.json"
     if registry_path.exists():
         manifest["field_registry"] = json.loads(registry_path.read_text(encoding="utf-8"))
@@ -424,6 +472,10 @@ def apply_edit_plan(
     state = read_workflow_state(workspace["workspace_dir"])
     if state.get("status") != "WAITING_APPROVAL" or state.get("plan_id") != plan.plan_id:
         raise DocumentError("현재 승인 대기 중인 plan이 아닙니다.")
+    _require_visual_analysis_contract(state)
+    registry_path = workspace["analysis_dir"] / "field-registry.json"
+    if not registry_path.exists():
+        raise DocumentError("저장된 SVG field_registry가 없습니다. analyze_document를 다시 실행하세요.")
     original_path = workspace["original_path"]
     validate_edit_plan(plan, original_path)
     attempt_dir = workspace["attempts_dir"] / plan.plan_id
@@ -434,8 +486,8 @@ def apply_edit_plan(
     try:
         operation_dicts = [operation.model_dump(exclude_none=True) for operation in plan.operations]
         result = apply_typed_edits(original_path, destination, operation_dicts)
-        original_manifest = analyze_hwpx_document(original_path)
-        modified_manifest = analyze_hwpx_document(destination)
+        original_manifest = _analyze_xml_document(original_path)
+        modified_manifest = _analyze_xml_document(destination)
         structure = compare_manifests(
             original_manifest, modified_manifest
         )
@@ -483,12 +535,7 @@ def apply_edit_plan(
 
         visual = compare_rendered_pages(original_render, modified_render)
         visual_diffs = []
-        registry_path = workspace["analysis_dir"] / "field-registry.json"
-        registry_for_visual = (
-            json.loads(registry_path.read_text(encoding="utf-8"))
-            if registry_path.exists()
-            else modified_manifest["field_registry"]
-        )
+        registry_for_visual = json.loads(registry_path.read_text(encoding="utf-8"))
         for page in visual["pages"]:
             page_number = page["page"]
             original_png = original_output / f"page_{page_number:03d}.png"

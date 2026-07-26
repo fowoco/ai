@@ -81,7 +81,27 @@ def create_edit_plan(
     if not edits:
         raise EditPlanError("편집 계획에는 하나 이상의 변경이 필요합니다.")
 
+    analysis_contract = manifest.get("analysis_contract", {})
+    if (
+        analysis_contract.get("version") != 2
+        or analysis_contract.get("registry_source") != "rhwp_svg"
+        or analysis_contract.get("interview_ready") is not True
+    ):
+        raise EditPlanError(
+            "rhwp SVG 분석 계약이 확인된 field_registry에서만 편집 계획을 만들 수 있습니다."
+        )
     registry = manifest.get("field_registry", [])
+    ungrounded_fields = [
+        field["field_id"]
+        for field in registry
+        if not field.get("visual_regions")
+        or field.get("constraints", {}).get("visual_source")
+        not in {"rhwp_svg", "human_confirmed_svg"}
+    ]
+    if ungrounded_fields:
+        raise EditPlanError(
+            "SVG 시각 근거가 없는 field가 있습니다: " + ", ".join(ungrounded_fields[:5])
+        )
     registry_by_id = {field["field_id"]: field for field in registry}
     dispositions = dispositions or {}
     missing_dispositions = sorted(set(registry_by_id) - set(dispositions))

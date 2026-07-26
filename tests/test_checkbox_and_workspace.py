@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from hwp_mcp.normalization import normalize_field, NormalizationRequest
-from hwp_mcp.hwpx import analyze_document, fill_cells
+from hwp_mcp.hwpx import _analyze_xml_document, fill_cells
 
 
 def test_checkbox_normalization() -> None:
@@ -28,7 +28,7 @@ def test_checkbox_cell_substitution_double_space() -> None:
     fill_res = fill_cells(sample_path, mod_path, edits)
     assert fill_res["applied"] == 1
 
-    manifest = analyze_document(mod_path)
+    manifest = _analyze_xml_document(mod_path)
     cells = manifest["sections"][0]["tables"][0]["cells"]
     target_cell = [c for c in cells if c["id"] == "section0.table0.row4.cell0"][0]
     # [  ] -> [V]로 치환되고, 원본 텍스트가 중복으로 추가되지 않아야 함
@@ -52,7 +52,7 @@ def test_sex_checkbox_substitution() -> None:
     fill_res = fill_cells(sample_path, mod_path, edits)
     assert fill_res["applied"] == 1
 
-    manifest = analyze_document(mod_path)
+    manifest = _analyze_xml_document(mod_path)
     cells = manifest["sections"][0]["tables"][0]["cells"]
     sex_cell = [c for c in cells if c["id"] == "section0.table0.row15.cell5"][0]
     assert "[V]남 M" in sex_cell["text"]

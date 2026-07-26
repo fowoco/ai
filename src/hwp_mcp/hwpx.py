@@ -236,8 +236,8 @@ def _element_text(element: ET.Element) -> str:
     return "".join(child.text or "" for child in element.iter() if _local_name(child.tag) == "t")
 
 
-def analyze_document(path: str | Path) -> dict[str, Any]:
-    """양식 대상 지정을 위한 간단한 구조 Manifest를 반환합니다."""
+def _analyze_xml_document(path: str | Path) -> dict[str, Any]:
+    """내부 XML 구조와 아직 시각 검증되지 않은 field 후보를 반환합니다."""
     path = Path(path)
     _require_hwpx(path)
     report = _validate_archive(path)
@@ -338,6 +338,7 @@ def analyze_document(path: str | Path) -> dict[str, Any]:
     manifest = {
         "format": "hwpx",
         "valid": True,
+        "analysis_stage": "XML_ONLY",
         "sections": sections,
         "paragraph_count": sum(section["paragraph_count"] for section in sections),
         "table_count": sum(section["table_count"] for section in sections),
@@ -345,7 +346,7 @@ def analyze_document(path: str | Path) -> dict[str, Any]:
     }
     manifest["field_candidates"] = infer_field_candidates(manifest)
     manifest["field_segments"] = infer_field_segments(manifest)
-    manifest["field_registry"] = infer_all_fields(manifest)
+    manifest["xml_field_candidates"] = infer_all_fields(manifest)
     return manifest
 
 

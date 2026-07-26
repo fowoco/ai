@@ -113,6 +113,12 @@ uv run pytest
 | `replace_text` | 정확한 문자열을 새 `.hwpx` 파일에 치환 후 재검증 |
 | `validate_document` | ZIP/XML·필수 파트·구역 파일 검증 |
 
+`analyze_document`의 `field_registry`는
+`analysis_contract.version == 2`, `registry_source == "rhwp_svg"`,
+`interview_ready == true`일 때만 인터뷰 입력으로 사용할 수 있습니다.
+내부 XML 분석은 `xml_field_candidates`만 만들며 최종 registry나 Edit Plan의
+입력으로 사용할 수 없습니다.
+
 ## FastAPI Endpoint
 
 | Endpoint | 동작 |

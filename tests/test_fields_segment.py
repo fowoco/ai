@@ -1,5 +1,5 @@
 import pytest
-from hwp_mcp.hwpx import analyze_document
+from hwp_mcp.hwpx import _analyze_xml_document
 from hwp_mcp.fields import FieldSegment, infer_field_segments
 
 def test_field_segment_model():
@@ -26,7 +26,7 @@ def test_infer_field_segments_from_standard_contract(tmp_path):
     if not os.path.exists(sample_path):
         pytest.skip("standard employment contract sample not found")
 
-    manifest = analyze_document(sample_path)
+    manifest = _analyze_xml_document(sample_path)
     segments = infer_field_segments(manifest)
     
     assert len(segments) > 0
