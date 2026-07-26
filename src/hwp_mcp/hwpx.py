@@ -633,7 +633,10 @@ def _apply_typed_operation(root: ET.Element, operation: dict[str, Any]) -> None:
         match = re.fullmatch(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})", value)
         if match is None:
             raise DocumentError("날짜 세그먼트 값은 YYYY-MM-DD 형식이어야 합니다.")
-        if len(cells) == 1 and operation.get("constraints", {}).get("mode") == "inline":
+        mode = operation.get("constraints", {}).get("mode")
+        if len(cells) == 1:
+            if mode != "inline":
+                raise DocumentError("1개 날짜 세그먼트는 inline mode여야 합니다.")
             anchor = operation.get("anchor", "")
             token = operation.get("constraints", {}).get("replacement_token", anchor)
             replacement = anchor.replace(
@@ -641,15 +644,14 @@ def _apply_typed_operation(root: ET.Element, operation: dict[str, Any]) -> None:
                 f"{match.group(1)}년 {match.group(2)}월 {match.group(3)}일",
                 1,
             )
-            _replace_anchor(
-                cells[0],
-                anchor,
-                replacement,
-                1,
-            )
+            _replace_anchor(cells[0], anchor, replacement, 1)
             return
         if len(cells) != 3:
-            raise DocumentError("날짜 세그먼트는 inline 또는 3개 XML segment여야 합니다.")
+            raise DocumentError("날짜 세그먼트는 inline 1개 또는 3개 XML segment여야 합니다.")
+        if mode == "empty_cells":
+            for cell, component in zip(cells, match.groups()):
+                _set_empty_cell_text(cell, component)
+            return
         anchors = operation.get("constraints", {}).get("anchors", ["yyyy", "mm", "dd"])
         if len(anchors) != 3:
             raise DocumentError("날짜 세그먼트 anchor가 올바르지 않습니다.")
@@ -669,6 +671,14 @@ def _apply_typed_operation(root: ET.Element, operation: dict[str, Any]) -> None:
     anchor = operation.get("anchor")
     expected_count = operation.get("expected_match_count", 1)
     if operation_name == "set_amount" and anchor:
+        if operation.get("constraints", {}).get("mode") == "prefix_unit":
+            _replace_anchor(
+                cell,
+                anchor,
+                f"{value} {anchor}",
+                expected_count,
+            )
+            return
         token = operation.get("constraints", {}).get("replacement_token", anchor)
         replacement_token = re.sub(r"\(\s+\)", f"({value})", token, count=1)
         _replace_anchor(
@@ -679,7 +689,15 @@ def _apply_typed_operation(root: ET.Element, operation: dict[str, Any]) -> None:
         )
         return
     if anchor:
-        _replace_anchor(cell, anchor, value, expected_count)
+        replacement_token = operation.get("constraints", {}).get(
+            "replacement_token"
+        )
+        replacement = (
+            anchor.replace(replacement_token, f" {value}", 1)
+            if replacement_token
+            else value
+        )
+        _replace_anchor(cell, anchor, replacement, expected_count)
     elif not _element_text(cell):
         _set_empty_cell_text(cell, value)
     else:
@@ -694,7 +712,7 @@ def _set_empty_cell_text(cell: ET.Element, value: str) -> None:
     texts = _text_elements(cell)
     if not texts:
         raise DocumentError("입력 대상 셀에 기존 <t> 노드가 없습니다.")
-    if any(element.text for element in texts):
+    if any(element.text and element.text.strip() for element in texts):
         raise DocumentError("빈 셀 사전조건이 일치하지 않습니다.")
     texts[-1].text = value
 

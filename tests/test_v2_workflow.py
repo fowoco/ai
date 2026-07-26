@@ -16,6 +16,7 @@ from hwp_mcp.plans import (
     sha256_file,
 )
 from hwp_mcp.server import confirm_visual_candidates
+from hwp_mcp.vision import parse_vision_decision
 from hwp_mcp.workspace import (
     finalize_attempt,
     prepare_workspace,
@@ -25,6 +26,18 @@ from hwp_mcp.workspace import (
 
 from test_hwpx import NS, make_table_fixture
 from analysis_helpers import make_grounded_manifest
+
+
+def test_vision_rejects_same_reason_for_every_field() -> None:
+    response = (
+        '{"verdict":"PASS","summary":"검토 완료","fields":['
+        '{"field_id":"amount","verdict":"PASS","reason":"생년월일 분할 입력"},'
+        '{"field_id":"occupation","verdict":"PASS","reason":"생년월일 분할 입력"}'
+        "]}"
+    )
+
+    with pytest.raises(DocumentError, match="같은 reason"):
+        parse_vision_decision(response, ["amount", "occupation"])
 
 
 def _make_grid_fixture(path: Path) -> None:
@@ -52,6 +65,112 @@ def _make_grid_fixture(path: Path) -> None:
         )
         archive.writestr("Contents/header.xml", header)
         archive.writestr("Contents/section0.xml", section)
+
+
+def test_typed_date_segments_write_three_empty_cells(tmp_path: Path) -> None:
+    source = tmp_path / "date.hwpx"
+    output = tmp_path / "date-edited.hwpx"
+    _make_grid_fixture(source)
+    segments = [
+        f"section0.table0.row0.cell{column}"
+        for column in range(1, 4)
+    ]
+    operation = {
+        "operation": "set_date_segments",
+        "field_id": "birth-date",
+        "target_id": segments[0],
+        "old_value": "",
+        "new_value": "1995-08-20",
+        "expected_match_count": 1,
+        "xml_segments": segments,
+        "constraints": {"mode": "empty_cells"},
+        "postcondition": "value_once",
+        "confidence": "confirmed",
+    }
+
+    apply_typed_edits(source, output, [operation])
+
+    cells = _analyze_xml_document(output)["sections"][0]["tables"][0]["cells"]
+    assert [cell["text"] for cell in cells[1:4]] == ["1995", "08", "20"]
+
+
+def test_typed_date_segments_reject_single_non_inline_cell(tmp_path: Path) -> None:
+    source = tmp_path / "date.hwpx"
+    output = tmp_path / "date-edited.hwpx"
+    _make_grid_fixture(source)
+    operation = {
+        "operation": "set_date_segments",
+        "field_id": "birth-date",
+        "target_id": "section0.table0.row0.cell1",
+        "old_value": "",
+        "new_value": "1995-08-20",
+        "expected_match_count": 1,
+        "xml_segments": ["section0.table0.row0.cell1"],
+        "constraints": {},
+        "postcondition": "value_once",
+        "confidence": "confirmed",
+    }
+
+    with pytest.raises(DocumentError, match="inline"):
+        apply_typed_edits(source, output, [operation])
+
+    assert not output.exists()
+
+
+def test_typed_amount_prefix_preserves_unit_text(tmp_path: Path) -> None:
+    source = tmp_path / "amount.hwpx"
+    output = tmp_path / "amount-edited.hwpx"
+    _make_grid_fixture(source)
+    operation = {
+        "operation": "set_amount",
+        "field_id": "annual-income",
+        "target_id": "section0.table0.row0.cell0",
+        "old_value": "등록번호",
+        "new_value": "3,000",
+        "anchor": "등록번호",
+        "expected_match_count": 1,
+        "xml_segments": ["section0.table0.row0.cell0"],
+        "constraints": {"mode": "prefix_unit"},
+        "postcondition": "value_once",
+        "confidence": "confirmed",
+    }
+
+    apply_typed_edits(source, output, [operation])
+
+    cell = _analyze_xml_document(output)["sections"][0]["tables"][0]["cells"][0]
+    assert cell["text"] == "3,000 등록번호"
+
+
+def test_placeholder_value_preserves_surrounding_label(tmp_path: Path) -> None:
+    source = Path("samples/통합신청서(신고서).hwpx")
+    if not source.exists():
+        return
+    output = tmp_path / "placeholder-edited.hwpx"
+    field = next(
+        item
+        for item in _analyze_xml_document(source)["xml_field_candidates"]
+        if item["kind"] == "placeholder"
+    )
+    operation = {
+        "operation": "replace_text_range",
+        "field_id": field["field_id"],
+        "target_id": field["target_id"],
+        "old_value": field["current_text"],
+        "new_value": "H-2",
+        "anchor": field["constraints"]["anchor"],
+        "expected_match_count": 1,
+        "xml_segments": field["xml_segments"],
+        "constraints": field["constraints"],
+        "postcondition": "value_once",
+        "confidence": "confirmed",
+    }
+
+    apply_typed_edits(source, output, [operation])
+
+    edited = _analyze_xml_document(output)
+    cells = edited["sections"][0]["tables"][0]["cells"]
+    target = next(cell for cell in cells if cell["id"] == field["target_id"])
+    assert target["text"] == "(희망 자격 : H-2)"
 
 
 def test_registry_v2_detects_grid_without_specific_label(tmp_path: Path) -> None:

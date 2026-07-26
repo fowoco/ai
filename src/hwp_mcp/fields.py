@@ -544,6 +544,49 @@ def infer_all_fields(manifest: dict[str, Any]) -> list[dict[str, Any]]:
                         )
                     )
 
+                amount_unit = re.fullmatch(
+                    r"\s*((?:억원|만원|천원|원)(?:\s*\([^)]*(?:won|krw)[^)]*\))?)\s*",
+                    text,
+                    flags=re.IGNORECASE,
+                )
+                if amount_unit:
+                    ordered = sorted(
+                        cells_by_row[row],
+                        key=lambda item: item.get("column", 0),
+                    )
+                    position = next(
+                        index
+                        for index, item in enumerate(ordered)
+                        if item.get("id") == cell_id
+                    )
+                    label = next(
+                        (
+                            item.get("text", "").strip()
+                            for item in reversed(ordered[:position])
+                            if item.get("text", "").strip()
+                        ),
+                        "금액",
+                    )
+                    registry.append(
+                        RegistryField(
+                            field_id=f"{cell_id}.amount_unit",
+                            target_id=cell_id,
+                            label=label[:60],
+                            type="amount",
+                            category=_categorize_row(row),
+                            row=row,
+                            column=column,
+                            current_text=text,
+                            required=_is_required_field(label),
+                            xml_segments=[cell_id],
+                            constraints={
+                                "mode": "prefix_unit",
+                                "anchor": amount_unit.group(1),
+                            },
+                        )
+                    )
+                    seen_ids.add(cell_id)
+
                 for match in re.finditer(r"\(\s{3,}\)\s*(?:원|won)", text, re.IGNORECASE):
                     anchor = _contextual_anchor(text, match.start(), match.end())
                     registry.append(
@@ -636,7 +679,10 @@ def infer_all_fields(manifest: dict[str, Any]) -> list[dict[str, Any]]:
                 text = cell.get("text", "")
                 col = cell.get("column", 0)
 
-                placeholder_match = re.search(r"[(\（]([^)）]+?)\s*:\s*\s{4,}[)\）]", text)
+                placeholder_match = re.search(
+                    r"[(\（]([^)）]+?)\s*:\s*?(\s{4,})[)\）]",
+                    text,
+                )
                 if placeholder_match:
                     registry.append(RegistryField(
                         field_id=f"{cell_id}.placeholder",
@@ -647,7 +693,10 @@ def infer_all_fields(manifest: dict[str, Any]) -> list[dict[str, Any]]:
                         row=row, column=col,
                         current_text=text,
                         required=False,
-                        constraints={"anchor": placeholder_match.group(0)},
+                        constraints={
+                            "anchor": placeholder_match.group(0),
+                            "replacement_token": placeholder_match.group(2),
+                        },
                     ))
                     seen_ids.add(cell_id)
 
@@ -659,10 +708,11 @@ def infer_all_fields(manifest: dict[str, Any]) -> list[dict[str, Any]]:
                 row_cells = sorted(cells_by_row[row_idx], key=lambda c: c.get("column", 0))
                 for label_cell, target_cell in zip(row_cells, row_cells[1:]):
                     label_text = label_cell.get("text", "").strip()
+                    label_id = label_cell.get("id", "")
                     target_text = target_cell.get("text", "").strip()
                     target_id = target_cell.get("id", "")
 
-                    if target_id in seen_ids:
+                    if label_id in seen_ids or target_id in seen_ids:
                         continue
                     if not label_text or label_text.startswith("■") or len(label_text) > 120:
                         continue
@@ -749,8 +799,46 @@ def reconcile_registry_with_svg(
         cell_id for cell_id, cell in cells.items() if not cell["text"].strip()
     ]
     reconciled = []
+    date_input_ids: set[str] = set()
+    mapped_date_field_ids: set[str] = set()
     for field in registry:
         item = {**field, "constraints": dict(field.get("constraints", {}))}
+        if (
+            item.get("kind") == "date_segments"
+            and len(item.get("xml_segments", [])) == 3
+            and len(item["constraints"].get("anchors", [])) == 3
+        ):
+            label_ids = item["xml_segments"]
+            targets = [
+                _visual_input_cell(regions[label_id]["bbox"], blank_ids, regions)
+                if label_id in regions
+                else (None, None)
+                for label_id in label_ids
+            ]
+            target_ids = [target_id for target_id, _ in targets]
+            if (
+                all(target_ids)
+                and len(set(target_ids)) == 3
+                and all(relation == "below" for _, relation in targets)
+            ):
+                target = cells[target_ids[0]]
+                item.update(
+                    {
+                        "target_id": target_ids[0],
+                        "row": target["row"],
+                        "column": target["column"],
+                        "xml_segments": target_ids,
+                    }
+                )
+                item["constraints"].update(
+                    {
+                        "mode": "empty_cells",
+                        "visual_label_cell_ids": label_ids,
+                        "visual_relation": "below",
+                    }
+                )
+                date_input_ids.update(target_ids)
+                mapped_date_field_ids.add(item["field_id"])
         if item.get("kind") == "text_field" and not item["current_text"].strip():
             label = re.sub(r"\s*\(하단 란\)$", "", item["label"]).strip()
             label_id = next(
@@ -787,6 +875,12 @@ def reconcile_registry_with_svg(
                     )
         reconciled.append(item)
 
+    reconciled = [
+        item
+        for item in reconciled
+        if item["field_id"] in mapped_date_field_ids
+        or item.get("target_id") not in date_input_ids
+    ]
     unique: dict[tuple[str | None, str], dict[str, Any]] = {}
     for item in reconciled:
         key = (
@@ -795,7 +889,33 @@ def reconcile_registry_with_svg(
             else ("field_id", item["field_id"])
         )
         current = unique.get(key)
-        if current is None or _visual_rank(item) > _visual_rank(current):
+        if current is None:
+            unique[key] = item
+            continue
+        current_label = re.sub(r"\s*\(하단 란\)$", "", current["label"]).strip()
+        item_label = re.sub(r"\s*\(하단 란\)$", "", item["label"]).strip()
+        if current_label != item_label:
+            preferred = (
+                item if _visual_rank(item) > _visual_rank(current) else current
+            )
+            current_label_id = current.get("constraints", {}).get(
+                "visual_label_cell_id"
+            )
+            item_label_id = item.get("constraints", {}).get(
+                "visual_label_cell_id"
+            )
+            same_label_row = (
+                current_label_id in cells
+                and item_label_id in cells
+                and cells[current_label_id]["row"] == cells[item_label_id]["row"]
+            )
+            if not same_label_row:
+                preferred["constraints"] = dict(preferred.get("constraints", {}))
+                preferred["constraints"]["ambiguous_target_labels"] = sorted(
+                    {current_label, item_label}
+                )
+            unique[key] = preferred
+        elif _visual_rank(item) > _visual_rank(current):
             unique[key] = item
     return list(unique.values())
 
@@ -805,24 +925,36 @@ def _visual_input_cell(
     blank_ids: list[str],
     regions: dict[str, dict[str, Any]],
 ) -> tuple[str | None, str | None]:
-    below = []
-    right = []
+    candidates = []
     for cell_id in blank_ids:
         bbox = regions[cell_id]["bbox"]
+        label_width = label_bbox[2] - label_bbox[0]
+        label_height = label_bbox[3] - label_bbox[1]
+        cell_width = bbox[2] - bbox[0]
+        cell_height = bbox[3] - bbox[1]
         horizontal = max(0.0, min(label_bbox[2], bbox[2]) - max(label_bbox[0], bbox[0]))
         vertical = max(0.0, min(label_bbox[3], bbox[3]) - max(label_bbox[1], bbox[1]))
-        horizontal_ratio = horizontal / max(1.0, min(label_bbox[2] - label_bbox[0], bbox[2] - bbox[0]))
-        vertical_ratio = vertical / max(1.0, min(label_bbox[3] - label_bbox[1], bbox[3] - bbox[1]))
+        horizontal_ratio = horizontal / max(1.0, min(label_width, cell_width))
+        vertical_ratio = vertical / max(1.0, min(label_height, cell_height))
         vertical_gap = bbox[1] - label_bbox[3]
         horizontal_gap = bbox[0] - label_bbox[2]
         if horizontal_ratio >= 0.6 and -0.5 <= vertical_gap <= 3:
-            below.append((vertical_gap, -horizontal_ratio, cell_id))
+            width_similarity = min(label_width, cell_width) / max(
+                1.0, label_width, cell_width
+            )
+            candidates.append(
+                (-width_similarity, vertical_gap, -horizontal_ratio, 0, cell_id, "below")
+            )
         elif vertical_ratio >= 0.6 and -0.5 <= horizontal_gap <= 3:
-            right.append((horizontal_gap, -vertical_ratio, cell_id))
-    if below:
-        return min(below)[2], "below"
-    if right:
-        return min(right)[2], "right"
+            height_similarity = min(label_height, cell_height) / max(
+                1.0, label_height, cell_height
+            )
+            candidates.append(
+                (-height_similarity, horizontal_gap, -vertical_ratio, 1, cell_id, "right")
+            )
+    if candidates:
+        best = min(candidates)
+        return best[4], best[5]
     return None, None
 
 
