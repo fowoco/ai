@@ -32,7 +32,11 @@ All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to th
 
 ### 🔑 핵심 원칙
 
-`analyze_document` 결과에 `field_registry`가 포함됩니다. 이것은 XML에서 **기계적으로 추출한 모든 채울 수 있는 필드의 완전한 목록**입니다.
+`analyze_document` 결과에 `field_registry`가 포함됩니다. 이것은 XML 후보를 `rhwp` SVG의 `cell-clip` 좌표와 결합한 **채울 수 있는 필드의 목록**입니다.
+
+- XML cell 수와 SVG cell clip 수가 다르면 `svg_analysis.status: NEEDS_HUMAN`이며 인터뷰로 진행하지 않습니다.
+- 라벨 아래 칸은 SVG 수평 겹침과 수직 인접 관계를 우선하고, 아래 칸이 없을 때만 오른쪽 인접 칸을 사용합니다.
+- 각 field의 `visual_regions`와 `constraints.visual_source: rhwp_svg`가 실제 페이지 bbox 근거입니다.
 
 **CRITICAL RULE: LLM은 `field_registry`의 모든 필드를 인터뷰에서 빠짐없이 소화해야 합니다.**
 - `field_registry`에 있는 필드를 건너뛰면 안 됩니다.
@@ -84,13 +88,14 @@ All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to th
 
 `analyze_document` → SVG 렌더링 후, **`field_registry`를 필수 체크리스트로 사용하여** 시각 더블체크를 수행합니다:
 
-1. `field_registry`의 각 필드가 SVG 렌더링에서 올바른 위치에 있는지 확인
+1. `field_registry`의 각 필드가 `visual_regions`로 SVG cell에 매핑됐는지 확인
 2. registry에 있는데 SVG에서 안 보이면 → 경고 발생
 3. SVG에서 보이는데 registry에 없으면 → 추가 검토
 
 ### 적용 후 Visual Diff
 
 - `compare_document_versions`로 원본 vs 수정본 SVG 렌더링 비교
+- 원본/수정 SVG에서 승인값 렌더 여부, 신규 text overflow, cell bbox 이동을 확인
 - `attempts/<plan-id>/diffs/page_001_diff.png` 생성 및 사용자에게 제공
 - Agent가 diff 이미지를 직접 검사하고 이상 징후를 사전 탐지
 
@@ -102,8 +107,9 @@ ANALYZED → READY_FOR_INTERVIEW → WAITING_APPROVAL
 ```
 
 - `apply_edit_plan`은 최종본을 만들지 않습니다.
-- 원본 hash, 승인 대상 외 변경, field postcondition, 페이지 수, 신규 layout warning, PNG component diff를 자동 검증합니다.
-- `review_document_vision`은 원본·수정·diff PNG와 registry를 MCP client의 멀티모달 sampling에 전달합니다.
+- 원본 hash, 승인 대상 외 변경, field postcondition, 페이지 수, 신규 layout warning, SVG geometry, PNG component diff를 자동 검증합니다.
+- SVG에서 승인값 누락·신규 overflow·cell 이동이 하나라도 있으면 Vision 전에 `NEEDS_HUMAN`으로 차단합니다.
+- `review_document_vision`은 파싱된 SVG geometry 근거와 원본·수정·diff PNG를 MCP client의 멀티모달 sampling에 전달합니다.
 - sampling 응답은 모든 편집 field의 `PASS | FAIL | NEEDS_HUMAN` JSON 판정을 포함해야 합니다.
 - sampling 미지원·응답 누락·형식 오류는 자동 `PASS`하지 않고 `NEEDS_HUMAN`입니다.
 - `finalize_document`는 호출자가 제출한 판정을 받지 않으며, 서버가 저장한 Vision `PASS`에서만 final HWPX를 복사합니다.

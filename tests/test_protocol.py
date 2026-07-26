@@ -4,6 +4,7 @@ import asyncio
 import os
 from pathlib import Path
 import sys
+import zipfile
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -15,10 +16,36 @@ from mcp.types import (
 )
 import pytest
 
-from test_hwpx import make_fixture, make_table_fixture
+from test_hwpx import NS, make_fixture, make_table_fixture
 
 
-@pytest.mark.parametrize("vision_mode", ["pass", "invalid", "unsupported"])
+def _make_stacked_table_fixture(path: Path) -> None:
+    def cell(text: str, row: int, column: int) -> str:
+        return (
+            f'<hp:tc><hp:cellAddr colAddr="{column}" rowAddr="{row}"/>'
+            '<hp:cellSpan colSpan="1" rowSpan="1"/>'
+            f"<hp:p><hp:run><hp:t>{text}</hp:t></hp:run></hp:p></hp:tc>"
+        )
+
+    section = (
+        f'<?xml version="1.0" encoding="UTF-8"?>'
+        f'<hs:sec xmlns:hs="{NS["hs"]}" xmlns:hp="{NS["hp"]}">'
+        "<hp:tbl>"
+        f"<hp:tr>{cell('성 Surname', 0, 0)}{cell('명 Given names', 0, 1)}{cell('', 0, 2)}</hp:tr>"
+        f"<hp:tr>{cell('', 1, 0)}{cell('', 1, 1)}{cell('', 1, 2)}</hp:tr>"
+        "</hp:tbl></hs:sec>"
+    )
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("mimetype", "application/hwp+zip")
+        archive.writestr("Contents/content.hpf", '<?xml version="1.0"?><package/>')
+        archive.writestr(
+            "Contents/header.xml",
+            f'<?xml version="1.0"?><hh:head xmlns:hh="{NS["hh"]}" secCnt="1"/>',
+        )
+        archive.writestr("Contents/section0.xml", section)
+
+
+@pytest.mark.parametrize("vision_mode", ["pass", "invalid", "unsupported", "overflow"])
 def test_stdio_server_lists_and_calls_tools(
     tmp_path: Path,
     vision_mode: str,
@@ -26,9 +53,11 @@ def test_stdio_server_lists_and_calls_tools(
     source = tmp_path / "sample.hwpx"
     modified = tmp_path / "modified.hwpx"
     plan_source = tmp_path / "plan-form.hwpx"
+    stacked_source = tmp_path / "stacked-form.hwpx"
     make_fixture(source)
     make_fixture(modified, text="변경된 문서")
     make_table_fixture(plan_source)
+    _make_stacked_table_fixture(stacked_source)
     asyncio.run(_exercise_server(tmp_path, vision_mode))
 
 
@@ -36,13 +65,36 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
     fake_rhwp = root / "fake-rhwp"
     fake_rhwp.write_text(
         "#!/usr/bin/env python3\n"
+        "from html import escape\n"
         "from pathlib import Path\n"
         "import sys\n"
+        "import zipfile\n"
+        "from xml.etree import ElementTree as ET\n"
+        f"force_overflow = {vision_mode == 'overflow'!r}\n"
         "if sys.argv[1] == 'info':\n"
         "    raise SystemExit(0)\n"
+        "source = Path(sys.argv[2])\n"
         "output = Path(sys.argv[sys.argv.index('--output') + 1])\n"
         "output.mkdir(parents=True, exist_ok=True)\n"
-        "(output / 'page_001.svg').write_text('<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"50\" height=\"50\"/>', encoding='utf-8')\n",
+        "with zipfile.ZipFile(source) as archive:\n"
+        "    root = ET.fromstring(archive.read('Contents/section0.xml'))\n"
+        "cells = [node for node in root.iter() if node.tag.rsplit('}', 1)[-1] == 'tc']\n"
+        "texts = [''.join(node.text or '' for node in cell.iter() if node.tag.rsplit('}', 1)[-1] == 't') for cell in cells]\n"
+        "clips = []\n"
+        "groups = []\n"
+        "for index, (cell, value) in enumerate(zip(cells, texts), start=1):\n"
+        "    address = next((node for node in cell if node.tag.rsplit('}', 1)[-1] == 'cellAddr'), None)\n"
+        "    row = int(address.attrib.get('rowAddr', 0)) if address is not None else 0\n"
+        "    column = int(address.attrib.get('colAddr', index - 1)) if address is not None else index - 1\n"
+        "    x = column * 100\n"
+        "    y = row * 30\n"
+        "    clips.append(f'<clipPath id=\"cell-clip-{index}\"><rect x=\"{x}\" y=\"{y}\" width=\"100\" height=\"30\"/></clipPath>')\n"
+        "    rendered = escape(value)\n"
+        "    text_length = 150 if force_overflow and value == '계획 값' else max(len(value) * 8, 1)\n"
+        "    text = f'<text transform=\"translate({x + 5},{y + 20})\" font-size=\"12\" textLength=\"{text_length}\">{rendered}</text>' if value else ''\n"
+        "    groups.append(f'<g clip-path=\"url(#cell-clip-{index})\">{text}</g>')\n"
+        "svg = '<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"30\"><defs>' + ''.join(clips) + '</defs>' + ''.join(groups) + '</svg>'\n"
+        "(output / 'page_001.svg').write_text(svg, encoding='utf-8')\n",
         encoding="utf-8",
     )
     fake_rhwp.chmod(0o755)
@@ -64,7 +116,7 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
             if vision_mode == "invalid"
             else (
                 '{"verdict":"PASS","summary":"의도한 셀에만 입력됨",'
-                '"fields":[{"field_id":"section0.table0.row0.cell1.blank",'
+                f'"fields":[{{"field_id":"{field_id}",'
                 '"verdict":"PASS","reason":"셀 경계 안에 정상 배치"}]}'
             )
         )
@@ -125,7 +177,22 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
             )
             assert analyzed_result.isError is not True
             assert analyzed_result.structuredContent["field_candidates"][0]["label"] == "업체명"
+            assert analyzed_result.structuredContent["svg_analysis"]["method"] == "rhwp_svg_geometry"
+            assert analyzed_result.structuredContent["svg_analysis"]["status"] == "MAPPED"
+            assert analyzed_result.structuredContent["field_registry"][0]["visual_regions"]
             field_id = analyzed_result.structuredContent["field_registry"][0]["field_id"]
+            stacked_result = await session.call_tool(
+                "analyze_document",
+                arguments={"path": "stacked-form.hwpx"},
+            )
+            assert stacked_result.isError is not True
+            stacked_registry = stacked_result.structuredContent["field_registry"]
+            assert next(
+                field for field in stacked_registry if field["label"] == "성 Surname"
+            )["target_id"] == "section0.table0.row1.cell0"
+            assert next(
+                field for field in stacked_registry if field["label"] == "명 Given names"
+            )["target_id"] == "section0.table0.row1.cell1"
             confirmed_result = await session.call_tool(
                 "confirm_visual_candidates",
                 arguments={"path": "plan-form.hwpx", "candidates": []},
@@ -183,10 +250,16 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
                 },
             )
 
+            if vision_mode == "overflow":
+                assert apply_result.isError is True
+                assert "rhwp SVG geometry" in str(apply_result.content)
+                return
             assert apply_result.isError is not True
             assert apply_result.structuredContent["status"] == "PENDING_VISION_REVIEW"
             assert apply_result.structuredContent["review"]["expected_changes"]["passed"] is True
             assert apply_result.structuredContent["review"]["visual"]["layout_warnings_preserved"] is True
+            assert apply_result.structuredContent["review"]["visual"]["svg_geometry"]["passed"] is True
+            assert apply_result.structuredContent["review"]["visual"]["svg_geometry"]["field_checks"][0]["rendered_value_present"] is True
 
             vision_result = await session.call_tool(
                 "review_document_vision",

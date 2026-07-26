@@ -119,6 +119,16 @@ def test_only_confirmed_visual_candidate_can_extend_registry(
     source = tmp_path / "form.hwpx"
     make_table_fixture(source)
     monkeypatch.setenv("HWP_MCP_ROOT", str(tmp_path))
+    workspace = prepare_workspace(source)
+    write_json(
+        workspace["analysis_dir"] / "field-registry.json",
+        analyze_document(source)["field_registry"],
+    )
+    update_workflow_state(
+        workspace["workspace_dir"],
+        status="ANALYZED",
+        svg_analysis_status="MAPPED",
+    )
 
     result = confirm_visual_candidates(
         "form.hwpx",
