@@ -6,7 +6,7 @@ import zipfile
 from PIL import Image, ImageDraw
 import pytest
 
-from hwp_mcp.compare import generate_visual_diff
+from hwp_mcp.compare import generate_visual_diff, validate_typed_postconditions
 from hwp_mcp.fields import infer_all_fields
 from hwp_mcp.hwpx import DocumentError, _analyze_xml_document, apply_typed_edits
 from hwp_mcp.plans import (
@@ -115,6 +115,58 @@ def test_typed_date_segments_reject_single_non_inline_cell(tmp_path: Path) -> No
         apply_typed_edits(source, output, [operation])
 
     assert not output.exists()
+
+
+def test_single_empty_date_cell_uses_validated_date_operation(tmp_path: Path) -> None:
+    source = tmp_path / "date.hwpx"
+    output = tmp_path / "date-edited.hwpx"
+    make_table_fixture(source, label="Passport Issue Date")
+    manifest = make_grounded_manifest(source)
+    field = next(item for item in manifest["field_registry"] if item["type"] == "date")
+    plan = create_edit_plan(
+        source,
+        manifest,
+        [
+            CellEditInput(
+                field_id=field["field_id"],
+                target_id=field["target_id"],
+                expected_text="",
+                value="2020-01-02",
+            )
+        ],
+        dispositions={field["field_id"]: "provided"},
+    )
+    operation = plan.operations[0]
+
+    assert operation.operation == "set_date_segments"
+    assert operation.constraints["mode"] == "empty_cell"
+
+    apply_typed_edits(source, output, [operation.model_dump()])
+
+    cells = _analyze_xml_document(output)["sections"][0]["tables"][0]["cells"]
+    assert cells[1]["text"] == "2020-01-02"
+
+
+def test_single_empty_date_postcondition_requires_exact_value(tmp_path: Path) -> None:
+    source = tmp_path / "date.hwpx"
+    make_table_fixture(source, label="Passport Issue Date")
+    manifest = _analyze_xml_document(source)
+    manifest["sections"][0]["tables"][0]["cells"][1]["text"] = "2020-invalid"
+    operation = {
+        "operation": "set_date_segments",
+        "field_id": "passport-issue-date",
+        "target_id": "section0.table0.row0.cell1",
+        "new_value": "2020-01-02",
+        "xml_segments": ["section0.table0.row0.cell1"],
+        "constraints": {"mode": "empty_cell"},
+    }
+
+    result = validate_typed_postconditions(manifest, [operation])
+
+    assert result == {
+        "passed": False,
+        "failures": ["passport-issue-date: 날짜 postcondition 불일치"],
+    }
 
 
 def test_typed_amount_prefix_preserves_unit_text(tmp_path: Path) -> None:

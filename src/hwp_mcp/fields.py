@@ -777,6 +777,13 @@ def infer_all_fields(manifest: dict[str, Any]) -> list[dict[str, Any]]:
             field.kind = _kind_for_type(field.type)
         if not field.xml_segments:
             field.xml_segments = [field.target_id]
+        if (
+            field.kind == "date_segments"
+            and len(field.xml_segments) == 1
+            and not field.current_text.strip()
+            and "mode" not in field.constraints
+        ):
+            field.constraints["mode"] = "empty_cell"
     return [field.model_dump() for field in registry]
 
 

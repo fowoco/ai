@@ -90,9 +90,12 @@ def validate_typed_postconditions(
         elif name == "set_date_segments":
             match = re.fullmatch(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})", value)
             inline = operation.get("constraints", {}).get("mode") == "inline"
+            empty_cell = operation.get("constraints", {}).get("mode") == "empty_cell"
             invalid = match is None
             if match is not None and inline:
                 invalid = any(component not in segment_texts[0] for component in match.groups())
+            elif match is not None and empty_cell:
+                invalid = segment_texts != [value]
             elif match is not None:
                 invalid = any(
                     component not in text
