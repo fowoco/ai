@@ -14,11 +14,14 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ImageContent, SamplingMessage, TextContent
 from pydantic import ValidationError
 
-from .fields import RegistryField
+from .fields import RegistryField, reconcile_registry_with_svg
 from .compare import (
+    analyze_svg_geometry,
+    attach_svg_regions,
     compare_manifests,
     compare_rendered_pages,
     generate_visual_diff,
+    review_svg_geometry,
     svg_to_png,
     validate_expected_changes,
     validate_typed_postconditions,
@@ -147,6 +150,16 @@ def analyze_document(path: str) -> dict[str, Any]:
     if original_render_dir.exists():
         shutil.rmtree(original_render_dir)
     render = render_svg(original_path, original_render_dir, debug_overlay=True)
+    svg_analysis = analyze_svg_geometry(render["files"], manifest)
+    manifest["field_registry"] = reconcile_registry_with_svg(
+        manifest,
+        manifest["field_registry"],
+        svg_analysis,
+    )
+    manifest["field_registry"] = attach_svg_regions(
+        manifest["field_registry"],
+        svg_analysis,
+    )
     png_paths = []
     for index, svg_path in enumerate(render["files"], start=1):
         png_path = original_render_dir / f"page_{index:03d}.png"
@@ -156,6 +169,7 @@ def analyze_document(path: str) -> dict[str, Any]:
     analysis_payload = {
         "manifest": manifest,
         "render": render,
+        "svg_analysis": svg_analysis,
         "png_paths": png_paths,
     }
     analysis_id = hashlib.sha256(
@@ -172,16 +186,26 @@ def analyze_document(path: str) -> dict[str, Any]:
         workspace["workspace_dir"],
         status="ANALYZED",
         analysis_id=analysis_id,
-        alignment_status="NEEDS_REVIEW",
+        alignment_status=(
+            "NEEDS_REVIEW"
+            if svg_analysis["status"] == "MAPPED"
+            else "NEEDS_HUMAN"
+        ),
+        svg_analysis_status=svg_analysis["status"],
     )
     return {
         **manifest,
         "analysis_id": analysis_id,
         "status": "ANALYZED",
-        "alignment_status": "NEEDS_REVIEW",
+        "alignment_status": (
+            "NEEDS_REVIEW"
+            if svg_analysis["status"] == "MAPPED"
+            else "NEEDS_HUMAN"
+        ),
         "workspace_dir": str(workspace["workspace_dir"]),
         "original_path": str(original_path),
         "render": render,
+        "svg_analysis": svg_analysis,
         "png_paths": png_paths,
     }
 
@@ -227,6 +251,13 @@ def compare_document_versions(
 
         # SVG -> PNG 캡처 생성 및 Visual Diff 빨간 하이라이트 박스 이미지 배출
         visual_res = compare_rendered_pages(original_render, modified_render)
+        visual_res["svg_geometry"] = review_svg_geometry(
+            original_render["files"],
+            modified_render["files"],
+            original_manifest,
+            modified_manifest,
+            [],
+        )
         diff_dir = output_path / "diffs"
         diff_dir.mkdir(parents=True, exist_ok=True)
         visual_diff_reports = []
@@ -276,8 +307,11 @@ def confirm_visual_candidates(
     state = read_workflow_state(workspace["workspace_dir"])
     if state["status"] != "ANALYZED":
         raise DocumentError("ANALYZED 상태에서만 visual candidate를 확정할 수 있습니다.")
+    if state.get("svg_analysis_status") != "MAPPED":
+        raise DocumentError("rhwp SVG cell geometry가 XML 구조와 매핑되지 않았습니다.")
     manifest = analyze_hwpx_document(workspace["original_path"])
-    registry = manifest["field_registry"]
+    registry_path = workspace["analysis_dir"] / "field-registry.json"
+    registry = json.loads(registry_path.read_text(encoding="utf-8"))
     known_cells = {
         cell["id"]
         for section in manifest["sections"]
@@ -436,6 +470,17 @@ def apply_edit_plan(
         if new_layout_warnings:
             raise DocumentError("수정 후 새 레이아웃 경고가 발생했습니다.")
 
+        svg_geometry = review_svg_geometry(
+            original_render["files"],
+            modified_render["files"],
+            original_manifest,
+            modified_manifest,
+            operation_dicts,
+        )
+        if not svg_geometry["passed"]:
+            report["review"] = {"svg_geometry": svg_geometry}
+            raise DocumentError("rhwp SVG geometry 검증에 실패했습니다.")
+
         visual = compare_rendered_pages(original_render, modified_render)
         visual_diffs = []
         registry_path = workspace["analysis_dir"] / "field-registry.json"
@@ -475,6 +520,7 @@ def apply_edit_plan(
                 "modified_layout_warnings": sorted(modified_warnings),
                 "new_layout_warnings": [],
                 "layout_warnings_preserved": True,
+                "svg_geometry": svg_geometry,
             },
         }
         report.update({"status": "PENDING_VISION_REVIEW", "review": review})

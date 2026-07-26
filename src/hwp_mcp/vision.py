@@ -75,6 +75,9 @@ def build_vision_prompt(
             "expected_changes": verification.get("review", {}).get(
                 "expected_changes"
             ),
+            "svg_geometry": verification.get("review", {})
+            .get("visual", {})
+            .get("svg_geometry"),
             "visual_components": [
                 {
                     "page": item.get("page"),

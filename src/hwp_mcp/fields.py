@@ -191,7 +191,10 @@ def infer_field_candidates_spatial(
     """SVG 시각 상대 기하학 좌표(Spatial Geometry)를 활용하여 라벨 하단/우측 빈 셀을 정밀 자동 추론합니다."""
     candidates = infer_field_candidates(manifest)
 
-    spatial_candidates = _infer_spatial_under_cells(manifest)
+    spatial_candidates = _infer_spatial_under_cells(
+        manifest,
+        Path(svg_path) if svg_path is not None else None,
+    )
     if spatial_candidates:
         # spatial candidates를 리스트 전면에 우선 배치
         spatial_label_ids = {sc["label_cell_id"] for sc in spatial_candidates}
@@ -203,6 +206,44 @@ def infer_field_candidates_spatial(
 
 def _infer_spatial_under_cells(manifest: dict[str, Any], svg_file: Path | None = None) -> list[dict[str, Any]]:
     """SVG 시각 상대 기하학 좌표 및 행/열 배치를 기반으로 하단 빈 셀을 정밀 식별합니다."""
+    if svg_file is not None:
+        from .compare import analyze_svg_geometry
+
+        analysis = analyze_svg_geometry([svg_file], manifest)
+        cells = {
+            cell["id"]: cell
+            for section in manifest.get("sections", [])
+            for table in section.get("tables", [])
+            for cell in table.get("cells", [])
+        }
+        blank_ids = [
+            cell_id for cell_id, cell in cells.items() if not cell["text"].strip()
+        ]
+        visual = []
+        for label_id, label_cell in cells.items():
+            label = label_cell["text"].strip()
+            if not label or label_id not in analysis["cell_regions"]:
+                continue
+            target_id, relation = _visual_input_cell(
+                analysis["cell_regions"][label_id]["bbox"],
+                blank_ids,
+                analysis["cell_regions"],
+            )
+            if target_id is None or relation != "below":
+                continue
+            visual.append(
+                FieldCandidate(
+                    target_id=target_id,
+                    label_cell_id=label_id,
+                    table_id=label_id.rsplit(".row", 1)[0],
+                    label=f"{label} (하단 란)",
+                    current_value=cells[target_id]["text"],
+                    kind="adjacent_blank_cell",
+                    confidence="heuristic",
+                ).model_dump()
+            )
+        return visual
+
     spatial_candidates: list[dict[str, Any]] = []
 
     for section in manifest.get("sections", []):
@@ -687,6 +728,109 @@ def infer_all_fields(manifest: dict[str, Any]) -> list[dict[str, Any]]:
         if not field.xml_segments:
             field.xml_segments = [field.target_id]
     return [field.model_dump() for field in registry]
+
+
+def reconcile_registry_with_svg(
+    manifest: dict[str, Any],
+    registry: list[dict[str, Any]],
+    svg_analysis: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """빈 text field를 rhwp SVG의 실제 아래/오른쪽 cell geometry에 맞춥니다."""
+    if svg_analysis.get("status") != "MAPPED":
+        return registry
+    cells = {
+        cell["id"]: cell
+        for section in manifest["sections"]
+        for table in section["tables"]
+        for cell in table["cells"]
+    }
+    regions = svg_analysis["cell_regions"]
+    blank_ids = [
+        cell_id for cell_id, cell in cells.items() if not cell["text"].strip()
+    ]
+    reconciled = []
+    for field in registry:
+        item = {**field, "constraints": dict(field.get("constraints", {}))}
+        if item.get("kind") == "text_field" and not item["current_text"].strip():
+            label = re.sub(r"\s*\(하단 란\)$", "", item["label"]).strip()
+            label_id = next(
+                (
+                    cell_id
+                    for cell_id, cell in cells.items()
+                    if cell["text"].strip() == label
+                ),
+                None,
+            )
+            if label_id in regions:
+                target_id, relation = _visual_input_cell(
+                    regions[label_id]["bbox"],
+                    blank_ids,
+                    regions,
+                )
+                if target_id is not None:
+                    target = cells[target_id]
+                    item.update(
+                        {
+                            "field_id": f"{target_id}.visual",
+                            "target_id": target_id,
+                            "label": label,
+                            "row": target["row"],
+                            "column": target["column"],
+                            "xml_segments": [target_id],
+                        }
+                    )
+                    item["constraints"].update(
+                        {
+                            "visual_label_cell_id": label_id,
+                            "visual_relation": relation,
+                        }
+                    )
+        reconciled.append(item)
+
+    unique: dict[tuple[str | None, str], dict[str, Any]] = {}
+    for item in reconciled:
+        key = (
+            (item.get("kind"), item["target_id"])
+            if item.get("kind") == "text_field" and not item["current_text"].strip()
+            else ("field_id", item["field_id"])
+        )
+        current = unique.get(key)
+        if current is None or _visual_rank(item) > _visual_rank(current):
+            unique[key] = item
+    return list(unique.values())
+
+
+def _visual_input_cell(
+    label_bbox: list[float],
+    blank_ids: list[str],
+    regions: dict[str, dict[str, Any]],
+) -> tuple[str | None, str | None]:
+    below = []
+    right = []
+    for cell_id in blank_ids:
+        bbox = regions[cell_id]["bbox"]
+        horizontal = max(0.0, min(label_bbox[2], bbox[2]) - max(label_bbox[0], bbox[0]))
+        vertical = max(0.0, min(label_bbox[3], bbox[3]) - max(label_bbox[1], bbox[1]))
+        horizontal_ratio = horizontal / max(1.0, min(label_bbox[2] - label_bbox[0], bbox[2] - bbox[0]))
+        vertical_ratio = vertical / max(1.0, min(label_bbox[3] - label_bbox[1], bbox[3] - bbox[1]))
+        vertical_gap = bbox[1] - label_bbox[3]
+        horizontal_gap = bbox[0] - label_bbox[2]
+        if horizontal_ratio >= 0.6 and -0.5 <= vertical_gap <= 3:
+            below.append((vertical_gap, -horizontal_ratio, cell_id))
+        elif vertical_ratio >= 0.6 and -0.5 <= horizontal_gap <= 3:
+            right.append((horizontal_gap, -vertical_ratio, cell_id))
+    if below:
+        return min(below)[2], "below"
+    if right:
+        return min(right)[2], "right"
+    return None, None
+
+
+def _visual_rank(field: dict[str, Any]) -> int:
+    return {"below": 2, "right": 1}.get(
+        field.get("constraints", {}).get("visual_relation"),
+        0,
+    )
 
 
 def _kind_for_type(field_type: RegistryFieldType) -> RegistryFieldKind:

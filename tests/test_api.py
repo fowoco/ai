@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from html import escape
 from pathlib import Path
+import zipfile
+from xml.etree import ElementTree as ET
 
 from httpx import ASGITransport, AsyncClient
 
@@ -24,8 +27,40 @@ def test_fastapi_control_plane_uses_same_plan_gate(
     def fake_run(command, **kwargs):
         if command[1] == "info":
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        source_path = Path(command[2])
         output_dir = Path(command[command.index("--output") + 1])
-        (output_dir / "page_001.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50"/>', encoding="utf-8")
+        with zipfile.ZipFile(source_path) as archive:
+            root = ET.fromstring(archive.read("Contents/section0.xml"))
+        cells = [
+            node for node in root.iter() if node.tag.rsplit("}", 1)[-1] == "tc"
+        ]
+        groups = []
+        clips = []
+        for index, cell in enumerate(cells):
+            text = "".join(
+                node.text or ""
+                for node in cell.iter()
+                if node.tag.rsplit("}", 1)[-1] == "t"
+            )
+            x = index * 100
+            clips.append(
+                f'<clipPath id="cell-clip-{index}"><rect x="{x}" y="0" '
+                'width="100" height="30"/></clipPath>'
+            )
+            rendered = (
+                f'<text transform="translate({x + 5},20)" font-size="12" '
+                f'textLength="{max(len(text) * 8, 1)}">{escape(text)}</text>'
+                if text
+                else ""
+            )
+            groups.append(
+                f'<g clip-path="url(#cell-clip-{index})">{rendered}</g>'
+            )
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="30">'
+            f"<defs>{''.join(clips)}</defs>{''.join(groups)}</svg>"
+        )
+        (output_dir / "page_001.svg").write_text(svg, encoding="utf-8")
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(rhwp.subprocess, "run", fake_run)
@@ -101,6 +136,7 @@ async def _assert_workflow(client: AsyncClient, tmp_path: Path) -> None:
     )
     assert compare.status_code == 200
     assert "visual" in compare.json()
+    assert compare.json()["visual"]["svg_geometry"]["passed"] is True
 
     finalized = await client.post(
         "/documents/finalize",
