@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import re
+from datetime import date
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,6 +17,9 @@ class EditPlanError(DocumentError):
     """편집 계획이 현재 문서와 맞지 않거나 승인되지 않았습니다."""
 
 
+ValueOrigin = Literal["user", "example"]
+
+
 class CellEditInput(BaseModel):
     """사용자가 확인한 typed field 변경 요청입니다."""
 
@@ -24,6 +29,7 @@ class CellEditInput(BaseModel):
     target_id: str = Field(min_length=1, max_length=200)
     expected_text: str = Field(max_length=10_000)
     value: str = Field(min_length=1, max_length=10_000)
+    value_origin: ValueOrigin = "user"
     label: str | None = Field(default=None, max_length=200)
     anchor: str | None = Field(default=None, min_length=1, max_length=10_000)
     expected_match_count: Literal[1] = 1
@@ -47,6 +53,7 @@ class EditOperation(BaseModel):
     label: str | None = Field(default=None, max_length=200)
     old_value: str = Field(max_length=10_000)
     new_value: str = Field(min_length=1, max_length=10_000)
+    value_origin: ValueOrigin = "user"
     anchor: str | None = Field(default=None, min_length=1, max_length=10_000)
     expected_match_count: Literal[1] = 1
     xml_segments: list[str] = Field(min_length=1, max_length=100)
@@ -161,6 +168,7 @@ def create_edit_plan(
             raise EditPlanError(
                 f"field 내용이 예상과 다릅니다: {field_id}: {current_text!r}"
             )
+        _validate_edit_input(field, edit)
         operations.append(
             EditOperation(
                 operation=_operation_for_field(field),
@@ -169,6 +177,7 @@ def create_edit_plan(
                 label=edit.label or field["label"],
                 old_value=current_text,
                 new_value=edit.value,
+                value_origin=edit.value_origin,
                 anchor=edit.anchor or field.get("constraints", {}).get("anchor"),
                 expected_match_count=edit.expected_match_count,
                 xml_segments=field.get("xml_segments") or [field["target_id"]],
@@ -244,3 +253,67 @@ def _operation_for_field(field: dict[str, Any]) -> str:
     if kind == "signable_region":
         return "set_signature_placeholder"
     return "replace_text_range"
+
+
+def _validate_edit_input(
+    field: dict[str, Any],
+    edit: CellEditInput,
+) -> None:
+    """적용 전에 typed 값과 anchor의 결정 가능성을 검증합니다."""
+    value = edit.value
+    constraints = field.get("constraints", {})
+    kind = field.get("kind")
+    field_type = field.get("type")
+    segments = field.get("xml_segments") or [field.get("target_id")]
+
+    if kind == "date_segments":
+        match = re.fullmatch(r"(\d{4})[-./](\d{1,2})[-./](\d{1,2})", value)
+        if match is None:
+            raise EditPlanError("날짜 값은 YYYY-MM-DD 형식이어야 합니다.")
+        try:
+            date(*(int(component) for component in match.groups()))
+        except ValueError as exc:
+            raise EditPlanError("유효한 날짜를 입력하세요.") from exc
+        mode = constraints.get("mode")
+        if len(segments) == 1 and mode not in {"empty_cell", "inline"}:
+            raise EditPlanError("한 칸 날짜는 empty_cell 또는 inline mode여야 합니다.")
+        if len(segments) == 3 and mode not in {"empty_cells", "inline"}:
+            raise EditPlanError("분할 날짜의 mode가 올바르지 않습니다.")
+        if len(segments) not in {1, 3}:
+            raise EditPlanError("날짜는 한 칸 또는 세 칸 segment여야 합니다.")
+
+    if kind in {"checkbox", "checkbox_group"}:
+        marker = re.compile(r"\[\s*\]")
+        anchor = edit.anchor or constraints.get("anchor")
+        current_text = field.get("current_text", "")
+        if anchor:
+            if (
+                marker.search(anchor) is None
+                or current_text.count(anchor) != 1
+            ):
+                raise EditPlanError(
+                    "checkbox anchor는 미선택 marker를 포함해 정확히 1회 일치해야 합니다."
+                )
+        elif len(marker.findall(current_text)) != 1:
+            raise EditPlanError("checkbox marker는 정확히 1개여야 합니다.")
+
+    if kind == "character_grid":
+        separators = {
+            item.get("value", "")
+            for item in constraints.get("separators", [])
+        }
+        characters = [character for character in value if character not in separators]
+        if len(characters) != len(segments):
+            raise EditPlanError("문자칸 수와 입력 문자 수가 다릅니다.")
+
+    if field_type == "amount" and constraints.get("mode") == "prefix_unit":
+        if re.fullmatch(r"\d[\d,]*", value) is None:
+            raise EditPlanError(
+                "prefix_unit 금액은 단위를 제외한 숫자만 입력하세요."
+            )
+
+    if field_type == "number" and re.fullmatch(r"[+-]?\d[\d,]*(?:\.\d+)?", value) is None:
+        raise EditPlanError("숫자 field에는 숫자만 입력하세요.")
+
+    if field_type == "phone" and re.fullmatch(r"[0-9+() .-]+", value) is None:
+        raise EditPlanError("전화번호 형식에 허용되지 않은 문자가 있습니다.")

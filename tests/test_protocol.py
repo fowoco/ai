@@ -206,8 +206,13 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
                 "version": 2,
                 "stage": "XML_SVG_MAPPED",
                 "registry_source": "rhwp_svg",
-                "interview_ready": True,
+                "interview_ready": False,
             }
+            assert analyzed_result.structuredContent["interview_ready"] is False
+            assert (
+                analyzed_result.structuredContent["next_action"]
+                == "confirm_visual_candidates"
+            )
             assert "xml_field_candidates" not in analyzed_result.structuredContent
             assert analyzed_result.structuredContent["field_registry"][0]["visual_regions"]
             assert all(
@@ -233,6 +238,11 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
             )
             assert confirmed_result.isError is not True
             assert confirmed_result.structuredContent["alignment_status"] == "CONSISTENT"
+            assert confirmed_result.structuredContent["interview_ready"] is True
+            assert (
+                confirmed_result.structuredContent["next_action"]
+                == "collect_field_values"
+            )
 
             render_result = await session.call_tool(
                 "render_document",

@@ -84,3 +84,101 @@ def test_plan_operations_can_be_applied_only_after_external_approval(
         apply_edit_plan("form.hwpx", "filled.hwpx", plan, approved=False)
 
     assert not output.exists()
+
+
+def test_plan_rejects_unit_inside_prefix_unit_amount(tmp_path: Path) -> None:
+    source = tmp_path / "form.hwpx"
+    make_table_fixture(source)
+    manifest = make_grounded_manifest(source)
+    field = manifest["field_registry"][0]
+    field["type"] = "amount"
+    field["constraints"].update({"mode": "prefix_unit", "anchor": "만원"})
+
+    with pytest.raises(EditPlanError, match="단위를 제외한 숫자"):
+        create_edit_plan(
+            source,
+            manifest,
+            [
+                CellEditInput(
+                    field_id=field["field_id"],
+                    target_id=field["target_id"],
+                    expected_text="",
+                    value="4000만원",
+                )
+            ],
+            dispositions={field["field_id"]: "provided"},
+        )
+
+
+def test_plan_rejects_invalid_calendar_date(tmp_path: Path) -> None:
+    source = tmp_path / "form.hwpx"
+    make_table_fixture(source)
+    manifest = make_grounded_manifest(source)
+    field = manifest["field_registry"][0]
+    field["type"] = "date"
+    field["kind"] = "date_segments"
+    field["constraints"]["mode"] = "empty_cell"
+
+    with pytest.raises(EditPlanError, match="유효한 날짜"):
+        create_edit_plan(
+            source,
+            manifest,
+            [
+                CellEditInput(
+                    field_id=field["field_id"],
+                    target_id=field["target_id"],
+                    expected_text="",
+                    value="2026-02-31",
+                )
+            ],
+            dispositions={field["field_id"]: "provided"},
+        )
+
+
+def test_plan_rejects_ambiguous_checkbox_without_anchor(tmp_path: Path) -> None:
+    source = tmp_path / "form.hwpx"
+    make_table_fixture(source, label="[ ] 남 [ ] 여")
+    manifest = make_grounded_manifest(source)
+    field = manifest["field_registry"][0]
+    field["type"] = "checkbox"
+    field["kind"] = "checkbox"
+    field["current_text"] = "[ ] 남 [ ] 여"
+
+    with pytest.raises(EditPlanError, match="checkbox marker"):
+        create_edit_plan(
+            source,
+            manifest,
+            [
+                CellEditInput(
+                    field_id=field["field_id"],
+                    target_id=field["target_id"],
+                    expected_text="[ ] 남 [ ] 여",
+                    value="selected",
+                )
+            ],
+            dispositions={field["field_id"]: "provided"},
+        )
+
+
+def test_plan_preserves_example_value_origin(tmp_path: Path) -> None:
+    source = tmp_path / "form.hwpx"
+    make_table_fixture(source)
+    manifest = make_grounded_manifest(source)
+    field = manifest["field_registry"][0]
+
+    plan = create_edit_plan(
+        source,
+        manifest,
+        [
+            CellEditInput(
+                field_id=field["field_id"],
+                target_id=field["target_id"],
+                expected_text="",
+                value="예시 업체",
+                value_origin="example",
+            )
+        ],
+        dispositions={field["field_id"]: "provided"},
+    )
+
+    assert plan.operations[0].value_origin == "example"

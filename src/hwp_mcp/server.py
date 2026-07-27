@@ -128,11 +128,18 @@ def _resolve_render_dir(raw_path: str) -> Path:
     return resolved
 
 
-def _require_visual_analysis_contract(state: dict[str, Any]) -> None:
+def _require_visual_analysis_contract(
+    state: dict[str, Any],
+    *,
+    require_interview_ready: bool = True,
+) -> None:
     if (
         state.get("analysis_contract_version") != ANALYSIS_CONTRACT_VERSION
         or state.get("registry_source") != "rhwp_svg"
-        or state.get("interview_ready") is not True
+        or (
+            require_interview_ready
+            and state.get("interview_ready") is not True
+        )
     ):
         raise DocumentError(
             "현재 rhwp SVG 분석 계약이 없습니다. 최신 MCP 서버에서 analyze_document를 다시 실행하세요."
@@ -205,7 +212,7 @@ def analyze_document(path: str) -> dict[str, Any]:
         "version": ANALYSIS_CONTRACT_VERSION,
         "stage": manifest["analysis_stage"],
         "registry_source": "rhwp_svg" if interview_ready else None,
-        "interview_ready": interview_ready,
+        "interview_ready": False,
     }
     manifest["analysis_contract"] = analysis_contract
     png_paths = []
@@ -237,7 +244,7 @@ def analyze_document(path: str) -> dict[str, Any]:
         analysis_id=analysis_id,
         analysis_contract_version=analysis_contract["version"],
         registry_source=analysis_contract["registry_source"],
-        interview_ready=analysis_contract["interview_ready"],
+        interview_ready=False,
         alignment_status=(
             "NEEDS_REVIEW"
             if svg_analysis["status"] == "MAPPED"
@@ -249,6 +256,12 @@ def analyze_document(path: str) -> dict[str, Any]:
         **manifest,
         "analysis_id": analysis_id,
         "status": "ANALYZED",
+        "interview_ready": False,
+        "next_action": (
+            "confirm_visual_candidates"
+            if svg_analysis["status"] == "MAPPED"
+            else "manual_review"
+        ),
         "alignment_status": (
             "NEEDS_REVIEW"
             if svg_analysis["status"] == "MAPPED"
@@ -362,7 +375,10 @@ def confirm_visual_candidates(
         raise DocumentError("ANALYZED 상태에서만 visual candidate를 확정할 수 있습니다.")
     if state.get("svg_analysis_status") != "MAPPED":
         raise DocumentError("rhwp SVG cell geometry가 XML 구조와 매핑되지 않았습니다.")
-    _require_visual_analysis_contract(state)
+    _require_visual_analysis_contract(
+        state,
+        require_interview_ready=False,
+    )
     manifest = _analyze_xml_document(workspace["original_path"])
     registry_path = workspace["analysis_dir"] / "field-registry.json"
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
@@ -409,14 +425,29 @@ def confirm_visual_candidates(
         normalized.append(normalized_candidate)
     write_json(workspace["analysis_dir"] / "visual-candidates.json", normalized)
     write_json(workspace["analysis_dir"] / "field-registry.json", registry)
+    analysis_contract = {
+        "version": ANALYSIS_CONTRACT_VERSION,
+        "stage": "XML_SVG_MAPPED",
+        "registry_source": "rhwp_svg",
+        "interview_ready": True,
+    }
+    saved_manifest_path = workspace["analysis_dir"] / "manifest.json"
+    saved_manifest = json.loads(saved_manifest_path.read_text(encoding="utf-8"))
+    saved_manifest["field_registry"] = registry
+    saved_manifest["analysis_contract"] = analysis_contract
+    write_json(saved_manifest_path, saved_manifest)
     update_workflow_state(
         workspace["workspace_dir"],
         status="READY_FOR_INTERVIEW",
         alignment_status="CONSISTENT",
+        interview_ready=True,
     )
     return {
         "status": "READY_FOR_INTERVIEW",
         "alignment_status": "CONSISTENT",
+        "interview_ready": True,
+        "next_action": "collect_field_values",
+        "analysis_contract": analysis_contract,
         "candidates": normalized,
         "field_registry": registry,
     }
