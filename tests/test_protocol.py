@@ -10,6 +10,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import (
     CreateMessageResult,
+    ElicitResult,
     ImageContent,
     SamplingCapability,
     TextContent,
@@ -47,7 +48,14 @@ def _make_stacked_table_fixture(path: Path) -> None:
 
 @pytest.mark.parametrize(
     "vision_mode",
-    ["pass", "invalid", "unsupported", "overflow", "mismatch"],
+    [
+        "pass",
+        "invalid",
+        "unsupported",
+        "approval_unsupported",
+        "overflow",
+        "mismatch",
+    ],
 )
 def test_stdio_server_lists_and_calls_tools(
     tmp_path: Path,
@@ -139,14 +147,28 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
             model="test-vision",
         )
 
-    session_kwargs = (
-        {
+    async def approve_plan(_context, params):
+        assert "계획 값" in params.message
+        return ElicitResult(
+            action="accept",
+            content={"approved": True},
+        )
+
+    session_kwargs = {
+        **(
+            {"elicitation_callback": approve_plan}
+            if vision_mode != "approval_unsupported"
+            else {}
+        ),
+        **(
+            {
             "sampling_callback": sample_vision,
             "sampling_capabilities": SamplingCapability(),
-        }
-        if vision_mode != "unsupported"
-        else {}
-    )
+            }
+            if vision_mode != "unsupported"
+            else {}
+        ),
+    }
     async with stdio_client(server_parameters) as (read_stream, write_stream):
         async with ClientSession(
             read_stream,
@@ -156,6 +178,10 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
             initialize_result = await session.initialize()
             assert "analysis_contract.version: 2" in (initialize_result.instructions or "")
             assert "hwp_mcp.hwpx" in (initialize_result.instructions or "")
+            assert "submit_host_vision_review" in (
+                initialize_result.instructions or ""
+            )
+            assert "이미지 입력" in (initialize_result.instructions or "")
             tools = await session.list_tools()
             tool_names = {tool.name for tool in tools.tools}
             assert {
@@ -166,9 +192,11 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
                 "compare_document_versions",
                 "fill_cells",
                 "create_edit_plan",
+                "approve_edit_plan",
                 "apply_edit_plan",
                 "confirm_visual_candidates",
                 "review_document_vision",
+                "submit_host_vision_review",
                 "finalize_document",
                 "normalize_field_value",
                 "replace_text",
@@ -206,8 +234,13 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
                 "version": 2,
                 "stage": "XML_SVG_MAPPED",
                 "registry_source": "rhwp_svg",
-                "interview_ready": True,
+                "interview_ready": False,
             }
+            assert analyzed_result.structuredContent["interview_ready"] is False
+            assert (
+                analyzed_result.structuredContent["next_action"]
+                == "confirm_visual_candidates"
+            )
             assert "xml_field_candidates" not in analyzed_result.structuredContent
             assert analyzed_result.structuredContent["field_registry"][0]["visual_regions"]
             assert all(
@@ -233,6 +266,11 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
             )
             assert confirmed_result.isError is not True
             assert confirmed_result.structuredContent["alignment_status"] == "CONSISTENT"
+            assert confirmed_result.structuredContent["interview_ready"] is True
+            assert (
+                confirmed_result.structuredContent["next_action"]
+                == "collect_field_values"
+            )
 
             render_result = await session.call_tool(
                 "render_document",
@@ -274,13 +312,26 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
             plan = plan_result.structuredContent
             assert plan["status"] == "WAITING_APPROVAL"
 
+            approval_result = await session.call_tool(
+                "approve_edit_plan",
+                arguments={
+                    "path": "plan-form.hwpx",
+                    "plan_id": plan["plan_id"],
+                },
+            )
+            if vision_mode == "approval_unsupported":
+                assert approval_result.isError is True
+                assert "elicitation" in str(approval_result.content)
+                assert not list(root.glob("*/attempts/*/modified.hwpx"))
+                return
+            assert approval_result.isError is not True
+            assert approval_result.structuredContent["status"] == "APPROVED"
+
             apply_result = await session.call_tool(
                 "apply_edit_plan",
                 arguments={
                     "path": "plan-form.hwpx",
-                    "output_path": None,
-                    "plan": plan,
-                    "approved": True,
+                    "plan_id": plan["plan_id"],
                 },
             )
 
@@ -303,8 +354,51 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
                 },
             )
             assert vision_result.isError is not True
-            expected_verdict = "PASS" if vision_mode == "pass" else "NEEDS_HUMAN"
-            assert vision_result.structuredContent["verdict"] == expected_verdict
+            if vision_mode == "unsupported":
+                request = vision_result.structuredContent
+                assert request["status"] == "VISION_REVIEW_REQUIRED"
+                assert request["next_action"] == "submit_host_vision_review"
+                evidence_view_ids = [
+                    view["view_id"]
+                    for view in request["views"]
+                    if field_id in view["field_ids"]
+                ]
+                host_result = await session.call_tool(
+                    "submit_host_vision_review",
+                    arguments={
+                        "path": "plan-form.hwpx",
+                        "plan_id": plan["plan_id"],
+                        "review_id": request["review_id"],
+                        "reviewer": {
+                            "provider": "test-host",
+                            "model": "test-vision",
+                            "capabilities": ["image_input"],
+                        },
+                        "decision": {
+                            "verdict": "PASS",
+                            "summary": "원본 대비 올바른 셀에 배치됨",
+                            "fields": [
+                                {
+                                    "field_id": field_id,
+                                    "verdict": "PASS",
+                                    "reason": "업체명 라벨 오른쪽 셀 경계 안에 배치됨",
+                                    "evidence_view_ids": evidence_view_ids,
+                                }
+                            ],
+                        },
+                    },
+                )
+                assert host_result.isError is not True
+                assert host_result.structuredContent["verdict"] == "PASS"
+                assert (
+                    host_result.structuredContent["source"]
+                    == "host_vision_submission"
+                )
+            else:
+                expected_verdict = (
+                    "PASS" if vision_mode == "pass" else "NEEDS_HUMAN"
+                )
+                assert vision_result.structuredContent["verdict"] == expected_verdict
             if vision_mode == "pass":
                 assert vision_result.structuredContent["model"] == "test-vision"
 
@@ -315,7 +409,7 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
                     "plan_id": plan["plan_id"],
                 },
             )
-            if vision_mode == "pass":
+            if vision_mode in {"pass", "unsupported"}:
                 assert finalize_result.isError is not True
                 assert finalize_result.structuredContent["status"] == "VERIFIED_FINAL"
             else:

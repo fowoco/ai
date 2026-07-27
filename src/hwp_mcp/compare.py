@@ -110,6 +110,22 @@ def validate_typed_postconditions(
             anchor = operation.get("anchor")
             if anchor and anchor in target:
                 failures.append(f"{field_id}: checkbox 원본 marker 잔존")
+        elif name == "set_amount":
+            target = "".join(segment_texts)
+            anchor = operation.get("anchor")
+            prefix_unit = (
+                operation.get("constraints", {}).get("mode") == "prefix_unit"
+            )
+            invalid = target.count(value) != 1
+            if prefix_unit:
+                invalid = (
+                    invalid
+                    or re.fullmatch(r"\d[\d,]*", value) is None
+                    or not anchor
+                    or target.count(anchor) != 1
+                )
+            if invalid:
+                failures.append(f"{field_id}: 금액 postcondition 불일치")
         elif "".join(segment_texts).count(value) != 1:
             failures.append(f"{field_id}: 입력값이 승인 segment에 정확히 1회 있지 않음")
 

@@ -6,6 +6,7 @@ from hwp_mcp.compare import (
     analyze_svg_geometry,
     compare_rendered_pages,
     validate_expected_changes,
+    validate_typed_postconditions,
 )
 
 
@@ -75,3 +76,40 @@ def test_svg_geometry_rejects_same_count_in_wrong_cell_order(
 
     assert result["status"] == "NEEDS_HUMAN"
     assert result["text_mismatch_cell_ids"] == ["cell-a", "cell-b"]
+
+
+def test_amount_postcondition_rejects_duplicate_prefix_unit() -> None:
+    manifest = {
+        "sections": [
+            {
+                "tables": [
+                    {
+                        "cells": [
+                            {
+                                "id": "section0.table0.row0.cell1",
+                                "text": "4000만원 만원",
+                            }
+                        ]
+                    }
+                ],
+                "paragraphs": [],
+            }
+        ]
+    }
+    result = validate_typed_postconditions(
+        manifest,
+        [
+            {
+                "operation": "set_amount",
+                "field_id": "amount-field",
+                "target_id": "section0.table0.row0.cell1",
+                "xml_segments": ["section0.table0.row0.cell1"],
+                "new_value": "4000만원",
+                "anchor": "만원",
+                "constraints": {"mode": "prefix_unit"},
+            }
+        ],
+    )
+
+    assert result["passed"] is False
+    assert "금액" in result["failures"][0]

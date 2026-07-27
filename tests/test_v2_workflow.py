@@ -16,7 +16,12 @@ from hwp_mcp.plans import (
     sha256_file,
 )
 from hwp_mcp.server import confirm_visual_candidates
-from hwp_mcp.vision import parse_vision_decision
+from hwp_mcp.vision import (
+    VisionImage,
+    VisionView,
+    build_vision_review_request,
+    parse_vision_decision,
+)
 from hwp_mcp.workspace import (
     finalize_attempt,
     prepare_workspace,
@@ -406,29 +411,61 @@ def test_workspace_copies_original_and_finalizes_only_after_vision_pass(
     source = tmp_path / "form.hwpx"
     make_table_fixture(source)
     workspace = prepare_workspace(source)
-    attempt = workspace["workspace_dir"] / "attempts" / "plan-1"
+    plan_id = "a" * 64
+    attempt = workspace["workspace_dir"] / "attempts" / plan_id
     attempt.mkdir(parents=True)
     modified = attempt / "modified.hwpx"
     modified.write_bytes(source.read_bytes())
-    write_json(
-        attempt / "verification-report.json",
-        {"status": "PENDING_VISION_REVIEW"},
-    )
+    report_path = attempt / "verification-report.json"
+    write_json(report_path, {"status": "PENDING_VISION_REVIEW"})
     update_workflow_state(
         workspace["workspace_dir"],
         status="PENDING_VISION_REVIEW",
-        plan_id="plan-1",
+        plan_id=plan_id,
         modified_path=str(modified),
     )
 
     with pytest.raises(DocumentError, match="Vision PASS"):
-        finalize_attempt(workspace["workspace_dir"], "plan-1")
+        finalize_attempt(workspace["workspace_dir"], plan_id)
     assert not (workspace["workspace_dir"] / "final").exists()
 
+    images = {}
+    for kind in ("original", "modified", "diff"):
+        image_path = attempt / f"{kind}.png"
+        Image.new("RGB", (10, 10), "white").save(image_path)
+        images[kind] = VisionImage(
+            path=str(image_path),
+            sha256=sha256_file(image_path),
+        )
+    request = build_vision_review_request(
+        plan_id=plan_id,
+        original_path=workspace["original_path"],
+        modified_path=modified,
+        verification_path=report_path,
+        views=[
+            VisionView(
+                view_id="page-001-full",
+                page=1,
+                kind="full",
+                bbox=None,
+                field_ids=["field-1"],
+                original=images["original"],
+                modified=images["modified"],
+                diff=images["diff"],
+            )
+        ],
+        expected_field_ids=["field-1"],
+        prompt="검토",
+    )
+    request_path = attempt / "vision-review-request.json"
+    write_json(request_path, request.model_dump())
     vision_review = {
         "source": "mcp_sampling",
-        "plan_id": "plan-1",
-        "modified_sha256": sha256_file(modified),
+        "review_id": request.review_id,
+        "plan_id": plan_id,
+        "original_sha256": request.original_sha256,
+        "modified_sha256": request.modified_sha256,
+        "verification_report_sha256": request.verification_report_sha256,
         "verdict": "PASS",
     }
     vision_path = attempt / "vision-review.json"
@@ -436,27 +473,33 @@ def test_workspace_copies_original_and_finalizes_only_after_vision_pass(
     update_workflow_state(
         workspace["workspace_dir"],
         status="PENDING_VISION_REVIEW",
-        plan_id="plan-1",
+        plan_id=plan_id,
         modified_path=str(modified),
+        vision_review_id=request.review_id,
+        vision_review_request_path=str(request_path),
+        vision_review_request_sha256=sha256_file(request_path),
         vision_status="PASS",
         vision_review_path=str(vision_path),
         vision_review_sha256=sha256_file(vision_path),
     )
     write_json(vision_path, {**vision_review, "verdict": "FAIL"})
     with pytest.raises(DocumentError, match="무결성"):
-        finalize_attempt(workspace["workspace_dir"], "plan-1")
+        finalize_attempt(workspace["workspace_dir"], plan_id)
 
     write_json(vision_path, vision_review)
     update_workflow_state(
         workspace["workspace_dir"],
         status="PENDING_VISION_REVIEW",
-        plan_id="plan-1",
+        plan_id=plan_id,
         modified_path=str(modified),
+        vision_review_id=request.review_id,
+        vision_review_request_path=str(request_path),
+        vision_review_request_sha256=sha256_file(request_path),
         vision_status="PASS",
         vision_review_path=str(vision_path),
         vision_review_sha256=sha256_file(vision_path),
     )
-    finalized = finalize_attempt(workspace["workspace_dir"], "plan-1")
+    finalized = finalize_attempt(workspace["workspace_dir"], plan_id)
 
     assert source.exists()
     assert workspace["original_path"].read_bytes() == source.read_bytes()

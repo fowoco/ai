@@ -11,13 +11,15 @@
 - 추가: `rhwp` CLI SVG의 `cell-clip`·텍스트 bbox를 파싱한 field spatial mapping
 - 추가: 원본 레이아웃 경고는 기준선으로 보존하고 수정 후 신규 경고만 차단
 - 추가: 두 HWPX 버전의 구조·SVG cell 이동·텍스트 overflow 비교
+- 추가: MCP 사용자 elicitation과 plan hash에 결합된 승인 receipt
 - 추가: 모든 field disposition을 강제하는 Edit Plan과 Vision 최종화 게이트
 - 추가: MCP sampling으로 원본·수정·diff PNG를 실제 Vision 판정
+- 추가: Sampling 미지원 Host의 범용 멀티모달 LLM Vision 제출
 - 추가: 날짜·전화번호 변환안을 별도로 확인하는 정규화 Tool
 - 제한: 원본 덮어쓰기 금지, 허용 작업 폴더 밖 접근 금지, 출력 파일 재검증
 - 제한: `rhwp`는 `RHWP_COMMAND`로 지정하며 렌더링 출력 폴더는 새 경로여야 함
 - 미지원: `.hwp` 바이너리 직접 편집, 전자서명 적용, 원격 HTTP 배포·인증
-- 제한: MCP client가 멀티모달 sampling을 지원하지 않으면 `NEEDS_HUMAN`
+- 제한: Sampling과 Host 이미지 입력을 모두 사용할 수 없으면 `NEEDS_HUMAN`
 
 HWP와 HWPX는 내부 구조가 다릅니다. HWPX는 ZIP/XML 기반이라 1차 대상으로 삼았고, HWP는 변환 어댑터를 별도 검토합니다.
 
@@ -29,9 +31,10 @@ HWP와 HWPX는 내부 구조가 다릅니다. HWPX는 ZIP/XML 기반이라 1차 
 flowchart LR
     A["ANALYZED"] --> I["READY_FOR_INTERVIEW"]
     I --> P["WAITING_APPROVAL"]
-    P --> X["typed XML edit·구조·의미·rhwp SVG geometry·PNG diff"]
+    P --> U["MCP 사용자 elicitation"]
+    U --> X["APPROVED·typed XML edit·구조·의미·rhwp SVG geometry·PNG diff"]
     X --> V["PENDING_VISION_REVIEW"]
-    V --> R["MCP Vision sampling"]
+    V --> R["MCP Sampling 또는 Host image-input LLM"]
     R -- "PASS" --> F["VERIFIED_FINAL"]
     R -- "FAIL / NEEDS_HUMAN" --> H["NEEDS_HUMAN"]
 
@@ -39,7 +42,7 @@ flowchart LR
     classDef guard fill:#fbe4d6,stroke:#c9632d,color:#2f2a26
     classDef result fill:#f1eee8,stroke:#8a8178,color:#2f2a26
 
-    class A,I,P,X mcp
+    class A,I,P,U,X mcp
     class V,R guard
     class F,H result
 ```
@@ -64,7 +67,7 @@ FastAPI Control Plane은 같은 작업 루트를 사용합니다.
 HWP_MCP_ROOT="/path/to/allowed/documents" uv run hwp-editor-api
 ```
 
-현재 HTTP 범위는 `/health`, `/documents/analyze`, `/plans/create`, `/plans/apply`입니다. 파일 업로드·세션 저장·웹 인증은 아직 추가하지 않았습니다.
+현재 HTTP 범위는 `/health`, `/documents/analyze`, `/plans/create`, `/plans/apply`입니다. 사용자 승인은 MCP `approve_edit_plan`에서만 생성하며 HTTP apply는 이미 승인 receipt가 있는 plan만 실행합니다. 파일 업로드·세션 저장·웹 인증은 아직 추가하지 않았습니다.
 
 ## MCP Client 등록 예시
 
@@ -106,14 +109,16 @@ uv run pytest
 | `compare_document_versions` | 문단·셀 구조와 SVG cell geometry·overflow·페이지 hash 비교 |
 | `fill_cells` | 레거시 저수준 셀 편집; 안전한 일반 흐름에서는 사용하지 않음 |
 | `create_edit_plan` | 모든 field disposition과 typed operation을 승인 전 상태로 저장 |
+| `approve_edit_plan` | 사용자 elicitation 수락을 plan hash 결합 receipt로 저장 |
 | `apply_edit_plan` | XML·의미·SVG 값 가시성/overflow/bbox 이동·component diff 검증 |
-| `review_document_vision` | SVG geometry 근거와 PNG 3종을 MCP Vision sampling으로 구조화 판정 |
+| `review_document_vision` | full-page/detail PNG 묶음을 만들고 Sampling 지원 여부에 따라 판정 또는 Host 검토 요청 |
+| `submit_host_vision_review` | 이미지 입력 LLM의 필드별 full/detail 근거를 artifact hash와 함께 검증 |
 | `finalize_document` | 서버가 기록한 Vision PASS attempt만 `final/`로 복사 |
 | `normalize_field_value` | 날짜·전화번호 변환안을 반환하고 자동 적용하지 않음 |
 | `replace_text` | 정확한 문자열을 새 `.hwpx` 파일에 치환 후 재검증 |
 | `validate_document` | ZIP/XML·필수 파트·구역 파일 검증 |
 
-`analyze_document`의 `field_registry`는
+`analyze_document` 후 `confirm_visual_candidates`를 수행합니다. 그 결과의 `field_registry`는
 `analysis_contract.version == 2`, `registry_source == "rhwp_svg"`,
 `interview_ready == true`일 때만 인터뷰 입력으로 사용할 수 있습니다.
 내부 XML 분석은 `xml_field_candidates`만 만들며 최종 registry나 Edit Plan의
@@ -126,7 +131,7 @@ uv run pytest
 | `GET /health` | Control Plane 상태 확인 |
 | `POST /documents/analyze` | 허용 루트의 HWPX 구조 분석 |
 | `POST /plans/create` | disposition이 완결된 승인 대기 Edit Plan 생성 |
-| `POST /plans/apply` | 검증 attempt 생성 후 Vision 검토 대기 |
+| `POST /plans/apply` | MCP 승인 receipt가 있는 plan의 검증 attempt 생성 |
 | `POST /documents/visual-candidates/confirm` | 시각 후보 판정 저장 |
 | `POST /documents/finalize` | MCP에서 이미 Vision PASS된 attempt만 최종화 |
 

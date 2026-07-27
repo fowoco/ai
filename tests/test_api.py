@@ -9,6 +9,16 @@ from xml.etree import ElementTree as ET
 from httpx import ASGITransport, AsyncClient
 
 from hwp_mcp.api import app
+from hwp_mcp.plans import (
+    EditPlan,
+    create_approval_receipt,
+    sha256_file,
+)
+from hwp_mcp.workspace import (
+    prepare_workspace,
+    update_workflow_state,
+    write_json,
+)
 
 from test_hwpx import make_table_fixture
 
@@ -106,19 +116,35 @@ async def _assert_workflow(client: AsyncClient, tmp_path: Path) -> None:
         "/plans/apply",
         json={
             "path": "form.hwpx",
-            "plan": plan.json(),
-            "approved": False,
+            "plan_id": plan.json()["plan_id"],
         },
     )
     assert blocked.status_code == 400
     assert not any(tmp_path.glob("*/attempts/*/modified.hwpx"))
 
+    workspace = prepare_workspace(tmp_path / "form.hwpx")
+    attempt = workspace["attempts_dir"] / plan.json()["plan_id"]
+    plan_path = attempt / "edit-plan.json"
+    receipt_path = attempt / "approval-receipt.json"
+    receipt = create_approval_receipt(
+        EditPlan.model_validate(plan.json()),
+        plan_path,
+        approved_at="2026-07-27T00:00:00+00:00",
+    )
+    write_json(receipt_path, receipt.model_dump())
+    update_workflow_state(
+        workspace["workspace_dir"],
+        status="APPROVED",
+        approved=True,
+        approval_receipt_path=str(receipt_path),
+        approval_receipt_sha256=sha256_file(receipt_path),
+    )
+
     applied = await client.post(
         "/plans/apply",
         json={
             "path": "form.hwpx",
-            "plan": plan.json(),
-            "approved": True,
+            "plan_id": plan.json()["plan_id"],
         },
     )
     assert applied.status_code == 200

@@ -35,7 +35,8 @@ All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to th
 `analyze_document` 결과에 `field_registry`가 포함됩니다. 이것은 XML 후보를 `rhwp` SVG의 `cell-clip` 좌표와 결합한 **채울 수 있는 필드의 목록**입니다.
 
 - 반드시 MCP `analyze_document` Tool을 호출합니다. shell에서 `hwp_mcp.hwpx` 내부 함수를 import해 인터뷰 목록을 만들지 않습니다.
-- 인터뷰 전 `analysis_contract.version: 2`, `stage: XML_SVG_MAPPED`, `registry_source: rhwp_svg`, `interview_ready: true`를 모두 확인합니다.
+- `analyze_document` 직후 `next_action: confirm_visual_candidates`를 수행합니다.
+- 확인 후 반환된 `analysis_contract.version: 2`, `stage: XML_SVG_MAPPED`, `registry_source: rhwp_svg`, `interview_ready: true`를 모두 확인한 뒤 인터뷰를 시작합니다.
 - 위 계약이 없거나 `xml_field_candidates`만 보이면 구 MCP 서버·캐시 또는 내부 XML 분석 결과입니다. 인터뷰를 중단하고 MCP 서버를 재연결한 뒤 다시 분석합니다.
 - XML cell 수와 SVG cell clip 수가 다르면 `svg_analysis.status: NEEDS_HUMAN`이며 인터뷰로 진행하지 않습니다.
 - 라벨 아래 칸은 SVG 수평 겹침과 수직 인접 관계를 우선하고, 아래 칸이 없을 때만 오른쪽 인접 칸을 사용합니다.
@@ -101,19 +102,28 @@ All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to th
 - 원본/수정 SVG에서 승인값 렌더 여부, 신규 text overflow, cell bbox 이동을 확인
 - `attempts/<plan-id>/diffs/page_001_diff.png` 생성 및 사용자에게 제공
 - Agent가 diff 이미지를 직접 검사하고 이상 징후를 사전 탐지
+- XML 요약만 읽고 시각 검토를 완료했다고 보고하지 않습니다.
 
 ## 5. Finalization Gate
 
 ```text
-ANALYZED → READY_FOR_INTERVIEW → WAITING_APPROVAL
+ANALYZED → READY_FOR_INTERVIEW → WAITING_APPROVAL → APPROVED
 → PENDING_VISION_REVIEW → VERIFIED_FINAL
 ```
 
+- `approve_edit_plan`의 MCP elicitation을 사용자가 수락해야 서버 승인 receipt가 생성됩니다.
+- `apply_edit_plan`은 호출자가 보낸 `approved=true`나 plan 객체를 받지 않습니다.
 - `apply_edit_plan`은 최종본을 만들지 않습니다.
 - 원본 hash, 승인 대상 외 변경, field postcondition, 페이지 수, 신규 layout warning, SVG geometry, PNG component diff를 자동 검증합니다.
 - SVG에서 승인값 누락·신규 overflow·cell 이동이 하나라도 있으면 Vision 전에 `NEEDS_HUMAN`으로 차단합니다.
-- `review_document_vision`은 파싱된 SVG geometry 근거와 원본·수정·diff PNG를 MCP client의 멀티모달 sampling에 전달합니다.
+- `review_document_vision`은 full-page와 편집 필드가 있는 detail band 각각의 원본·수정·diff PNG를 해시와 결합합니다.
+- MCP Client가 Sampling을 지원하면 같은 이미지 묶음을 `sampling/createMessage`에 전달합니다.
+- Sampling 미지원 또는 transport 실패이면 `VISION_REVIEW_REQUIRED`와 `next_action: submit_host_vision_review`를 반환합니다. 이 경우 workflow는 `PENDING_VISION_REVIEW`를 유지합니다.
+- Host의 멀티모달 LLM은 반환된 모든 full-page와 관련 detail view를 **이미지 입력으로 직접 열어** 비교합니다. Gemini, GPT, Claude, 로컬 VLM 등 모델명은 제한하지 않습니다.
+- `submit_host_vision_review`은 `image_input` capability, `review_id`, 모든 artifact hash, 전체 편집 field, field별 full/detail `evidence_view_ids`, 고유 reason을 검증합니다.
+- 이미지 입력을 사용할 수 없거나 이미지를 열지 못한 모델은 판정을 제출하지 말고 `NEEDS_HUMAN`으로 중단합니다.
 - sampling 응답은 모든 편집 field의 `PASS | FAIL | NEEDS_HUMAN` JSON 판정을 포함해야 합니다.
-- sampling 미지원·응답 누락·형식 오류는 자동 `PASS`하지 않고 `NEEDS_HUMAN`입니다.
-- `finalize_document`는 호출자가 제출한 판정을 받지 않으며, 서버가 저장한 Vision `PASS`에서만 final HWPX를 복사합니다.
+- sampling 응답 누락·형식 오류는 자동 `PASS`하지 않고 `NEEDS_HUMAN`입니다.
+- `finalize_document`는 서버가 검증·저장한 `mcp_sampling` 또는 `host_vision_submission` PASS에서만 final HWPX를 복사합니다.
+- `attempts/<plan-id>/modified.hwpx`를 다른 경로로 직접 복사해 완료본으로 취급하지 않습니다. `workflow-state.status: VERIFIED_FINAL`과 서버의 `final_path`만 완료입니다.
 - `FAIL` 또는 `NEEDS_HUMAN`은 attempt와 verification report를 보존하고 final 파일을 만들지 않습니다.
