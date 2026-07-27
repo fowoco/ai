@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+from datetime import datetime, timezone
 import hashlib
 import json
 import logging
@@ -11,8 +12,14 @@ import sys
 from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
-from mcp.types import ImageContent, SamplingMessage, TextContent
-from pydantic import ValidationError
+from mcp.types import (
+    ClientCapabilities,
+    ElicitationCapability,
+    ImageContent,
+    SamplingMessage,
+    TextContent,
+)
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from .fields import RegistryField, reconcile_registry_with_svg
 from .compare import (
@@ -39,8 +46,10 @@ from .hwpx import (
 from .plans import (
     CellEditInput,
     EditPlan,
+    create_approval_receipt,
     create_edit_plan as build_edit_plan,
     sha256_file,
+    validate_approval_receipt,
     validate_edit_plan,
 )
 from .normalization import NormalizationRequest, normalize_field
@@ -69,6 +78,14 @@ mcp = FastMCP(
     instructions=MCP_INSTRUCTIONS,
     json_response=True,
 )
+
+
+class ApprovalAnswer(BaseModel):
+    """Edit Plan 실물 적용에 대한 사용자 응답입니다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    approved: bool
 
 
 def _allowed_root() -> Path:
@@ -495,35 +512,100 @@ def create_edit_plan(
 
 
 @mcp.tool()
-def apply_edit_plan(
+async def approve_edit_plan(
     path: str,
-    output_path: str | None,
-    plan: EditPlan,
-    approved: bool = False,
-    review_output_dir: str | None = None,
+    plan_id: str,
+    ctx: Context,
 ) -> dict[str, Any]:
-    """승인된 typed plan을 workspace attempt에 적용하고 Vision 검토 대기로 전환합니다."""
-    # v1 호출 호환용 인자이며 v2 산출물 경로는 workspace가 결정합니다.
-    _ = output_path, review_output_dir
-    if not approved:
-        raise DocumentError("사용자 명시적 승인 없이는 Edit Plan을 적용할 수 없습니다.")
-    if not isinstance(plan, EditPlan):
-        try:
-            plan = EditPlan.model_validate(plan)
-        except ValidationError as exc:
-            raise DocumentError("Edit Plan 형식이 올바르지 않습니다.") from exc
+    """현재 저장 Edit Plan을 사용자 elicitation으로 승인합니다."""
     input_path = _resolve_path(path, must_exist=True)
     workspace = prepare_workspace(input_path)
     state = read_workflow_state(workspace["workspace_dir"])
-    if state.get("status") != "WAITING_APPROVAL" or state.get("plan_id") != plan.plan_id:
+    if (
+        state.get("status") != "WAITING_APPROVAL"
+        or state.get("plan_id") != plan_id
+    ):
         raise DocumentError("현재 승인 대기 중인 plan이 아닙니다.")
+    if not ctx.session.check_client_capability(
+        ClientCapabilities(elicitation=ElicitationCapability())
+    ):
+        raise DocumentError(
+            "MCP client가 사용자 approval elicitation을 지원하지 않습니다."
+        )
+
+    attempt_dir = workspace["attempts_dir"] / plan_id
+    plan_path = attempt_dir / "edit-plan.json"
+    plan = _read_stored_plan(plan_path)
+    validate_edit_plan(plan, workspace["original_path"])
+    operation_summary = "\n".join(
+        (
+            f"- {operation.label or operation.field_id}: "
+            f"{operation.old_value!r} -> {operation.new_value!r} "
+            f"(origin={operation.value_origin})"
+        )
+        for operation in plan.operations
+    )
+    result = await ctx.elicit(
+        (
+            "다음 HWPX Edit Plan을 실물 수정본에 적용할까요?\n"
+            f"plan_id={plan.plan_id}\n{operation_summary}"
+        ),
+        ApprovalAnswer,
+    )
+    if (
+        result.action != "accept"
+        or result.data.approved is not True
+    ):
+        raise DocumentError("사용자가 Edit Plan 적용을 승인하지 않았습니다.")
+
+    receipt = create_approval_receipt(
+        plan,
+        plan_path,
+        approved_at=datetime.now(timezone.utc).isoformat(),
+    )
+    receipt_path = attempt_dir / "approval-receipt.json"
+    write_json(receipt_path, receipt.model_dump())
+    update_workflow_state(
+        workspace["workspace_dir"],
+        status="APPROVED",
+        approved=True,
+        approval_receipt_path=str(receipt_path),
+        approval_receipt_sha256=sha256_file(receipt_path),
+    )
+    return {
+        **receipt.model_dump(),
+        "status": "APPROVED",
+        "next_action": "apply_edit_plan",
+    }
+
+
+@mcp.tool()
+def apply_edit_plan(
+    path: str,
+    plan_id: str,
+) -> dict[str, Any]:
+    """승인된 typed plan을 workspace attempt에 적용하고 Vision 검토 대기로 전환합니다."""
+    input_path = _resolve_path(path, must_exist=True)
+    workspace = prepare_workspace(input_path)
+    state = read_workflow_state(workspace["workspace_dir"])
+    if state.get("status") != "APPROVED" or state.get("plan_id") != plan_id:
+        raise DocumentError("서버 승인 receipt가 있는 현재 plan이 아닙니다.")
     _require_visual_analysis_contract(state)
     registry_path = workspace["analysis_dir"] / "field-registry.json"
     if not registry_path.exists():
         raise DocumentError("저장된 SVG field_registry가 없습니다. analyze_document를 다시 실행하세요.")
     original_path = workspace["original_path"]
+    attempt_dir = workspace["attempts_dir"] / plan_id
+    plan_path = attempt_dir / "edit-plan.json"
+    receipt_path = attempt_dir / "approval-receipt.json"
+    plan = _read_stored_plan(plan_path)
     validate_edit_plan(plan, original_path)
-    attempt_dir = workspace["attempts_dir"] / plan.plan_id
+    validate_approval_receipt(plan, plan_path, receipt_path)
+    if (
+        state.get("approval_receipt_path") != str(receipt_path)
+        or state.get("approval_receipt_sha256") != sha256_file(receipt_path)
+    ):
+        raise DocumentError("workflow 승인 receipt 무결성 검증에 실패했습니다.")
     destination = attempt_dir / "modified.hwpx"
     if destination.exists():
         raise DocumentError("이 plan의 수정 attempt가 이미 존재합니다.")
@@ -651,6 +733,15 @@ def apply_edit_plan(
             attempts=list(dict.fromkeys(attempts)),
         )
         raise
+
+
+def _read_stored_plan(plan_path: Path) -> EditPlan:
+    if not plan_path.is_file():
+        raise DocumentError("저장된 Edit Plan을 찾지 못했습니다.")
+    try:
+        return EditPlan.model_validate_json(plan_path.read_text(encoding="utf-8"))
+    except ValidationError as exc:
+        raise DocumentError("저장된 Edit Plan 형식이 올바르지 않습니다.") from exc
 
 
 @mcp.tool()

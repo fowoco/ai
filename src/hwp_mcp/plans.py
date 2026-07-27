@@ -7,7 +7,7 @@ import re
 from datetime import date
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .fields import Disposition
 from .hwpx import DocumentError
@@ -75,6 +75,62 @@ class EditPlan(BaseModel):
     dispositions: dict[str, Disposition]
     approval_required: Literal[True] = True
     status: Literal["WAITING_APPROVAL"] = "WAITING_APPROVAL"
+
+
+class ApprovalReceipt(BaseModel):
+    """MCP elicitation으로 승인된 저장 plan의 지문입니다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal[1] = 1
+    plan_id: str = Field(min_length=64, max_length=64)
+    document_sha256: str = Field(min_length=64, max_length=64)
+    edit_plan_sha256: str = Field(min_length=64, max_length=64)
+    source: Literal["mcp_elicitation"] = "mcp_elicitation"
+    approved_at: str = Field(min_length=1, max_length=100)
+
+
+def create_approval_receipt(
+    plan: EditPlan,
+    plan_path: str | Path,
+    *,
+    approved_at: str,
+) -> ApprovalReceipt:
+    """현재 저장된 plan 파일에 결합된 승인 receipt를 만듭니다."""
+    stored_plan = Path(plan_path)
+    if not stored_plan.is_file():
+        raise EditPlanError("승인할 저장 Edit Plan을 찾지 못했습니다.")
+    return ApprovalReceipt(
+        plan_id=plan.plan_id,
+        document_sha256=plan.document_sha256,
+        edit_plan_sha256=sha256_file(stored_plan),
+        approved_at=approved_at,
+    )
+
+
+def validate_approval_receipt(
+    plan: EditPlan,
+    plan_path: str | Path,
+    receipt_path: str | Path,
+) -> ApprovalReceipt:
+    """receipt가 현재 저장 plan과 정확히 결합됐는지 검증합니다."""
+    stored_plan = Path(plan_path)
+    stored_receipt = Path(receipt_path)
+    if not stored_plan.is_file() or not stored_receipt.is_file():
+        raise EditPlanError("서버 승인 receipt가 없습니다.")
+    try:
+        receipt = ApprovalReceipt.model_validate_json(
+            stored_receipt.read_text(encoding="utf-8")
+        )
+    except ValidationError as exc:
+        raise EditPlanError("승인 receipt 형식이 올바르지 않습니다.") from exc
+    if (
+        receipt.plan_id != plan.plan_id
+        or receipt.document_sha256 != plan.document_sha256
+        or receipt.edit_plan_sha256 != sha256_file(stored_plan)
+    ):
+        raise EditPlanError("승인 receipt 무결성 검증에 실패했습니다.")
+    return receipt
 
 
 def create_edit_plan(

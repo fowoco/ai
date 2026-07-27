@@ -15,6 +15,7 @@ WorkflowStatus = Literal[
     "ANALYZED",
     "READY_FOR_INTERVIEW",
     "WAITING_APPROVAL",
+    "APPROVED",
     "PENDING_VISION_REVIEW",
     "VERIFIED_FINAL",
     "NEEDS_HUMAN",

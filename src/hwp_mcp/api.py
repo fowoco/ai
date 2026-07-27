@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .fields import Disposition
 from .hwpx import DocumentError
-from .plans import CellEditInput, EditPlan
+from .plans import CellEditInput
 from .server import (
     analyze_document as analyze_mcp_document,
     apply_edit_plan as apply_mcp_edit_plan,
@@ -34,15 +34,12 @@ class CreatePlanRequest(DocumentRequest):
 
 
 class ApplyPlanRequest(BaseModel):
-    """승인된 계획을 적용할 경로와 검토 설정입니다."""
+    """서버 승인 receipt가 있는 계획을 적용합니다."""
 
     model_config = ConfigDict(extra="forbid")
 
     path: str = Field(min_length=1, max_length=4096)
-    output_path: str | None = Field(default=None, min_length=1, max_length=4096)
-    plan: EditPlan
-    approved: bool = False
-    review_output_dir: str | None = Field(default=None, max_length=4096)
+    plan_id: str = Field(min_length=64, max_length=64)
 
 
 class CompareRequest(BaseModel):
@@ -94,10 +91,7 @@ def create_app() -> FastAPI:
         return _call(
             apply_mcp_edit_plan,
             request.path,
-            request.output_path,
-            request.plan,
-            request.approved,
-            request.review_output_dir,
+            request.plan_id,
         )
 
     @app.post("/documents/visual-candidates/confirm")

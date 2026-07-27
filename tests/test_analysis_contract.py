@@ -93,12 +93,12 @@ def test_apply_rejects_stale_analysis_contract(
     (workspace["attempts_dir"] / plan.plan_id).mkdir()
     update_workflow_state(
         workspace["workspace_dir"],
-        status="WAITING_APPROVAL",
+        status="APPROVED",
         plan_id=plan.plan_id,
-        approved=False,
+        approved=True,
     )
 
     with pytest.raises(DocumentError, match="분석 계약"):
-        apply_edit_plan("form.hwpx", None, plan, approved=True)
+        apply_edit_plan("form.hwpx", plan.plan_id)
 
     assert not (workspace["attempts_dir"] / plan.plan_id / "modified.hwpx").exists()

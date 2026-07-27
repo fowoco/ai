@@ -10,6 +10,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.types import (
     CreateMessageResult,
+    ElicitResult,
     ImageContent,
     SamplingCapability,
     TextContent,
@@ -47,7 +48,14 @@ def _make_stacked_table_fixture(path: Path) -> None:
 
 @pytest.mark.parametrize(
     "vision_mode",
-    ["pass", "invalid", "unsupported", "overflow", "mismatch"],
+    [
+        "pass",
+        "invalid",
+        "unsupported",
+        "approval_unsupported",
+        "overflow",
+        "mismatch",
+    ],
 )
 def test_stdio_server_lists_and_calls_tools(
     tmp_path: Path,
@@ -139,14 +147,28 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
             model="test-vision",
         )
 
-    session_kwargs = (
-        {
+    async def approve_plan(_context, params):
+        assert "계획 값" in params.message
+        return ElicitResult(
+            action="accept",
+            content={"approved": True},
+        )
+
+    session_kwargs = {
+        **(
+            {"elicitation_callback": approve_plan}
+            if vision_mode != "approval_unsupported"
+            else {}
+        ),
+        **(
+            {
             "sampling_callback": sample_vision,
             "sampling_capabilities": SamplingCapability(),
-        }
-        if vision_mode != "unsupported"
-        else {}
-    )
+            }
+            if vision_mode != "unsupported"
+            else {}
+        ),
+    }
     async with stdio_client(server_parameters) as (read_stream, write_stream):
         async with ClientSession(
             read_stream,
@@ -166,6 +188,7 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
                 "compare_document_versions",
                 "fill_cells",
                 "create_edit_plan",
+                "approve_edit_plan",
                 "apply_edit_plan",
                 "confirm_visual_candidates",
                 "review_document_vision",
@@ -284,13 +307,26 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
             plan = plan_result.structuredContent
             assert plan["status"] == "WAITING_APPROVAL"
 
+            approval_result = await session.call_tool(
+                "approve_edit_plan",
+                arguments={
+                    "path": "plan-form.hwpx",
+                    "plan_id": plan["plan_id"],
+                },
+            )
+            if vision_mode == "approval_unsupported":
+                assert approval_result.isError is True
+                assert "elicitation" in str(approval_result.content)
+                assert not list(root.glob("*/attempts/*/modified.hwpx"))
+                return
+            assert approval_result.isError is not True
+            assert approval_result.structuredContent["status"] == "APPROVED"
+
             apply_result = await session.call_tool(
                 "apply_edit_plan",
                 arguments={
                     "path": "plan-form.hwpx",
-                    "output_path": None,
-                    "plan": plan,
-                    "approved": True,
+                    "plan_id": plan["plan_id"],
                 },
             )
 
