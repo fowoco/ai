@@ -74,6 +74,10 @@ def test_vision_detail_crops_only_edited_bands(tmp_path):
         [0, 0, 100, 324],
         [0, 576, 100, 900],
     ]
+    assert [detail["field_ids"] for detail in details] == [
+        ["top-field"],
+        ["bottom-field"],
+    ]
     assert all(
         Path(detail[kind]).is_file()
         for detail in details

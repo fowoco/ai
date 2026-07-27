@@ -8,7 +8,10 @@ import shutil
 import unicodedata
 from typing import Any, Literal
 
+from pydantic import ValidationError
+
 from .hwpx import DocumentError, validate_document
+from .vision import VisionReviewRequest, validate_vision_review_request
 
 
 WorkflowStatus = Literal[
@@ -116,6 +119,28 @@ def finalize_attempt(
         raise DocumentError("자동 검증을 통과한 attempt가 아닙니다.")
     if not validate_document(modified)["valid"]:
         raise DocumentError("수정본 HWPX 재검증에 실패했습니다.")
+    request_path = attempt_dir / "vision-review-request.json"
+    if (
+        state.get("vision_review_request_path") != str(request_path)
+        or not request_path.is_file()
+        or state.get("vision_review_request_sha256") != _sha256(request_path)
+    ):
+        raise DocumentError("Vision review request 무결성 검증에 실패했습니다.")
+    try:
+        request = VisionReviewRequest.model_validate_json(
+            request_path.read_text(encoding="utf-8")
+        )
+    except ValidationError as exc:
+        raise DocumentError("Vision review request 형식이 올바르지 않습니다.") from exc
+    validate_vision_review_request(request, attempt_dir)
+    if (
+        request.review_id != state.get("vision_review_id")
+        or request.plan_id != plan_id
+        or request.original_sha256 != state.get("original_sha256")
+        or request.modified_sha256 != _sha256(modified)
+        or request.verification_report_sha256 != _sha256(report_path)
+    ):
+        raise DocumentError("현재 attempt와 다른 Vision review request입니다.")
     vision_path = attempt_dir / "vision-review.json"
     if state.get("vision_review_path") != str(vision_path) or not vision_path.is_file():
         raise DocumentError("서버 Vision 검토 보고서를 찾지 못했습니다.")
@@ -123,10 +148,15 @@ def finalize_attempt(
         raise DocumentError("Vision 검토 보고서 무결성 검증에 실패했습니다.")
     vision_review = json.loads(vision_path.read_text(encoding="utf-8"))
     if (
-        vision_review.get("source") != "mcp_sampling"
+        vision_review.get("source")
+        not in {"mcp_sampling", "host_vision_submission"}
+        or vision_review.get("review_id") != request.review_id
         or vision_review.get("plan_id") != plan_id
         or vision_review.get("verdict") != "PASS"
+        or vision_review.get("original_sha256") != request.original_sha256
         or vision_review.get("modified_sha256") != _sha256(modified)
+        or vision_review.get("verification_report_sha256")
+        != request.verification_report_sha256
     ):
         raise DocumentError("현재 attempt와 일치하는 Vision PASS가 아닙니다.")
 

@@ -16,6 +16,7 @@ from mcp.types import (
     ClientCapabilities,
     ElicitationCapability,
     ImageContent,
+    SamplingCapability,
     SamplingMessage,
     TextContent,
 )
@@ -55,9 +56,17 @@ from .plans import (
 from .normalization import NormalizationRequest, normalize_field
 from .rhwp import render_svg
 from .vision import (
+    HostReviewer,
+    VisionDecision,
+    VisionImage,
+    VisionReviewRequest,
+    VisionView,
     build_vision_prompt,
+    build_vision_review_request,
     create_vision_detail_crops,
     parse_vision_decision,
+    validate_host_vision_submission,
+    validate_vision_review_request,
 )
 from .workspace import (
     finalize_attempt,
@@ -449,7 +458,11 @@ def confirm_visual_candidates(
         "interview_ready": True,
     }
     saved_manifest_path = workspace["analysis_dir"] / "manifest.json"
-    saved_manifest = json.loads(saved_manifest_path.read_text(encoding="utf-8"))
+    saved_manifest = (
+        json.loads(saved_manifest_path.read_text(encoding="utf-8"))
+        if saved_manifest_path.is_file()
+        else manifest
+    )
     saved_manifest["field_registry"] = registry
     saved_manifest["analysis_contract"] = analysis_contract
     write_json(saved_manifest_path, saved_manifest)
@@ -761,7 +774,7 @@ async def review_document_vision(
     plan_id: str,
     ctx: Context,
 ) -> dict[str, Any]:
-    """MCP client Vision sampling으로 원본·수정·diff PNG를 판정합니다."""
+    """Sampling을 우선하고 미지원 시 Host Vision 검토 묶음을 반환합니다."""
     input_path = _resolve_path(path, must_exist=True)
     workspace = prepare_workspace(input_path)
     state = read_workflow_state(workspace["workspace_dir"])
@@ -795,10 +808,6 @@ async def review_document_vision(
         registry=registry,
         verification=verification,
     )
-    content: list[TextContent | ImageContent] = [
-        TextContent(type="text", text=prompt)
-    ]
-    total_image_bytes = 0
     page_sets = [
         sorted((attempt_dir / directory).glob(pattern))
         for directory, pattern in (
@@ -809,17 +818,102 @@ async def review_document_vision(
     ]
     if not page_sets[0] or len({len(paths) for paths in page_sets}) != 1:
         raise DocumentError("Vision 검토용 원본·수정·diff PNG 구성이 일치하지 않습니다.")
-    detail_bands = []
+    views: list[VisionView] = []
     for page_index, paths in enumerate(zip(*page_sets), start=1):
+        field_regions = _field_regions_for_page(edited_registry, page_index)
+        views.append(
+            VisionView(
+                view_id=f"page-{page_index:03d}-full",
+                page=page_index,
+                kind="full",
+                bbox=None,
+                field_ids=sorted(field_regions),
+                original=_vision_image(paths[0]),
+                modified=_vision_image(paths[1]),
+                diff=_vision_image(paths[2]),
+            )
+        )
+        page_details = create_vision_detail_crops(
+            page_number=page_index,
+            original_path=paths[0],
+            modified_path=paths[1],
+            diff_path=paths[2],
+            field_regions=field_regions,
+            output_dir=attempt_dir / "vision-details",
+        )
+        for detail in page_details:
+            views.append(
+                VisionView(
+                    view_id=(
+                        f"page-{page_index:03d}-band-{detail['band']:03d}"
+                    ),
+                    page=page_index,
+                    kind="detail",
+                    bbox=detail["bbox"],
+                    field_ids=detail["field_ids"],
+                    original=_vision_image(Path(detail["original"])),
+                    modified=_vision_image(Path(detail["modified"])),
+                    diff=_vision_image(Path(detail["diff"])),
+                )
+            )
+
+    request = build_vision_review_request(
+        plan_id=plan_id,
+        original_path=workspace["original_path"],
+        modified_path=attempt_dir / "modified.hwpx",
+        verification_path=verification_path,
+        views=views,
+        expected_field_ids=expected_field_ids,
+        prompt=prompt,
+    )
+    validate_vision_review_request(request, attempt_dir)
+    request_path = attempt_dir / "vision-review-request.json"
+    write_json(request_path, request.model_dump())
+    update_workflow_state(
+        workspace["workspace_dir"],
+        status="PENDING_VISION_REVIEW",
+        vision_review_id=request.review_id,
+        vision_review_request_path=str(request_path),
+        vision_review_request_sha256=sha256_file(request_path),
+    )
+    total_image_bytes = sum(
+        Path(image.path).stat().st_size
+        for view in request.views
+        for image in (view.original, view.modified, view.diff)
+    )
+    if total_image_bytes > 30 * 1024 * 1024:
+        return _vision_fallback_response(
+            request,
+            request_path,
+            "Sampling 이미지 payload가 30MB 제한을 초과했습니다.",
+        )
+    if not ctx.session.check_client_capability(
+        ClientCapabilities(sampling=SamplingCapability())
+    ):
+        return _vision_fallback_response(
+            request,
+            request_path,
+            "MCP client가 sampling/createMessage를 지원하지 않습니다.",
+        )
+
+    content: list[TextContent | ImageContent] = [
+        TextContent(type="text", text=prompt)
+    ]
+    for view in request.views:
         content.append(
             TextContent(
                 type="text",
-                text=f"page {page_index}: original, modified, diff 순서",
+                text=(
+                    f"{view.view_id}: "
+                    f"{'detail band' if view.kind == 'detail' else 'full page'}; "
+                    f"page={view.page}; "
+                    f"bbox={view.bbox}; field_ids={view.field_ids}; "
+                    "original, modified, diff 순서"
+                ),
             )
         )
-        for image_path in paths:
-            data = image_path.read_bytes()
-            total_image_bytes += len(data)
+        for image in (view.original, view.modified, view.diff):
+            data = Path(image.path).read_bytes()
             content.append(
                 ImageContent(
                     type="image",
@@ -827,48 +921,6 @@ async def review_document_vision(
                     mimeType="image/png",
                 )
             )
-        page_details = create_vision_detail_crops(
-            page_number=page_index,
-            original_path=paths[0],
-            modified_path=paths[1],
-            diff_path=paths[2],
-            field_regions=_field_regions_for_page(
-                edited_registry,
-                page_index,
-            ),
-            output_dir=attempt_dir / "vision-details",
-        )
-        detail_bands.extend(page_details)
-        for detail in page_details:
-            content.append(
-                TextContent(
-                    type="text",
-                    text=(
-                        f"page {page_index} detail band {detail['band']}: "
-                        "original, modified, diff 순서; "
-                        f"bbox={detail['bbox']}"
-                    ),
-                )
-            )
-            for kind in ("original", "modified", "diff"):
-                data = Path(detail[kind]).read_bytes()
-                total_image_bytes += len(data)
-                content.append(
-                    ImageContent(
-                        type="image",
-                        data=base64.b64encode(data).decode("ascii"),
-                        mimeType="image/png",
-                    )
-                )
-    if total_image_bytes > 30 * 1024 * 1024:
-        return _record_vision_needs_human(
-            workspace["workspace_dir"],
-            attempt_dir,
-            plan_id,
-            expected_field_ids,
-            "Vision 이미지가 30MB 제한을 초과했습니다.",
-        )
-
     try:
         sampled = await ctx.session.create_message(
             messages=[SamplingMessage(role="user", content=content)],
@@ -880,6 +932,13 @@ async def review_document_vision(
             temperature=0,
             metadata={"task": "hwp-vision-review", "plan_id": plan_id},
         )
+    except Exception as exc:
+        return _vision_fallback_response(
+            request,
+            request_path,
+            f"Vision sampling transport 실패: {exc}",
+        )
+    try:
         if not isinstance(sampled.content, TextContent):
             raise DocumentError("Vision sampling이 텍스트 JSON을 반환하지 않았습니다.")
         decision = parse_vision_decision(sampled.content.text, expected_field_ids)
@@ -887,33 +946,91 @@ async def review_document_vision(
         return _record_vision_needs_human(
             workspace["workspace_dir"],
             attempt_dir,
-            plan_id,
-            expected_field_ids,
-            f"Vision sampling 실패: {exc}",
+            request,
+            f"Vision sampling 응답 검증 실패: {exc}",
         )
 
     review = {
         "source": "mcp_sampling",
-        "plan_id": plan_id,
-        "original_sha256": state["original_sha256"],
-        "modified_sha256": sha256_file(attempt_dir / "modified.hwpx"),
+        "review_id": request.review_id,
+        "plan_id": request.plan_id,
+        "original_sha256": request.original_sha256,
+        "modified_sha256": request.modified_sha256,
+        "verification_report_sha256": request.verification_report_sha256,
         "model": sampled.model,
-        "detail_bands": detail_bands,
+        "detail_bands": [
+            view.model_dump() for view in request.views if view.kind == "detail"
+        ],
         **decision.model_dump(),
     }
-    review_path = attempt_dir / "vision-review.json"
-    write_json(review_path, review)
-    next_status = (
-        "PENDING_VISION_REVIEW"
-        if decision.verdict == "PASS"
-        else "NEEDS_HUMAN"
-    )
-    update_workflow_state(
+    _save_vision_review(
         workspace["workspace_dir"],
-        status=next_status,
-        vision_status=decision.verdict,
-        vision_review_path=str(review_path),
-        vision_review_sha256=sha256_file(review_path),
+        attempt_dir,
+        review,
+        decision.verdict,
+    )
+    return review
+
+
+@mcp.tool()
+def submit_host_vision_review(
+    path: str,
+    plan_id: str,
+    review_id: str,
+    reviewer: HostReviewer,
+    decision: VisionDecision,
+) -> dict[str, Any]:
+    """Host의 image-input LLM 판정을 현재 review request에 결합합니다."""
+    input_path = _resolve_path(path, must_exist=True)
+    workspace = prepare_workspace(input_path)
+    state = read_workflow_state(workspace["workspace_dir"])
+    if (
+        state.get("status") != "PENDING_VISION_REVIEW"
+        or state.get("plan_id") != plan_id
+        or state.get("vision_review_id") != review_id
+    ):
+        raise DocumentError("현재 Host Vision 검토 대기 중인 request가 아닙니다.")
+    attempt_dir = workspace["attempts_dir"] / plan_id
+    request_path = attempt_dir / "vision-review-request.json"
+    if (
+        state.get("vision_review_request_path") != str(request_path)
+        or not request_path.is_file()
+        or state.get("vision_review_request_sha256") != sha256_file(request_path)
+    ):
+        raise DocumentError("Vision review request 무결성 검증에 실패했습니다.")
+    try:
+        request = VisionReviewRequest.model_validate_json(
+            request_path.read_text(encoding="utf-8")
+        )
+    except ValidationError as exc:
+        raise DocumentError("Vision review request 형식이 올바르지 않습니다.") from exc
+    if request.review_id != review_id or request.plan_id != plan_id:
+        raise DocumentError("현재 attempt와 다른 Vision review request입니다.")
+    validate_vision_review_request(request, attempt_dir)
+    verification_path = attempt_dir / "verification-report.json"
+    if (
+        request.original_sha256 != sha256_file(workspace["original_path"])
+        or request.modified_sha256 != sha256_file(attempt_dir / "modified.hwpx")
+        or request.verification_report_sha256 != sha256_file(verification_path)
+    ):
+        raise DocumentError("Vision review artifact 무결성 검증에 실패했습니다.")
+    validate_host_vision_submission(request, reviewer, decision)
+    review = {
+        "source": "host_vision_submission",
+        "review_id": request.review_id,
+        "plan_id": request.plan_id,
+        "original_sha256": request.original_sha256,
+        "modified_sha256": request.modified_sha256,
+        "verification_report_sha256": request.verification_report_sha256,
+        "reviewer": reviewer.model_dump(),
+        "model": reviewer.model,
+        **decision.model_dump(),
+    }
+    _save_vision_review(
+        workspace["workspace_dir"],
+        attempt_dir,
+        review,
+        decision.verdict,
     )
     return review
 
@@ -921,16 +1038,16 @@ async def review_document_vision(
 def _record_vision_needs_human(
     workspace_dir: Path,
     attempt_dir: Path,
-    plan_id: str,
-    field_ids: list[str],
+    request: VisionReviewRequest,
     reason: str,
 ) -> dict[str, Any]:
-    state = read_workflow_state(workspace_dir)
     review = {
         "source": "mcp_sampling",
-        "plan_id": plan_id,
-        "original_sha256": state["original_sha256"],
-        "modified_sha256": sha256_file(attempt_dir / "modified.hwpx"),
+        "review_id": request.review_id,
+        "plan_id": request.plan_id,
+        "original_sha256": request.original_sha256,
+        "modified_sha256": request.modified_sha256,
+        "verification_report_sha256": request.verification_report_sha256,
         "model": None,
         "verdict": "NEEDS_HUMAN",
         "summary": reason,
@@ -939,20 +1056,60 @@ def _record_vision_needs_human(
                 "field_id": field_id,
                 "verdict": "NEEDS_HUMAN",
                 "reason": reason,
+                "evidence_view_ids": [],
             }
-            for field_id in field_ids
+            for field_id in request.expected_field_ids
         ],
     }
+    _save_vision_review(
+        workspace_dir,
+        attempt_dir,
+        review,
+        "NEEDS_HUMAN",
+    )
+    return review
+
+
+def _save_vision_review(
+    workspace_dir: Path,
+    attempt_dir: Path,
+    review: dict[str, Any],
+    verdict: str,
+) -> None:
     review_path = attempt_dir / "vision-review.json"
     write_json(review_path, review)
     update_workflow_state(
         workspace_dir,
-        status="NEEDS_HUMAN",
-        vision_status="NEEDS_HUMAN",
+        status=(
+            "PENDING_VISION_REVIEW"
+            if verdict == "PASS"
+            else "NEEDS_HUMAN"
+        ),
+        vision_status=verdict,
         vision_review_path=str(review_path),
         vision_review_sha256=sha256_file(review_path),
     )
-    return review
+
+
+def _vision_fallback_response(
+    request: VisionReviewRequest,
+    request_path: Path,
+    reason: str,
+) -> dict[str, Any]:
+    return {
+        **request.model_dump(),
+        "status": "VISION_REVIEW_REQUIRED",
+        "next_action": "submit_host_vision_review",
+        "review_request_path": str(request_path),
+        "sampling_unavailable_reason": reason,
+    }
+
+
+def _vision_image(path: Path) -> VisionImage:
+    return VisionImage(
+        path=str(path),
+        sha256=sha256_file(path),
+    )
 
 
 def _field_regions_for_page(

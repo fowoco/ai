@@ -192,6 +192,7 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
                 "apply_edit_plan",
                 "confirm_visual_candidates",
                 "review_document_vision",
+                "submit_host_vision_review",
                 "finalize_document",
                 "normalize_field_value",
                 "replace_text",
@@ -349,8 +350,51 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
                 },
             )
             assert vision_result.isError is not True
-            expected_verdict = "PASS" if vision_mode == "pass" else "NEEDS_HUMAN"
-            assert vision_result.structuredContent["verdict"] == expected_verdict
+            if vision_mode == "unsupported":
+                request = vision_result.structuredContent
+                assert request["status"] == "VISION_REVIEW_REQUIRED"
+                assert request["next_action"] == "submit_host_vision_review"
+                evidence_view_ids = [
+                    view["view_id"]
+                    for view in request["views"]
+                    if field_id in view["field_ids"]
+                ]
+                host_result = await session.call_tool(
+                    "submit_host_vision_review",
+                    arguments={
+                        "path": "plan-form.hwpx",
+                        "plan_id": plan["plan_id"],
+                        "review_id": request["review_id"],
+                        "reviewer": {
+                            "provider": "test-host",
+                            "model": "test-vision",
+                            "capabilities": ["image_input"],
+                        },
+                        "decision": {
+                            "verdict": "PASS",
+                            "summary": "원본 대비 올바른 셀에 배치됨",
+                            "fields": [
+                                {
+                                    "field_id": field_id,
+                                    "verdict": "PASS",
+                                    "reason": "업체명 라벨 오른쪽 셀 경계 안에 배치됨",
+                                    "evidence_view_ids": evidence_view_ids,
+                                }
+                            ],
+                        },
+                    },
+                )
+                assert host_result.isError is not True
+                assert host_result.structuredContent["verdict"] == "PASS"
+                assert (
+                    host_result.structuredContent["source"]
+                    == "host_vision_submission"
+                )
+            else:
+                expected_verdict = (
+                    "PASS" if vision_mode == "pass" else "NEEDS_HUMAN"
+                )
+                assert vision_result.structuredContent["verdict"] == expected_verdict
             if vision_mode == "pass":
                 assert vision_result.structuredContent["model"] == "test-vision"
 
@@ -361,7 +405,7 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
                     "plan_id": plan["plan_id"],
                 },
             )
-            if vision_mode == "pass":
+            if vision_mode in {"pass", "unsupported"}:
                 assert finalize_result.isError is not True
                 assert finalize_result.structuredContent["status"] == "VERIFIED_FINAL"
             else:
