@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from app.coordinator import CoordinatorService
 from app.core.config import get_settings
 from app.documents import (
     DocumentConversionService,
@@ -20,6 +21,13 @@ from app.documents.conversion.converters import (
 )
 from app.documents.conversion.engines import LibreOfficeEngine
 from app.documents.snapshots import DocumentSnapshotRepository
+
+
+@lru_cache
+def get_coordinator_service() -> CoordinatorService:
+    """Return the in-memory Coordinator for this worker."""
+
+    return CoordinatorService()
 
 
 @lru_cache
@@ -111,6 +119,7 @@ def get_document_conversion_service() -> DocumentConversionService:
 
 
 __all__ = [
+    "get_coordinator_service",
     "get_document_conversion_service",
     "get_document_editing_service",
     "get_document_record_generation_service",

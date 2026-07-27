@@ -39,6 +39,7 @@ docker compose down
 app/
 ├─ agents/       자연어 의도 분석, 값 추출, 누락 정보 확인
 ├─ api/          FastAPI Internal API, 요청·응답과 서비스 조립
+├─ coordinator/  상태 전이 계약·복합 요청 분리 프로토타입 (영속은 server)
 ├─ documents/    HWP/HWPX/XML/PDF 처리, 편집, 변환, 스냅샷
 └─ core/         환경설정 등 공통 기반
 ```
@@ -47,17 +48,34 @@ app/
 
 ```text
 Server → API → agents
+             ├→ coordinator   (전이 검증·분리 제안만; WorkItem 영속은 server)
              └→ documents
 ```
 
 - `agents`는 HWP/HWPX 파일 구조를 알지 않는다.
 - `documents`는 자연어를 해석하지 않고 구조화된 값과 파일만 처리한다.
-- `api`는 HTTP 계약을 담당하고 두 도메인의 서비스를 조립한다.
+- `coordinator`는 knowledge 9상태 전이와 복합 요청 분리를 검증한다. client는
+  이 API를 직접 호출하지 않고 server의 `/api/work-items`를 사용한다.
+- `api`는 HTTP 계약을 담당하고 도메인 서비스를 조립한다.
 
 상세 문서:
 
 - [Internal API 안내](app/api/README.md)
 - [문서 처리 아키텍처](app/documents/README.md)
+- [Coordinator 프로토타입](app/coordinator/README.md)
+
+## Coordinator (프로토타입)
+
+영속 업무카드·HR 승인은 **server** 소유다. AI는 아래 Internal 엔드포인트로
+분리 초안과 전이 규칙만 제공한다.
+
+```text
+POST /api/v1/internal/coordinator/propose-split
+POST /api/v1/internal/coordinator/validate-transition
+```
+
+`/work-items/*` 하위는 로컬 상태머신 검증용 임시 시뮬레이터이며, client 공개
+경로가 아니다.
 
 ## 문서 API
 

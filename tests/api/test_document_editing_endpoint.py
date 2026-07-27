@@ -269,6 +269,7 @@ def test_openapi_exposes_separate_document_actions() -> None:
     assert "/api/v1/documents/templates/{template_id}" in paths
 
     assert [tag["name"] for tag in schema["tags"]] == [
+        "Coordinator (Prototype)",
         "Document Capabilities",
         "Document Templates",
         "Document Inspection",
@@ -277,6 +278,11 @@ def test_openapi_exposes_separate_document_actions() -> None:
         "Document Conversion",
     ]
     assert [tag["description"] for tag in schema["tags"]] == [
+        (
+            "지식 패키지 상태머신·복합 요청 분리 프로토타입. "
+            "client 공개 API가 아니며, 영속 WorkItem은 server `/api/work-items` 소유다. "
+            "AI 핵심은 propose-split·validate-transition이다."
+        ),
         "현재 서버에서 사용할 수 있는 문서 처리 기능과 변환 조합을 조회합니다.",
         "등록된 문서 템플릿 목록과 편집 가능한 필드를 조회합니다.",
         "업로드한 문서의 실제 포맷을 감지하고 일치하는 템플릿을 식별합니다.",

@@ -1,5 +1,6 @@
 """OpenAPI 태그 이름과 Swagger 표시 정보를 관리한다."""
 
+COORDINATOR_TAG = "Coordinator (Prototype)"
 DOCUMENT_CAPABILITIES_TAG = "Document Capabilities"
 DOCUMENT_TEMPLATES_TAG = "Document Templates"
 DOCUMENT_INSPECTION_TAG = "Document Inspection"
@@ -8,6 +9,14 @@ DOCUMENT_GENERATION_TAG = "Document Generation"
 DOCUMENT_CONVERSION_TAG = "Document Conversion"
 
 OPENAPI_TAGS_METADATA = [
+    {
+        "name": COORDINATOR_TAG,
+        "description": (
+            "지식 패키지 상태머신·복합 요청 분리 프로토타입. "
+            "client 공개 API가 아니며, 영속 WorkItem은 server `/api/work-items` 소유다. "
+            "AI 핵심은 propose-split·validate-transition이다."
+        ),
+    },
     {
         "name": DOCUMENT_CAPABILITIES_TAG,
         "description": "현재 서버에서 사용할 수 있는 문서 처리 기능과 변환 조합을 조회합니다.",
