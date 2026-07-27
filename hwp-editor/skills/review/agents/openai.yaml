@@ -1,4 +1,0 @@
-interface:
-  display_name: "Convention Review"
-  short_description: "프로젝트 기준 또는 기본 안전 기준으로 변경사항 검토"
-  default_prompt: "Use $review to review the current changes with project conventions when available, or baseline safety checks otherwise."

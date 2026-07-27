@@ -1,4 +1,0 @@
-interface:
-  display_name: "Project Wiki"
-  short_description: "프로젝트 설정과 지식 수명주기를 하나로 통합 관리"
-  default_prompt: "Use $wiki to set up or maintain this project's LLM Wiki."
