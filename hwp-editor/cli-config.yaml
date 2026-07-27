@@ -1,0 +1,2 @@
+terminal:
+  docker_mount_cwd_to_workspace: true

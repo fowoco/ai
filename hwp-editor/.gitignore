@@ -1,0 +1,37 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.DS_Store
+
+# BEGIN project-scaffold
+# raw trust classes — shared만 검열 후 추적 가능
+raw/private/
+raw/quarantine/
+raw/generated/
+raw/dev-logs/
+raw/handoffs/
+raw/ideas/
+raw/meetings/
+raw/decisions/
+
+# Graphify — 로컬 생성 파일, 개인 맥락 분석용
+graphify-out/
+
+# project-scaffold — clone별 설정, install lock, recovery backup
+.project-scaffold/local/
+.project-scaffold/recovery/
+SOUL.local.md
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# OS
+.DS_Store
+.agents/skills/
+.hermes/skills/
+.worktrees/
+# END project-scaffold

@@ -1,0 +1,55 @@
+/* project-scaffold — wiki/ 폴더 색상 그룹 */
+
+/* conventions/ — 파랑 (원칙·규범) */
+.nav-folder-title[data-path="conventions"] .nav-folder-title-content {
+  color: #4fc3f7;
+  font-weight: 600;
+}
+.nav-folder-title[data-path="conventions"] + .nav-folder-children .nav-file-title-content {
+  color: #b3e5fc;
+}
+
+/* decisions/ — 주황 (중요 판단) */
+.nav-folder-title[data-path="decisions"] .nav-folder-title-content {
+  color: #ffb74d;
+  font-weight: 600;
+}
+.nav-folder-title[data-path="decisions"] + .nav-folder-children .nav-file-title-content {
+  color: #ffe0b2;
+}
+
+/* devlog/ — 초록 (진행·성장) */
+.nav-folder-title[data-path="devlog"] .nav-folder-title-content {
+  color: #81c784;
+  font-weight: 600;
+}
+.nav-folder-title[data-path="devlog"] + .nav-folder-children .nav-file-title-content {
+  color: #c8e6c9;
+}
+
+/* meetings/ — 보라 (사람·소통) */
+.nav-folder-title[data-path="meetings"] .nav-folder-title-content {
+  color: #ce93d8;
+  font-weight: 600;
+}
+.nav-folder-title[data-path="meetings"] + .nav-folder-children .nav-file-title-content {
+  color: #e1bee7;
+}
+
+/* sources/ — 회색 (원본 자료) */
+.nav-folder-title[data-path="sources"] .nav-folder-title-content {
+  color: #90a4ae;
+  font-weight: 600;
+}
+.nav-folder-title[data-path="sources"] + .nav-folder-children .nav-file-title-content {
+  color: #cfd8dc;
+}
+
+/* synthesis/ — 핑크 (통찰·결론) */
+.nav-folder-title[data-path="synthesis"] .nav-folder-title-content {
+  color: #f48fb1;
+  font-weight: 600;
+}
+.nav-folder-title[data-path="synthesis"] + .nav-folder-children .nav-file-title-content {
+  color: #fce4ec;
+}
