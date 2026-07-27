@@ -1,13 +1,26 @@
 from __future__ import annotations
 
+import base64
+import json
 from pathlib import Path
 
 import hwp_mcp.hwpx as hwpx
 import pytest
 
 from hwp_mcp.hwpx import DocumentError
-from hwp_mcp.plans import CellEditInput, EditPlanError, create_edit_plan
-from hwp_mcp.server import apply_edit_plan, confirm_visual_candidates
+from hwp_mcp.integrity import EnvSigningKeyProvider
+from hwp_mcp.plans import (
+    CellEditInput,
+    EditPlanError,
+    create_approval_receipt,
+    create_edit_plan,
+    sha256_file,
+)
+from hwp_mcp.server import (
+    _workflow_services,
+    apply_edit_plan,
+    confirm_visual_candidates,
+)
 from hwp_mcp.workspace import prepare_workspace, update_workflow_state, write_json
 from analysis_helpers import make_grounded_manifest
 from test_hwpx import make_table_fixture
@@ -74,6 +87,17 @@ def test_apply_rejects_stale_analysis_contract(
     source = tmp_path / "form.hwpx"
     make_table_fixture(source)
     monkeypatch.setenv("HWP_MCP_ROOT", str(tmp_path))
+    monkeypatch.setenv("HWP_MCP_ACTIVE_SIGNING_KEY_ID", "test-v1")
+    monkeypatch.setenv(
+        "HWP_MCP_SIGNING_KEYS",
+        json.dumps(
+            {
+                "test-v1": base64.b64encode(b"test-signing-key-" * 2).decode(
+                    "ascii"
+                )
+            }
+        ),
+    )
     workspace = prepare_workspace(source)
     manifest = make_grounded_manifest(workspace["original_path"])
     field = manifest["field_registry"][0]
@@ -90,7 +114,34 @@ def test_apply_rejects_stale_analysis_contract(
         ],
         dispositions={field["field_id"]: "provided"},
     )
-    (workspace["attempts_dir"] / plan.plan_id).mkdir()
+    document_id, repository, artifacts = _workflow_services(workspace)
+    repository.set_analysis_status(document_id, "READY_FOR_INTERVIEW")
+    attempt_dir = workspace["attempts_dir"] / plan.plan_id
+    attempt_dir.mkdir()
+    plan_path = attempt_dir / "edit-plan.json"
+    write_json(plan_path, plan.model_dump())
+    artifacts.put(plan.plan_id, "edit_plan", plan_path)
+    repository.create_plan(document_id, plan.plan_id, sha256_file(plan_path))
+    receipt = create_approval_receipt(
+        plan,
+        plan_path,
+        approved_at="2026-07-27T00:00:00+00:00",
+        approver_subject="local-interactive-user",
+        signer=EnvSigningKeyProvider.from_env(),
+    )
+    receipt_path = attempt_dir / "approval-receipt.json"
+    write_json(receipt_path, receipt.model_dump())
+    receipt_artifact = artifacts.put(
+        plan.plan_id,
+        "approval_receipt",
+        receipt_path,
+    )
+    repository.approve_plan(
+        document_id,
+        plan.plan_id,
+        receipt_sha256=receipt_artifact.sha256,
+        approved_at=receipt.approved_at,
+    )
     update_workflow_state(
         workspace["workspace_dir"],
         status="APPROVED",

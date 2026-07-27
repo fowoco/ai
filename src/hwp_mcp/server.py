@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import base64
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import logging
@@ -9,10 +9,12 @@ import os
 from pathlib import Path
 import shutil
 import sys
+import threading
 from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import (
+    CallToolResult,
     ClientCapabilities,
     ElicitationCapability,
     ImageContent,
@@ -22,6 +24,7 @@ from mcp.types import (
 )
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from .artifacts import LocalArtifactStore
 from .fields import RegistryField, reconcile_registry_with_svg
 from .compare import (
     analyze_svg_geometry,
@@ -44,6 +47,7 @@ from .hwpx import (
     replace_text as replace_hwpx_text,
     validate_document as validate_file,
 )
+from .integrity import EnvSigningKeyProvider
 from .plans import (
     CellEditInput,
     EditPlan,
@@ -55,17 +59,21 @@ from .plans import (
 )
 from .normalization import NormalizationRequest, normalize_field
 from .rhwp import render_svg
+from .state import SqliteWorkflowRepository
 from .vision import (
     HostReviewer,
     VisionDecision,
+    VisionDelivery,
     VisionImage,
     VisionReviewRequest,
     VisionView,
     build_vision_prompt,
     build_vision_review_request,
+    create_vision_delivery,
     create_vision_detail_crops,
     parse_vision_decision,
     validate_host_vision_submission,
+    validate_vision_delivery,
     validate_vision_review_request,
 )
 from .workspace import (
@@ -73,6 +81,7 @@ from .workspace import (
     prepare_workspace,
     read_workflow_state,
     update_workflow_state,
+    workflow_document_id,
     write_json,
 )
 
@@ -87,6 +96,8 @@ mcp = FastMCP(
     instructions=MCP_INSTRUCTIONS,
     json_response=True,
 )
+_RECOVERY_LOCK = threading.Lock()
+_RECOVERED_DATABASES: set[Path] = set()
 
 
 class ApprovalAnswer(BaseModel):
@@ -100,6 +111,92 @@ class ApprovalAnswer(BaseModel):
 def _allowed_root() -> Path:
     configured = os.environ.get("HWP_MCP_ROOT")
     return Path(configured).expanduser().resolve() if configured else Path.cwd().resolve()
+
+
+def _state_db_path() -> Path:
+    root = _allowed_root()
+    configured = os.environ.get("HWP_MCP_STATE_DB", ".hwp-mcp/state.sqlite3")
+    candidate = Path(configured).expanduser()
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    resolved = candidate.resolve(strict=False)
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise DocumentError("workflow DB는 HWP_MCP_ROOT 안에 있어야 합니다.") from exc
+    return resolved
+
+
+def _workflow_services(
+    workspace: dict[str, Path],
+) -> tuple[str, SqliteWorkflowRepository, LocalArtifactStore]:
+    original_sha256 = sha256_file(workspace["original_path"])
+    document_id = workflow_document_id(
+        workspace["workspace_dir"],
+        original_sha256,
+    )
+    database_path = _state_db_path()
+    repository = SqliteWorkflowRepository(database_path)
+    artifacts = LocalArtifactStore(_allowed_root(), repository)
+    with _RECOVERY_LOCK:
+        if database_path not in _RECOVERED_DATABASES:
+            _recover_reserved_attempts(repository, artifacts)
+            _RECOVERED_DATABASES.add(database_path)
+    repository.ensure_document(
+        document_id,
+        original_sha256,
+        str(workspace["workspace_dir"]),
+    )
+    artifacts.put(document_id, "original", workspace["original_path"])
+    return document_id, repository, artifacts
+
+
+def _recover_reserved_attempts(
+    repository: SqliteWorkflowRepository,
+    artifacts: LocalArtifactStore,
+) -> None:
+    """재시작 전에 멈춘 RESERVED attempt를 보수적으로 복구합니다."""
+    for attempt in repository.list_reserved_attempts():
+        document = repository.get_document(attempt.document_id)
+        attempt_dir = (
+            Path(document.workspace_uri) / "attempts" / attempt.plan_id
+        ).resolve()
+        modified_path = attempt_dir / "modified.hwpx"
+        if not modified_path.is_file():
+            repository.complete_attempt(
+                attempt.plan_id,
+                status="ABORTED_NO_OUTPUT",
+            )
+            continue
+        report_path = attempt_dir / "verification-report.json"
+        if not report_path.is_file():
+            write_json(
+                report_path,
+                {
+                    "plan_id": attempt.plan_id,
+                    "status": "NEEDS_HUMAN",
+                    "error": (
+                        "서버 재시작 시 출력이 남은 RESERVED attempt를 "
+                        "실패 attempt로 복구했습니다."
+                    ),
+                },
+            )
+        modified_artifact = artifacts.put(
+            attempt.plan_id,
+            "modified_hwpx",
+            modified_path,
+        )
+        report_artifact = artifacts.put(
+            attempt.plan_id,
+            "verification_report",
+            report_path,
+        )
+        repository.complete_attempt(
+            attempt.plan_id,
+            status="FAILED",
+            modified_sha256=modified_artifact.sha256,
+            report_sha256=report_artifact.sha256,
+        )
 
 
 def _resolve_path(raw_path: str, *, must_exist: bool) -> Path:
@@ -191,6 +288,7 @@ def analyze_document(path: str) -> dict[str, Any]:
     """원본 복사·XML registry·SVG/PNG를 document workspace에 생성합니다."""
     input_path = _resolve_path(path, must_exist=True)
     workspace = prepare_workspace(input_path)
+    document_id, repository, _ = _workflow_services(workspace)
     original_path = workspace["original_path"]
     manifest = _analyze_xml_document(original_path)
     xml_field_candidates = manifest.pop("xml_field_candidates")
@@ -264,6 +362,7 @@ def analyze_document(path: str) -> dict[str, Any]:
     visual_candidates_path = workspace["analysis_dir"] / "visual-candidates.json"
     if not visual_candidates_path.exists():
         write_json(visual_candidates_path, [])
+    repository.set_analysis_status(document_id, "ANALYZED")
     update_workflow_state(
         workspace["workspace_dir"],
         status="ANALYZED",
@@ -396,8 +495,10 @@ def confirm_visual_candidates(
     """사람이 판정한 SVG-only 후보를 증거로 저장하며 자동 편집 대상으로 만들지 않습니다."""
     input_path = _resolve_path(path, must_exist=True)
     workspace = prepare_workspace(input_path)
+    document_id, repository, _ = _workflow_services(workspace)
+    document = repository.get_document(document_id)
     state = read_workflow_state(workspace["workspace_dir"])
-    if state["status"] != "ANALYZED":
+    if document.status != "ANALYZED":
         raise DocumentError("ANALYZED 상태에서만 visual candidate를 확정할 수 있습니다.")
     if state.get("svg_analysis_status") != "MAPPED":
         raise DocumentError("rhwp SVG cell geometry가 XML 구조와 매핑되지 않았습니다.")
@@ -466,6 +567,7 @@ def confirm_visual_candidates(
     saved_manifest["field_registry"] = registry
     saved_manifest["analysis_contract"] = analysis_contract
     write_json(saved_manifest_path, saved_manifest)
+    repository.set_analysis_status(document_id, "READY_FOR_INTERVIEW")
     update_workflow_state(
         workspace["workspace_dir"],
         status="READY_FOR_INTERVIEW",
@@ -492,16 +594,12 @@ def create_edit_plan(
     """모든 field disposition을 확인해 typed 승인 대기 계획을 저장합니다."""
     input_path = _resolve_path(path, must_exist=True)
     workspace = prepare_workspace(input_path)
+    document_id, repository, artifacts = _workflow_services(workspace)
+    document = repository.get_document(document_id)
     state = read_workflow_state(workspace["workspace_dir"])
-    if state["status"] != "READY_FOR_INTERVIEW":
+    if document.status != "READY_FOR_INTERVIEW":
         raise DocumentError("analyze_document와 시각 후보 확인 후 계획을 만드세요.")
     _require_visual_analysis_contract(state)
-    if len(state.get("attempts", [])) >= 2:
-        update_workflow_state(
-            workspace["workspace_dir"],
-            status="NEEDS_HUMAN",
-        )
-        raise DocumentError("XML/SVG 조정 2회를 소진해 사람 검토가 필요합니다.")
     original_path = workspace["original_path"]
     manifest_path = workspace["analysis_dir"] / "manifest.json"
     if not manifest_path.exists():
@@ -513,7 +611,14 @@ def create_edit_plan(
     plan = build_edit_plan(original_path, manifest, edits, dispositions)
     attempt_dir = workspace["attempts_dir"] / plan.plan_id
     attempt_dir.mkdir()
-    write_json(attempt_dir / "edit-plan.json", plan.model_dump(exclude_none=True))
+    plan_path = attempt_dir / "edit-plan.json"
+    write_json(plan_path, plan.model_dump(exclude_none=True))
+    artifacts.put(plan.plan_id, "edit_plan", plan_path)
+    repository.create_plan(
+        document_id,
+        plan.plan_id,
+        sha256_file(plan_path),
+    )
     update_workflow_state(
         workspace["workspace_dir"],
         status="WAITING_APPROVAL",
@@ -533,10 +638,11 @@ async def approve_edit_plan(
     """현재 저장 Edit Plan을 사용자 elicitation으로 승인합니다."""
     input_path = _resolve_path(path, must_exist=True)
     workspace = prepare_workspace(input_path)
-    state = read_workflow_state(workspace["workspace_dir"])
+    document_id, repository, artifacts = _workflow_services(workspace)
+    document = repository.get_document(document_id)
     if (
-        state.get("status") != "WAITING_APPROVAL"
-        or state.get("plan_id") != plan_id
+        document.status != "WAITING_APPROVAL"
+        or document.current_plan_id != plan_id
     ):
         raise DocumentError("현재 승인 대기 중인 plan이 아닙니다.")
     if not ctx.session.check_client_capability(
@@ -548,8 +654,11 @@ async def approve_edit_plan(
 
     attempt_dir = workspace["attempts_dir"] / plan_id
     plan_path = attempt_dir / "edit-plan.json"
+    plan_artifact = artifacts.verify(plan_id, "edit_plan")
     plan = _read_stored_plan(plan_path)
     validate_edit_plan(plan, workspace["original_path"])
+    if plan_artifact.sha256 != sha256_file(plan_path):
+        raise DocumentError("workflow DB의 Edit Plan hash가 다릅니다.")
     operation_summary = "\n".join(
         (
             f"- {operation.label or operation.field_id}: "
@@ -571,13 +680,24 @@ async def approve_edit_plan(
     ):
         raise DocumentError("사용자가 Edit Plan 적용을 승인하지 않았습니다.")
 
+    signer = EnvSigningKeyProvider.from_env()
+    approved_at = datetime.now(timezone.utc).isoformat()
     receipt = create_approval_receipt(
         plan,
         plan_path,
-        approved_at=datetime.now(timezone.utc).isoformat(),
+        approved_at=approved_at,
+        approver_subject="local-interactive-user",
+        signer=signer,
     )
     receipt_path = attempt_dir / "approval-receipt.json"
     write_json(receipt_path, receipt.model_dump())
+    receipt_artifact = artifacts.put(plan_id, "approval_receipt", receipt_path)
+    repository.approve_plan(
+        document_id,
+        plan_id,
+        receipt_sha256=receipt_artifact.sha256,
+        approved_at=approved_at,
+    )
     update_workflow_state(
         workspace["workspace_dir"],
         status="APPROVED",
@@ -600,8 +720,10 @@ def apply_edit_plan(
     """승인된 typed plan을 workspace attempt에 적용하고 Vision 검토 대기로 전환합니다."""
     input_path = _resolve_path(path, must_exist=True)
     workspace = prepare_workspace(input_path)
+    document_id, repository, artifacts = _workflow_services(workspace)
+    document = repository.get_document(document_id)
     state = read_workflow_state(workspace["workspace_dir"])
-    if state.get("status") != "APPROVED" or state.get("plan_id") != plan_id:
+    if document.status != "APPROVED" or document.current_plan_id != plan_id:
         raise DocumentError("서버 승인 receipt가 있는 현재 plan이 아닙니다.")
     _require_visual_analysis_contract(state)
     registry_path = workspace["analysis_dir"] / "field-registry.json"
@@ -611,17 +733,28 @@ def apply_edit_plan(
     attempt_dir = workspace["attempts_dir"] / plan_id
     plan_path = attempt_dir / "edit-plan.json"
     receipt_path = attempt_dir / "approval-receipt.json"
+    plan_artifact = artifacts.verify(plan_id, "edit_plan")
+    receipt_artifact = artifacts.verify(plan_id, "approval_receipt")
     plan = _read_stored_plan(plan_path)
     validate_edit_plan(plan, original_path)
-    validate_approval_receipt(plan, plan_path, receipt_path)
+    signer = EnvSigningKeyProvider.from_env()
+    validate_approval_receipt(
+        plan,
+        plan_path,
+        receipt_path,
+        signer=signer,
+    )
+    approval = repository.require_active_approval(document_id, plan_id)
     if (
-        state.get("approval_receipt_path") != str(receipt_path)
-        or state.get("approval_receipt_sha256") != sha256_file(receipt_path)
+        plan_artifact.sha256 != sha256_file(plan_path)
+        or receipt_artifact.sha256 != sha256_file(receipt_path)
+        or approval.receipt_sha256 != receipt_artifact.sha256
     ):
-        raise DocumentError("workflow 승인 receipt 무결성 검증에 실패했습니다.")
+        raise DocumentError("workflow DB의 승인 artifact 무결성 검증에 실패했습니다.")
     destination = attempt_dir / "modified.hwpx"
     if destination.exists():
         raise DocumentError("이 plan의 수정 attempt가 이미 존재합니다.")
+    repository.reserve_attempt(document_id, plan_id)
     report: dict[str, Any] = {"plan_id": plan.plan_id, "approved": True}
     try:
         operation_dicts = [operation.model_dump(exclude_none=True) for operation in plan.operations]
@@ -711,8 +844,21 @@ def apply_edit_plan(
             },
         }
         report.update({"status": "PENDING_VISION_REVIEW", "review": review})
-        write_json(attempt_dir / "verification-report.json", report)
-        attempts = [*state.get("attempts", []), plan.plan_id]
+        report_path = attempt_dir / "verification-report.json"
+        write_json(report_path, report)
+        modified_artifact = artifacts.put(plan_id, "modified_hwpx", destination)
+        report_artifact = artifacts.put(plan_id, "verification_report", report_path)
+        repository.complete_attempt(
+            plan_id,
+            status="PENDING_VISION_REVIEW",
+            modified_sha256=modified_artifact.sha256,
+            report_sha256=report_artifact.sha256,
+        )
+        attempts = [
+            attempt.plan_id
+            for attempt in repository.list_attempts(document_id)
+            if attempt.status != "ABORTED_NO_OUTPUT"
+        ]
         update_workflow_state(
             workspace["workspace_dir"],
             status="PENDING_VISION_REVIEW",
@@ -720,7 +866,7 @@ def apply_edit_plan(
             approved=True,
             vision_status=None,
             modified_path=str(destination),
-            attempts=list(dict.fromkeys(attempts)),
+            attempts=attempts,
         )
         result.update(
             {
@@ -735,15 +881,39 @@ def apply_edit_plan(
         return result
     except Exception as exc:
         report.update({"status": "NEEDS_HUMAN", "error": str(exc)})
-        write_json(attempt_dir / "verification-report.json", report)
-        attempts = [*state.get("attempts", []), plan.plan_id]
+        report_path = attempt_dir / "verification-report.json"
+        write_json(report_path, report)
+        if destination.exists():
+            modified_artifact = artifacts.put(plan_id, "modified_hwpx", destination)
+            report_artifact = artifacts.put(
+                plan_id,
+                "verification_report",
+                report_path,
+            )
+            repository.complete_attempt(
+                plan_id,
+                status="FAILED",
+                modified_sha256=modified_artifact.sha256,
+                report_sha256=report_artifact.sha256,
+            )
+        else:
+            artifacts.put(plan_id, "preflight_error_report", report_path)
+            repository.complete_attempt(
+                plan_id,
+                status="ABORTED_NO_OUTPUT",
+            )
+        attempts = [
+            attempt.plan_id
+            for attempt in repository.list_attempts(document_id)
+            if attempt.status != "ABORTED_NO_OUTPUT"
+        ]
         update_workflow_state(
             workspace["workspace_dir"],
             status="NEEDS_HUMAN",
             plan_id=plan.plan_id,
             approved=True,
             modified_path=str(destination) if destination.exists() else None,
-            attempts=list(dict.fromkeys(attempts)),
+            attempts=attempts,
         )
         raise
 
@@ -765,7 +935,77 @@ def finalize_document(
     """서버가 기록한 Vision PASS attempt만 final/에 복사합니다."""
     input_path = _resolve_path(path, must_exist=True)
     workspace = prepare_workspace(input_path)
-    return finalize_attempt(workspace["workspace_dir"], plan_id)
+    document_id, repository, artifacts = _workflow_services(workspace)
+    document = repository.get_document(document_id)
+    if (
+        document.status != "PENDING_VISION_REVIEW"
+        or document.current_plan_id != plan_id
+    ):
+        raise DocumentError("workflow DB의 현재 Vision PASS plan이 아닙니다.")
+    attempt = repository.get_attempt(plan_id)
+    if attempt.status != "PENDING_VISION_REVIEW":
+        raise DocumentError("workflow DB의 현재 attempt를 최종화할 수 없습니다.")
+    signer = EnvSigningKeyProvider.from_env()
+    for kind in (
+        "edit_plan",
+        "approval_receipt",
+        "modified_hwpx",
+        "verification_report",
+        "vision_review_request",
+        "vision_review",
+    ):
+        artifacts.verify(plan_id, kind)
+    plan_path = workspace["attempts_dir"] / plan_id / "edit-plan.json"
+    receipt_path = workspace["attempts_dir"] / plan_id / "approval-receipt.json"
+    plan = _read_stored_plan(plan_path)
+    validate_approval_receipt(
+        plan,
+        plan_path,
+        receipt_path,
+        signer=signer,
+    )
+    approval = repository.require_active_approval(document_id, plan_id)
+    if approval.receipt_sha256 != artifacts.get(
+        plan_id,
+        "approval_receipt",
+    ).sha256:
+        raise DocumentError("workflow DB의 승인 receipt hash가 다릅니다.")
+    review = repository.get_plan_vision_review(plan_id)
+    review_artifact = artifacts.get(plan_id, "vision_review")
+    if review.verdict != "PASS" or review.review_sha256 != review_artifact.sha256:
+        raise DocumentError("workflow DB에 현재 attempt의 Vision PASS가 없습니다.")
+    request_artifact = artifacts.get(plan_id, "vision_review_request")
+    modified_artifact = artifacts.get(plan_id, "modified_hwpx")
+    update_workflow_state(
+        workspace["workspace_dir"],
+        status="PENDING_VISION_REVIEW",
+        plan_id=plan_id,
+        approved=True,
+        vision_status="PASS",
+        modified_path=modified_artifact.uri,
+        vision_review_id=review.review_id,
+        vision_review_request_path=request_artifact.uri,
+        vision_review_request_sha256=request_artifact.sha256,
+        vision_review_path=review_artifact.uri,
+        vision_review_sha256=review_artifact.sha256,
+    )
+    result = finalize_attempt(workspace["workspace_dir"], plan_id)
+    try:
+        final_artifact = artifacts.put(plan_id, "final_hwpx", result["final_path"])
+        repository.finalize(document_id, plan_id)
+    except Exception:
+        Path(result["final_path"]).unlink(missing_ok=True)
+        update_workflow_state(
+            workspace["workspace_dir"],
+            status="PENDING_VISION_REVIEW",
+            vision_status="PASS",
+            final_path=None,
+        )
+        raise
+    return {
+        **result,
+        "final_sha256": final_artifact.sha256,
+    }
 
 
 @mcp.tool()
@@ -773,14 +1013,15 @@ async def review_document_vision(
     path: str,
     plan_id: str,
     ctx: Context,
-) -> dict[str, Any]:
+) -> CallToolResult:
     """Sampling을 우선하고 미지원 시 Host Vision 검토 묶음을 반환합니다."""
     input_path = _resolve_path(path, must_exist=True)
     workspace = prepare_workspace(input_path)
-    state = read_workflow_state(workspace["workspace_dir"])
+    document_id, repository, artifacts = _workflow_services(workspace)
+    document = repository.get_document(document_id)
     if (
-        state.get("status") != "PENDING_VISION_REVIEW"
-        or state.get("plan_id") != plan_id
+        document.status != "PENDING_VISION_REVIEW"
+        or document.current_plan_id != plan_id
     ):
         raise DocumentError("현재 Vision 검토 대기 중인 plan이 아닙니다.")
 
@@ -869,6 +1110,7 @@ async def review_document_vision(
     validate_vision_review_request(request, attempt_dir)
     request_path = attempt_dir / "vision-review-request.json"
     write_json(request_path, request.model_dump())
+    artifacts.put(plan_id, "vision_review_request", request_path)
     update_workflow_state(
         workspace["workspace_dir"],
         status="PENDING_VISION_REVIEW",
@@ -882,9 +1124,13 @@ async def review_document_vision(
         for image in (view.original, view.modified, view.diff)
     )
     if total_image_bytes > 30 * 1024 * 1024:
-        return _vision_fallback_response(
+        return _record_vision_needs_human(
+            document_id,
+            repository,
+            artifacts,
+            workspace["workspace_dir"],
+            attempt_dir,
             request,
-            request_path,
             "Sampling 이미지 payload가 30MB 제한을 초과했습니다.",
         )
     if not ctx.session.check_client_capability(
@@ -894,6 +1140,9 @@ async def review_document_vision(
             request,
             request_path,
             "MCP client가 sampling/createMessage를 지원하지 않습니다.",
+            document_id=document_id,
+            repository=repository,
+            artifacts=artifacts,
         )
 
     content: list[TextContent | ImageContent] = [
@@ -937,6 +1186,9 @@ async def review_document_vision(
             request,
             request_path,
             f"Vision sampling transport 실패: {exc}",
+            document_id=document_id,
+            repository=repository,
+            artifacts=artifacts,
         )
     try:
         if not isinstance(sampled.content, TextContent):
@@ -944,6 +1196,9 @@ async def review_document_vision(
         decision = parse_vision_decision(sampled.content.text, expected_field_ids)
     except Exception as exc:
         return _record_vision_needs_human(
+            document_id,
+            repository,
+            artifacts,
             workspace["workspace_dir"],
             attempt_dir,
             request,
@@ -964,12 +1219,16 @@ async def review_document_vision(
         **decision.model_dump(),
     }
     _save_vision_review(
+        document_id,
+        repository,
+        artifacts,
         workspace["workspace_dir"],
         attempt_dir,
         review,
         decision.verdict,
+        delivery_id=None,
     )
-    return review
+    return _structured_tool_result(review)
 
 
 @mcp.tool()
@@ -977,27 +1236,25 @@ def submit_host_vision_review(
     path: str,
     plan_id: str,
     review_id: str,
+    delivery_id: str,
     reviewer: HostReviewer,
     decision: VisionDecision,
 ) -> dict[str, Any]:
     """Host의 image-input LLM 판정을 현재 review request에 결합합니다."""
     input_path = _resolve_path(path, must_exist=True)
     workspace = prepare_workspace(input_path)
-    state = read_workflow_state(workspace["workspace_dir"])
+    document_id, repository, artifacts = _workflow_services(workspace)
+    document = repository.get_document(document_id)
     if (
-        state.get("status") != "PENDING_VISION_REVIEW"
-        or state.get("plan_id") != plan_id
-        or state.get("vision_review_id") != review_id
+        document.status != "PENDING_VISION_REVIEW"
+        or document.current_plan_id != plan_id
     ):
         raise DocumentError("현재 Host Vision 검토 대기 중인 request가 아닙니다.")
     attempt_dir = workspace["attempts_dir"] / plan_id
     request_path = attempt_dir / "vision-review-request.json"
-    if (
-        state.get("vision_review_request_path") != str(request_path)
-        or not request_path.is_file()
-        or state.get("vision_review_request_sha256") != sha256_file(request_path)
-    ):
-        raise DocumentError("Vision review request 무결성 검증에 실패했습니다.")
+    request_artifact = artifacts.verify(plan_id, "vision_review_request")
+    if request_artifact.uri != str(request_path.resolve()):
+        raise DocumentError("Vision review request artifact 경로가 다릅니다.")
     try:
         request = VisionReviewRequest.model_validate_json(
             request_path.read_text(encoding="utf-8")
@@ -1007,6 +1264,29 @@ def submit_host_vision_review(
     if request.review_id != review_id or request.plan_id != plan_id:
         raise DocumentError("현재 attempt와 다른 Vision review request입니다.")
     validate_vision_review_request(request, attempt_dir)
+    delivery_record = repository.require_vision_delivery(
+        delivery_id,
+        document_id,
+        plan_id,
+        review_id,
+    )
+    delivery = VisionDelivery(
+        delivery_id=delivery_record.delivery_id,
+        review_id=delivery_record.review_id,
+        plan_id=delivery_record.plan_id,
+        manifest_sha256=delivery_record.manifest_sha256,
+        expires_at=delivery_record.expires_at,
+        signature=delivery_record.signature,
+    )
+    validate_vision_delivery(
+        request,
+        delivery,
+        signer=EnvSigningKeyProvider.from_env(),
+        now=datetime.now(timezone.utc),
+    )
+    for view in request.views:
+        for role in ("original", "modified", "diff"):
+            artifacts.verify(delivery_id, f"{view.view_id}:{role}")
     verification_path = attempt_dir / "verification-report.json"
     if (
         request.original_sha256 != sha256_file(workspace["original_path"])
@@ -1027,20 +1307,27 @@ def submit_host_vision_review(
         **decision.model_dump(),
     }
     _save_vision_review(
+        document_id,
+        repository,
+        artifacts,
         workspace["workspace_dir"],
         attempt_dir,
         review,
         decision.verdict,
+        delivery_id=delivery_id,
     )
     return review
 
 
 def _record_vision_needs_human(
+    document_id: str,
+    repository: SqliteWorkflowRepository,
+    artifacts: LocalArtifactStore,
     workspace_dir: Path,
     attempt_dir: Path,
     request: VisionReviewRequest,
     reason: str,
-) -> dict[str, Any]:
+) -> CallToolResult:
     review = {
         "source": "mcp_sampling",
         "review_id": request.review_id,
@@ -1062,22 +1349,44 @@ def _record_vision_needs_human(
         ],
     }
     _save_vision_review(
+        document_id,
+        repository,
+        artifacts,
         workspace_dir,
         attempt_dir,
         review,
         "NEEDS_HUMAN",
+        delivery_id=None,
     )
-    return review
+    return _structured_tool_result(review)
 
 
 def _save_vision_review(
+    document_id: str,
+    repository: SqliteWorkflowRepository,
+    artifacts: LocalArtifactStore,
     workspace_dir: Path,
     attempt_dir: Path,
     review: dict[str, Any],
     verdict: str,
+    *,
+    delivery_id: str | None,
 ) -> None:
     review_path = attempt_dir / "vision-review.json"
     write_json(review_path, review)
+    review_artifact = artifacts.put(
+        review["plan_id"],
+        "vision_review",
+        review_path,
+    )
+    repository.record_vision_review(
+        review_id=review["review_id"],
+        document_id=document_id,
+        plan_id=review["plan_id"],
+        delivery_id=delivery_id,
+        verdict=verdict,
+        review_sha256=review_artifact.sha256,
+    )
     update_workflow_state(
         workspace_dir,
         status=(
@@ -1095,14 +1404,92 @@ def _vision_fallback_response(
     request: VisionReviewRequest,
     request_path: Path,
     reason: str,
-) -> dict[str, Any]:
-    return {
+    *,
+    document_id: str,
+    repository: SqliteWorkflowRepository,
+    artifacts: LocalArtifactStore,
+) -> CallToolResult:
+    signer = EnvSigningKeyProvider.from_env()
+    delivery = create_vision_delivery(
+        request,
+        signer=signer,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+    )
+    repository.record_vision_delivery(
+        delivery_id=delivery.delivery_id,
+        document_id=document_id,
+        plan_id=request.plan_id,
+        review_id=request.review_id,
+        manifest_sha256=delivery.manifest_sha256,
+        signature=delivery.signature.model_dump(),
+        expires_at=delivery.expires_at,
+    )
+    for view in request.views:
+        for role, image in (
+            ("original", view.original),
+            ("modified", view.modified),
+            ("diff", view.diff),
+        ):
+            artifacts.put(
+                delivery.delivery_id,
+                f"{view.view_id}:{role}",
+                image.path,
+            )
+    delivery_path = (
+        request_path.parent / f"vision-delivery-{delivery.delivery_id}.json"
+    )
+    write_json(delivery_path, delivery.model_dump())
+    artifacts.put(delivery.delivery_id, "vision_delivery", delivery_path)
+    structured = {
         **request.model_dump(),
+        **delivery.model_dump(),
         "status": "VISION_REVIEW_REQUIRED",
         "next_action": "submit_host_vision_review",
         "review_request_path": str(request_path),
         "sampling_unavailable_reason": reason,
     }
+    content: list[TextContent | ImageContent] = [
+        TextContent(
+            type="text",
+            text=f"{reason}\n{request.prompt}",
+        )
+    ]
+    for view in request.views:
+        content.append(
+            TextContent(
+                type="text",
+                text=(
+                    f"{view.view_id}: "
+                    f"{'detail band' if view.kind == 'detail' else 'full page'}; "
+                    f"page={view.page}; bbox={view.bbox}; "
+                    f"field_ids={view.field_ids}; original, modified, diff 순서"
+                ),
+            )
+        )
+        for image in (view.original, view.modified, view.diff):
+            content.append(
+                ImageContent(
+                    type="image",
+                    data=base64.b64encode(Path(image.path).read_bytes()).decode("ascii"),
+                    mimeType="image/png",
+                )
+            )
+    return CallToolResult(
+        content=content,
+        structuredContent=structured,
+    )
+
+
+def _structured_tool_result(value: dict[str, Any]) -> CallToolResult:
+    return CallToolResult(
+        content=[
+            TextContent(
+                type="text",
+                text=json.dumps(value, ensure_ascii=False),
+            )
+        ],
+        structuredContent=value,
+    )
 
 
 def _vision_image(path: Path) -> VisionImage:

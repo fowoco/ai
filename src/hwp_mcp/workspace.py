@@ -29,7 +29,15 @@ def prepare_workspace(input_path: str | Path) -> dict[str, Path]:
     """원본을 이동하지 않고 hash로 격리된 document workspace에 복사합니다."""
     source = Path(input_path).resolve()
     if source.name == "original.hwpx" and (source.parent / "workflow-state.json").exists():
-        return _workspace_paths(source.parent)
+        paths = _workspace_paths(source.parent)
+        state = json.loads(paths["state_path"].read_text(encoding="utf-8"))
+        current_hash = _sha256(source)
+        if state.get("original_sha256") != current_hash:
+            raise DocumentError(f"workspace 원본 hash가 다릅니다: {source}")
+        if not state.get("document_id"):
+            state["document_id"] = workflow_document_id(source.parent, current_hash)
+            _write_json(paths["state_path"], state)
+        return paths
 
     digest = _sha256(source)
     safe_stem = _safe_stem(source.stem)
@@ -65,8 +73,14 @@ def prepare_workspace(input_path: str | Path) -> dict[str, Path]:
                 "modified_path": None,
                 "final_path": None,
                 "attempts": [],
+                "document_id": workflow_document_id(workspace_dir, digest),
             },
         )
+    else:
+        state = json.loads(paths["state_path"].read_text(encoding="utf-8"))
+        if not state.get("document_id"):
+            state["document_id"] = workflow_document_id(workspace_dir, digest)
+            _write_json(paths["state_path"], state)
     return paths
 
 
@@ -176,6 +190,14 @@ def finalize_attempt(
 
 def write_json(path: str | Path, value: Any) -> None:
     _write_json(Path(path), value)
+
+
+def workflow_document_id(
+    workspace_dir: str | Path,
+    original_sha256: str,
+) -> str:
+    workspace = str(Path(workspace_dir).resolve())
+    return hashlib.sha256(f"{workspace}\0{original_sha256}".encode("utf-8")).hexdigest()
 
 
 def _workspace_paths(workspace_dir: Path) -> dict[str, Path]:

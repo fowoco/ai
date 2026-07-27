@@ -1010,6 +1010,11 @@ def _categorize_row(row: int) -> str:
 def _guess_field_type(label: str) -> RegistryFieldType:
     """라벨 텍스트로 필드 타입을 추정합니다."""
     label_lower = label.lower()
+    if (
+        any(kw in label_lower for kw in ("여권", "passport"))
+        and any(kw in label_lower for kw in ("번호", "number", "no."))
+    ):
+        return "text"
     if any(kw in label_lower for kw in ("전화", "phone", "cell phone", "telephone")):
         return "phone"
     if any(kw in label_lower for kw in ("날짜", "일자", "date", "기간", "유효", "생년월일")):

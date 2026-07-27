@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 import re
 from datetime import date
@@ -11,6 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .fields import Disposition
 from .hwpx import DocumentError
+from .integrity import (
+    Signature,
+    SigningKeyProvider,
+    canonical_json_bytes,
+)
 
 
 class EditPlanError(DocumentError):
@@ -82,12 +86,14 @@ class ApprovalReceipt(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal[1] = 1
+    version: Literal[2] = 2
     plan_id: str = Field(min_length=64, max_length=64)
     document_sha256: str = Field(min_length=64, max_length=64)
     edit_plan_sha256: str = Field(min_length=64, max_length=64)
+    approver_subject: str = Field(min_length=1, max_length=200)
     source: Literal["mcp_elicitation"] = "mcp_elicitation"
     approved_at: str = Field(min_length=1, max_length=100)
+    signature: Signature
 
 
 def create_approval_receipt(
@@ -95,23 +101,32 @@ def create_approval_receipt(
     plan_path: str | Path,
     *,
     approved_at: str,
+    approver_subject: str,
+    signer: SigningKeyProvider,
 ) -> ApprovalReceipt:
     """현재 저장된 plan 파일에 결합된 승인 receipt를 만듭니다."""
     stored_plan = Path(plan_path)
     if not stored_plan.is_file():
         raise EditPlanError("승인할 저장 Edit Plan을 찾지 못했습니다.")
-    return ApprovalReceipt(
-        plan_id=plan.plan_id,
-        document_sha256=plan.document_sha256,
-        edit_plan_sha256=sha256_file(stored_plan),
-        approved_at=approved_at,
-    )
+    payload = {
+        "version": 2,
+        "plan_id": plan.plan_id,
+        "document_sha256": plan.document_sha256,
+        "edit_plan_sha256": sha256_file(stored_plan),
+        "approver_subject": approver_subject,
+        "source": "mcp_elicitation",
+        "approved_at": approved_at,
+    }
+    signature = signer.sign(canonical_json_bytes(payload))
+    return ApprovalReceipt(**payload, signature=signature)
 
 
 def validate_approval_receipt(
     plan: EditPlan,
     plan_path: str | Path,
     receipt_path: str | Path,
+    *,
+    signer: SigningKeyProvider,
 ) -> ApprovalReceipt:
     """receipt가 현재 저장 plan과 정확히 결합됐는지 검증합니다."""
     stored_plan = Path(plan_path)
@@ -130,6 +145,11 @@ def validate_approval_receipt(
         or receipt.edit_plan_sha256 != sha256_file(stored_plan)
     ):
         raise EditPlanError("승인 receipt 무결성 검증에 실패했습니다.")
+    if not signer.verify(
+        canonical_json_bytes(receipt.model_dump(exclude={"signature"})),
+        receipt.signature,
+    ):
+        raise EditPlanError("승인 receipt 서명 검증에 실패했습니다.")
     return receipt
 
 
@@ -291,9 +311,7 @@ def sha256_file(path: str | Path) -> str:
 
 
 def _canonical_json(value: dict[str, Any]) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
+    return canonical_json_bytes(value)
 
 
 def _operation_for_field(field: dict[str, Any]) -> str:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import os
 from pathlib import Path
 import sys
@@ -119,6 +121,14 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
             **os.environ,
             "HWP_MCP_ROOT": str(root),
             "RHWP_COMMAND": str(fake_rhwp),
+            "HWP_MCP_ACTIVE_SIGNING_KEY_ID": "test-v1",
+            "HWP_MCP_SIGNING_KEYS": json.dumps(
+                {
+                    "test-v1": base64.b64encode(b"test-signing-key-" * 2).decode(
+                        "ascii"
+                    )
+                }
+            ),
         },
     )
 
@@ -327,6 +337,21 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
             assert approval_result.isError is not True
             assert approval_result.structuredContent["status"] == "APPROVED"
 
+            projection_path = next(root.glob("plan-form-*/workflow-state.json"))
+            projection = json.loads(projection_path.read_text(encoding="utf-8"))
+            projection.update(
+                {
+                    "status": "WAITING_APPROVAL",
+                    "approved": False,
+                    "approval_receipt_path": "forged.json",
+                    "attempts": ["forged-1", "forged-2"],
+                }
+            )
+            projection_path.write_text(
+                json.dumps(projection, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
             apply_result = await session.call_tool(
                 "apply_edit_plan",
                 arguments={
@@ -358,6 +383,14 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
                 request = vision_result.structuredContent
                 assert request["status"] == "VISION_REVIEW_REQUIRED"
                 assert request["next_action"] == "submit_host_vision_review"
+                assert request["delivery_id"]
+                assert len(
+                    [
+                        item
+                        for item in vision_result.content
+                        if isinstance(item, ImageContent)
+                    ]
+                ) == 6
                 evidence_view_ids = [
                     view["view_id"]
                     for view in request["views"]
@@ -369,6 +402,7 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
                         "path": "plan-form.hwpx",
                         "plan_id": plan["plan_id"],
                         "review_id": request["review_id"],
+                        "delivery_id": request["delivery_id"],
                         "reviewer": {
                             "provider": "test-host",
                             "model": "test-vision",

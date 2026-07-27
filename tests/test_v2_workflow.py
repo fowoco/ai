@@ -507,6 +507,18 @@ def test_workspace_copies_original_and_finalizes_only_after_vision_pass(
     assert Path(finalized["final_path"]).exists()
 
 
+def test_workspace_reentry_rejects_tampered_original(tmp_path: Path) -> None:
+    source = tmp_path / "form.hwpx"
+    make_table_fixture(source)
+    workspace = prepare_workspace(source)
+    workspace["original_path"].write_bytes(
+        workspace["original_path"].read_bytes() + b"tampered"
+    )
+
+    with pytest.raises(DocumentError, match="workspace 원본 hash"):
+        prepare_workspace(workspace["original_path"])
+
+
 def test_visual_diff_reports_separate_components(tmp_path: Path) -> None:
     original = tmp_path / "original.png"
     modified = tmp_path / "modified.png"

@@ -4,12 +4,15 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import secrets
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .hwpx import DocumentError
+from .integrity import Signature, SigningKeyProvider, canonical_json_bytes
 
 
 VisionVerdict = Literal["PASS", "FAIL", "NEEDS_HUMAN"]
@@ -82,6 +85,20 @@ class HostReviewer(BaseModel):
     capabilities: list[str] = Field(max_length=20)
 
 
+class VisionDelivery(BaseModel):
+    """Host에 실제 이미지 bytes를 전달한 1회성 증거입니다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal[1] = 1
+    delivery_id: str = Field(min_length=64, max_length=64)
+    review_id: str = Field(min_length=64, max_length=64)
+    plan_id: str = Field(min_length=64, max_length=64)
+    manifest_sha256: str = Field(min_length=64, max_length=64)
+    expires_at: str = Field(min_length=1, max_length=100)
+    signature: Signature
+
+
 def build_vision_review_request(
     *,
     plan_id: str,
@@ -103,6 +120,76 @@ def build_vision_review_request(
         prompt=prompt,
     )
     return request.model_copy(update={"review_id": compute_review_id(request)})
+
+
+def create_vision_delivery(
+    request: VisionReviewRequest,
+    *,
+    signer: SigningKeyProvider,
+    expires_at: datetime,
+) -> VisionDelivery:
+    if expires_at.tzinfo is None:
+        raise DocumentError("Vision delivery 만료 시각에는 timezone이 필요합니다.")
+    payload = {
+        "version": 1,
+        "delivery_id": secrets.token_hex(32),
+        "review_id": request.review_id,
+        "plan_id": request.plan_id,
+        "manifest_sha256": image_manifest_sha256(request),
+        "expires_at": expires_at.astimezone(timezone.utc).isoformat(),
+    }
+    return VisionDelivery(
+        **payload,
+        signature=signer.sign(canonical_json_bytes(payload)),
+    )
+
+
+def validate_vision_delivery(
+    request: VisionReviewRequest,
+    delivery: VisionDelivery,
+    *,
+    signer: SigningKeyProvider,
+    now: datetime,
+) -> None:
+    if now.tzinfo is None:
+        raise DocumentError("Vision delivery 검증 시각에는 timezone이 필요합니다.")
+    if (
+        delivery.review_id != request.review_id
+        or delivery.plan_id != request.plan_id
+        or delivery.manifest_sha256 != image_manifest_sha256(request)
+    ):
+        raise DocumentError("현재 request와 다른 Vision delivery입니다.")
+    payload = delivery.model_dump(exclude={"signature"})
+    if not signer.verify(canonical_json_bytes(payload), delivery.signature):
+        raise DocumentError("Vision delivery 서명 검증에 실패했습니다.")
+    try:
+        expires_at = datetime.fromisoformat(delivery.expires_at)
+    except ValueError as exc:
+        raise DocumentError("Vision delivery 만료 시각 형식이 올바르지 않습니다.") from exc
+    if expires_at.tzinfo is None or now.astimezone(timezone.utc) >= expires_at.astimezone(
+        timezone.utc
+    ):
+        raise DocumentError("Vision delivery가 만료되었습니다.")
+
+
+def image_manifest_sha256(request: VisionReviewRequest) -> str:
+    manifest = {
+        "review_id": request.review_id,
+        "views": [
+            {
+                "view_id": view.view_id,
+                "page": view.page,
+                "kind": view.kind,
+                "bbox": view.bbox,
+                "field_ids": view.field_ids,
+                "original_sha256": view.original.sha256,
+                "modified_sha256": view.modified.sha256,
+                "diff_sha256": view.diff.sha256,
+            }
+            for view in request.views
+        ],
+    }
+    return hashlib.sha256(canonical_json_bytes(manifest)).hexdigest()
 
 
 def compute_review_id(request: VisionReviewRequest) -> str:

@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from hwp_mcp.hwpx import _analyze_xml_document
-from hwp_mcp.fields import infer_all_fields
+from hwp_mcp.fields import _guess_field_type, infer_all_fields
 
 
 SAMPLE = Path("samples/통합신청서(신고서).hwpx")
@@ -107,3 +107,7 @@ def test_registry_categories_are_valid() -> None:
     }
     for f in registry:
         assert f["category"] in valid, f"필드 {f['field_id']}의 category가 {f['category']}"
+
+
+def test_passport_number_is_text_to_preserve_alphanumeric_value() -> None:
+    assert _guess_field_type("여권번호 Passport No.") == "text"

@@ -13,7 +13,9 @@ All AI Agents executing commands via `hwp-editor-mcp` MUST adhere strictly to th
   - Copy original into workspace: `original.hwpx` (never move the source)
   - Modified File: `attempts/<plan-id>/modified.hwpx`
   - Render Outputs: `attempts/<plan-id>/{original,modified,diffs}/`
-  - Final File: `final/<safe-stem>_verified.hwpx`, created only after Vision `PASS`
+- Final File: `final/<safe-stem>_verified.hwpx`, created only after Vision `PASS`
+- Authoritative workflow state: `$HWP_MCP_ROOT/.hwp-mcp/state.sqlite3`
+- `workflow-state.json`은 사람이 읽는 projection이며 승인·attempt 횟수의 근거가 아닙니다.
 - File naming convention: `page_001.svg`, `page_001.png`, `page_001_diff.png` (3-digit 1-indexed).
 
 ---
@@ -111,19 +113,21 @@ ANALYZED → READY_FOR_INTERVIEW → WAITING_APPROVAL → APPROVED
 → PENDING_VISION_REVIEW → VERIFIED_FINAL
 ```
 
-- `approve_edit_plan`의 MCP elicitation을 사용자가 수락해야 서버 승인 receipt가 생성됩니다.
+- `approve_edit_plan`의 MCP elicitation을 사용자가 수락해야 HMAC 서명 승인 receipt와 SQLite 승인 레코드가 생성됩니다.
+- `HWP_MCP_ACTIVE_SIGNING_KEY_ID`와 `HWP_MCP_SIGNING_KEYS`가 없거나 기존 `key_id`가 key ring에 없으면 승인·적용·최종화는 중단됩니다.
 - `apply_edit_plan`은 호출자가 보낸 `approved=true`나 plan 객체를 받지 않습니다.
 - `apply_edit_plan`은 최종본을 만들지 않습니다.
 - 원본 hash, 승인 대상 외 변경, field postcondition, 페이지 수, 신규 layout warning, SVG geometry, PNG component diff를 자동 검증합니다.
 - SVG에서 승인값 누락·신규 overflow·cell 이동이 하나라도 있으면 Vision 전에 `NEEDS_HUMAN`으로 차단합니다.
 - `review_document_vision`은 full-page와 편집 필드가 있는 detail band 각각의 원본·수정·diff PNG를 해시와 결합합니다.
 - MCP Client가 Sampling을 지원하면 같은 이미지 묶음을 `sampling/createMessage`에 전달합니다.
-- Sampling 미지원 또는 transport 실패이면 `VISION_REVIEW_REQUIRED`와 `next_action: submit_host_vision_review`를 반환합니다. 이 경우 workflow는 `PENDING_VISION_REVIEW`를 유지합니다.
+- Sampling 미지원 또는 transport 실패이면 실제 full/detail PNG `ImageContent`, 서명된 1회성 `delivery_id`, `VISION_REVIEW_REQUIRED`, `next_action: submit_host_vision_review`를 함께 반환합니다. 이 경우 workflow는 `PENDING_VISION_REVIEW`를 유지합니다.
 - Host의 멀티모달 LLM은 반환된 모든 full-page와 관련 detail view를 **이미지 입력으로 직접 열어** 비교합니다. Gemini, GPT, Claude, 로컬 VLM 등 모델명은 제한하지 않습니다.
-- `submit_host_vision_review`은 `image_input` capability, `review_id`, 모든 artifact hash, 전체 편집 field, field별 full/detail `evidence_view_ids`, 고유 reason을 검증합니다.
+- `submit_host_vision_review`은 `delivery_id`, 만료·서명·1회 사용 여부, `image_input` capability, `review_id`, 모든 artifact hash, 전체 편집 field, field별 full/detail `evidence_view_ids`, 고유 reason을 검증합니다.
 - 이미지 입력을 사용할 수 없거나 이미지를 열지 못한 모델은 판정을 제출하지 말고 `NEEDS_HUMAN`으로 중단합니다.
 - sampling 응답은 모든 편집 field의 `PASS | FAIL | NEEDS_HUMAN` JSON 판정을 포함해야 합니다.
 - sampling 응답 누락·형식 오류는 자동 `PASS`하지 않고 `NEEDS_HUMAN`입니다.
 - `finalize_document`는 서버가 검증·저장한 `mcp_sampling` 또는 `host_vision_submission` PASS에서만 final HWPX를 복사합니다.
-- `attempts/<plan-id>/modified.hwpx`를 다른 경로로 직접 복사해 완료본으로 취급하지 않습니다. `workflow-state.status: VERIFIED_FINAL`과 서버의 `final_path`만 완료입니다.
+- `attempts/<plan-id>/modified.hwpx`를 다른 경로로 직접 복사해 완료본으로 취급하지 않습니다. SQLite `documents.status: VERIFIED_FINAL`과 서버의 `final_path`가 함께 있어야 완료입니다.
 - `FAIL` 또는 `NEEDS_HUMAN`은 attempt와 verification report를 보존하고 final 파일을 만들지 않습니다.
+- 출력이 생성된 실패 attempt는 SQLite의 2회 제한을 소비합니다. `workflow-state.json`의 `attempts`를 지우거나 바꿔도 제한은 초기화되지 않습니다.
