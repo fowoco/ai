@@ -1,8 +1,11 @@
 # HWPX 작성 흐름 강화 및 범용 Host Vision 검토 설계
 
-- 상태: 사용자 방향 승인, 구현 전 명세 검토
+- 상태: 1차 구현 완료, 배포 무결성 설계로 일부 대체
 - 작성일: 2026-07-27
 - 범위: HWP Editor MCP v2 작성·승인·시각 검토·최종화 흐름
+
+> 승인 서명, authoritative workflow 상태, attempt 계산, Host Vision 이미지 전달은
+> `2026-07-27-deployment-workflow-integrity-design.md`가 이 문서보다 우선한다.
 
 ## 1. 문제
 
