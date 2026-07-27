@@ -9,11 +9,7 @@ from xml.etree import ElementTree as ET
 from httpx import ASGITransport, AsyncClient
 
 from hwp_mcp.api import app
-from hwp_mcp.plans import (
-    EditPlan,
-    create_approval_receipt,
-    sha256_file,
-)
+from hwp_mcp.plans import sha256_file
 from hwp_mcp.workspace import (
     prepare_workspace,
     update_workflow_state,
@@ -126,12 +122,23 @@ async def _assert_workflow(client: AsyncClient, tmp_path: Path) -> None:
     attempt = workspace["attempts_dir"] / plan.json()["plan_id"]
     plan_path = attempt / "edit-plan.json"
     receipt_path = attempt / "approval-receipt.json"
-    receipt = create_approval_receipt(
-        EditPlan.model_validate(plan.json()),
-        plan_path,
-        approved_at="2026-07-27T00:00:00+00:00",
+    write_json(
+        receipt_path,
+        {
+            "version": 2,
+            "plan_id": plan.json()["plan_id"],
+            "document_sha256": plan.json()["document_sha256"],
+            "edit_plan_sha256": sha256_file(plan_path),
+            "approver_subject": "forged-user",
+            "source": "mcp_elicitation",
+            "approved_at": "2026-07-27T00:00:00+00:00",
+            "signature": {
+                "key_id": "forged",
+                "algorithm": "HMAC-SHA256",
+                "value": "A" * 44,
+            },
+        },
     )
-    write_json(receipt_path, receipt.model_dump())
     update_workflow_state(
         workspace["workspace_dir"],
         status="APPROVED",
@@ -147,30 +154,7 @@ async def _assert_workflow(client: AsyncClient, tmp_path: Path) -> None:
             "plan_id": plan.json()["plan_id"],
         },
     )
-    assert applied.status_code == 200
-    assert applied.json()["status"] == "PENDING_VISION_REVIEW"
-    assert not any(tmp_path.glob("*/final/*.hwpx"))
-
-    compare = await client.post(
-        "/compare/versions",
-        json={
-            "original_path": "form.hwpx",
-            "modified_path": str(Path(applied.json()["output_path"]).relative_to(tmp_path)),
-            "output_dir": "diffs_api_test",
-            "debug_overlay": True,
-        },
-    )
-    assert compare.status_code == 200
-    assert "visual" in compare.json()
-    assert compare.json()["visual"]["svg_geometry"]["passed"] is True
-
-    finalized = await client.post(
-        "/documents/finalize",
-        json={
-            "path": "form.hwpx",
-            "plan_id": plan.json()["plan_id"],
-        },
-    )
-    assert finalized.status_code == 400
-    assert "Vision PASS" in finalized.json()["detail"]
+    assert applied.status_code == 400
+    assert "승인 receipt" in applied.json()["detail"]
+    assert not any(tmp_path.glob("*/attempts/*/modified.hwpx"))
     assert not any(tmp_path.glob("*/final/*.hwpx"))

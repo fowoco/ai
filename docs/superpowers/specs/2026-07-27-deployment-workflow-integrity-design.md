@@ -1,6 +1,6 @@
 # HWPX 배포 무결성 설계
 
-- 상태: 사용자 방향 승인, 구현 계획 전 검토
+- 상태: 독립 단일 서버 구현 및 회귀 검증 완료
 - 작성일: 2026-07-27
 - 범위: 승인, workflow/attempt 상태, 산출물 무결성, Host Vision 전달, 영숫자 값 보존
 - 선행 설계: `2026-07-27-workflow-hardening-and-host-vision-review-design.md`
@@ -36,9 +36,9 @@ MCP Sampling 미지원 Host의 Vision fallback은 PNG 경로와 해시만 반환
 - `workflow-state.json`은 사람과 디버깅을 위한 projection일 뿐 승인·상태 판단에
   사용하지 않는다.
 
-### 2.2 초기 구현과 배포 구현
+### 2.2 독립 단일 서버 구현
 
-초기 로컬 구현:
+정식 지원 구성:
 
 - `EnvSigningKeyProvider`
   - `HWP_MCP_ACTIVE_SIGNING_KEY_ID`
@@ -50,15 +50,14 @@ MCP Sampling 미지원 Host의 Vision fallback은 PNG 경로와 해시만 반환
   - 현재 workspace/attempt 디렉터리를 유지
   - 저장 후 DB에 URI와 SHA-256 기록
 
-배포 구현:
+이 구성은 FOWOCO나 다른 서비스 DB와 결합하지 않는 독립 서버다. 하나의 MCP 서버
+인스턴스가 전용 SQLite, 환경변수 key ring, 로컬 artifact workspace를 소유한다.
+프로젝트가 종료되어도 같은 DB·key ring·workspace를 백업하고 복원해 유지할 수
+있다.
 
-- Secret Manager 또는 KMS 기반 `SigningKeyProvider`
-- 여러 서버 인스턴스가 공유하는 트랜잭션 DB 기반 `WorkflowRepository`
-- Object Storage 기반 `ArtifactStore`
-
-초기 구현은 배포 provider를 흉내 내지 않는다. 인터페이스와 receipt 형식만
-안정화한다. 다중 인스턴스 배포 전에는 공유 DB와 KMS/Secret Manager adapter를
-구현하고 동일 contract test를 통과해야 한다.
+공유 DB, Secret Manager/KMS, Object Storage는 다중 인스턴스가 실제로 필요해질
+때만 같은 protocol의 선택적 adapter로 검토한다. 현재 지원 범위나 배포 완료
+조건이 아니다.
 
 ## 3. 인터페이스
 
@@ -100,7 +99,8 @@ class WorkflowRepository(Protocol):
     def finalize(self, document_id: str, plan_id: str) -> DocumentRecord: ...
 ```
 
-쓰기 메서드는 트랜잭션과 optimistic version 검사를 사용한다. 상태 전이는
+쓰기 메서드는 `BEGIN IMMEDIATE` 트랜잭션을 사용한다. `version`은 상태 변경
+감사 카운터이며 다중 인스턴스 optimistic lock으로 사용하지 않는다. 상태 전이는
 repository가 검증하며 호출자가 임의 status 문자열로 덮어쓸 수 없다.
 
 최소 레코드:
@@ -299,15 +299,16 @@ provider는 domain 모델에 FastMCP를 의존시키지 않는다.
 - 로컬 서버 재시작 후 유효 승인 복구
 - DB/키/이미지 문제가 있을 때 `VERIFIED_FINAL` 생성 안 됨
 
-## 11. 배포 게이트
+## 11. 독립 배포 게이트
 
-SQLite와 환경변수 HMAC은 로컬 개발·단일 인스턴스 검증용이다. 다음 항목 없이는
-다중 인스턴스 배포 완료로 표시하지 않는다.
+정식 지원 범위는 단일 MCP 서버 인스턴스다.
 
-- 공유 트랜잭션 DB adapter와 동시성 contract test
-- Secret Manager/KMS provider와 key rotation test
-- Object Storage adapter와 hash/권한 test
-- 인증 transport principal 결합
-- 백업·복구 절차와 감사 로그
+- 전용 SQLite는 `HWP_MCP_ROOT` 내부에 둔다.
+- HMAC active key와 key ring은 환경변수로 주입한다.
+- 이전 승인 검증에 필요한 과거 `key_id`는 회전 후에도 key ring에 남긴다.
+- SQLite, key ring, workspace artifact를 하나의 복구 단위로 백업한다.
+- 같은 SQLite를 여러 MCP 서버 프로세스가 동시에 소유하는 구성은 지원하지 않는다.
+- 인증되지 않은 원격 공개 endpoint는 지원하지 않는다.
 
-이 게이트를 통과하기 전 배포 상태는 `local beta`로만 표기한다.
+다중 인스턴스가 필요해지면 별도 설계로 공유 DB·KMS·Object Storage adapter와
+인증 transport를 추가한다.

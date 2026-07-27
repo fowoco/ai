@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 from hwp_mcp.hwpx import DocumentError
+from hwp_mcp.integrity import EnvSigningKeyProvider
 from hwp_mcp.plans import sha256_file
 from hwp_mcp.vision import (
     HostReviewer,
@@ -12,8 +14,10 @@ from hwp_mcp.vision import (
     VisionImage,
     VisionView,
     build_vision_review_request,
+    create_vision_delivery,
     compute_review_id,
     validate_host_vision_submission,
+    validate_vision_delivery,
     validate_vision_review_request,
 )
 
@@ -165,4 +169,71 @@ def test_host_review_requires_mapped_detail_evidence(tmp_path: Path) -> None:
                 capabilities=["image_input"],
             ),
             decision,
+        )
+
+
+def test_vision_delivery_is_signed_and_bound_to_image_manifest(
+    tmp_path: Path,
+) -> None:
+    request = _request(tmp_path)
+    signer = EnvSigningKeyProvider("v1", {"v1": b"a" * 32})
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+    delivery = create_vision_delivery(
+        request,
+        signer=signer,
+        expires_at=expires_at,
+    )
+
+    validate_vision_delivery(
+        request,
+        delivery,
+        signer=EnvSigningKeyProvider("v1", {"v1": b"a" * 32}),
+        now=datetime.now(timezone.utc),
+    )
+    changed = request.model_copy(
+        update={"review_id": "b" * 64},
+    )
+    with pytest.raises(DocumentError, match="delivery"):
+        validate_vision_delivery(
+            changed,
+            delivery,
+            signer=signer,
+            now=datetime.now(timezone.utc),
+        )
+
+
+def test_vision_delivery_rejects_expired_or_forged_signature(
+    tmp_path: Path,
+) -> None:
+    request = _request(tmp_path)
+    signer = EnvSigningKeyProvider("v1", {"v1": b"a" * 32})
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=1)
+    delivery = create_vision_delivery(
+        request,
+        signer=signer,
+        expires_at=expires_at,
+    )
+
+    with pytest.raises(DocumentError, match="만료"):
+        validate_vision_delivery(
+            request,
+            delivery,
+            signer=signer,
+            now=expires_at + timedelta(seconds=1),
+        )
+
+    forged = delivery.model_copy(
+        update={
+            "signature": delivery.signature.model_copy(
+                update={"value": "A" * 44}
+            )
+        }
+    )
+    with pytest.raises(DocumentError, match="서명"):
+        validate_vision_delivery(
+            request,
+            forged,
+            signer=signer,
+            now=datetime.now(timezone.utc),
         )
