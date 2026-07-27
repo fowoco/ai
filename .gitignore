@@ -33,4 +33,5 @@ __pycache__/
 .DS_Store
 .agents/skills/
 .hermes/skills/
+.worktrees/
 # END project-scaffold
