@@ -178,6 +178,10 @@ async def _exercise_server(root: Path, vision_mode: str) -> None:
             initialize_result = await session.initialize()
             assert "analysis_contract.version: 2" in (initialize_result.instructions or "")
             assert "hwp_mcp.hwpx" in (initialize_result.instructions or "")
+            assert "submit_host_vision_review" in (
+                initialize_result.instructions or ""
+            )
+            assert "이미지 입력" in (initialize_result.instructions or "")
             tools = await session.list_tools()
             tool_names = {tool.name for tool in tools.tools}
             assert {
