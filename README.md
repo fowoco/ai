@@ -65,8 +65,10 @@ Server가 호출하는 핵심 분석 Internal API다. Intent 분류·Slot 추출
 검사를 규칙 기반으로 수행한다. LLM·knowledge 패키지 연동은 후속이다.
 
 ```text
-POST /api/v1/internal/v1/analyses
+POST /internal/v1/analyses
 ```
+
+계약 요약·Language용 fixture: [docs/analyses-contract.md](docs/analyses-contract.md)
 
 ## 문서 API
 

@@ -1,0 +1,28 @@
+{
+  "requestId": "10000000-0000-0000-0000-000000000001",
+  "attemptId": "20000000-0000-0000-0000-000000000001",
+  "contractVersion": "1.0.0",
+  "requiredKnowledgeVersion": "0.2.0",
+  "deadlineMs": 10000,
+  "maskedInput": {
+    "maskedInstruction": "workerRef 30000000-0000-0000-0000-000000000001의 체류연장 준비",
+    "workers": [
+      {
+        "workerRef": "30000000-0000-0000-0000-000000000001",
+        "preferredLanguage": "vi",
+        "workStatus": "ACTIVE",
+        "stayExpiryDate": "2026-12-31"
+      }
+    ],
+    "workflowConstraints": [
+      {
+        "workflowId": "EXPIRY_RENEWAL",
+        "allowedSlotKeys": [
+          "stay_expiry_date",
+          "contract_end_date",
+          "monthly_wage"
+        ]
+      }
+    ]
+  }
+}

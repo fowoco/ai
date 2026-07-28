@@ -19,6 +19,7 @@ from app.api.schemas.analyses import (
 
 from .ambiguity import AmbiguityAgent
 from .intent import IntentSlotAgent
+from .intent.service import public_workflow_id
 from .workflow import WorkflowAgent
 
 
@@ -41,7 +42,9 @@ class AnalysisPipeline:
         mi = request.masked_input
         instruction = mi.masked_instruction
         constraint_ids = [c.workflow_id for c in mi.workflow_constraints]
-        allowed_keys_by_wf = {c.workflow_id: c.allowed_slot_keys for c in mi.workflow_constraints}
+        allowed_keys_by_constraint = {
+            c.workflow_id: c.allowed_slot_keys for c in mi.workflow_constraints
+        }
 
         candidates: list[AnalysisCandidate] = []
 
@@ -77,12 +80,20 @@ class AnalysisPipeline:
                 )
                 continue
 
+            response_workflow_id = public_workflow_id(
+                internal_workflow_id=intent_result.workflow_id,
+                intent=intent_result.intent,
+                constraints=constraint_ids,
+            )
+
             if worker.worker_ref and "worker_id" not in intent_result.extracted_slots:
                 intent_result.extracted_slots["worker_id"] = worker.worker_ref
             if worker.stay_expiry_date and "stay_expiry_date" not in intent_result.extracted_slots:
                 intent_result.extracted_slots["stay_expiry_date"] = worker.stay_expiry_date
 
-            allowed_keys = allowed_keys_by_wf.get(intent_result.workflow_id)
+            allowed_keys = allowed_keys_by_constraint.get(
+                response_workflow_id
+            ) or allowed_keys_by_constraint.get(intent_result.workflow_id)
             filtered_slots = intent_result.extracted_slots
             if allowed_keys:
                 filtered_slots = {
@@ -97,7 +108,7 @@ class AnalysisPipeline:
                 AnalysisCandidate(
                     candidate_ref=f"candidate-{uuid4().hex[:8]}",
                     worker_ref=worker.worker_ref,
-                    workflow_id=intent_result.workflow_id,
+                    workflow_id=response_workflow_id,
                     extracted_slots=filtered_slots,
                     missing_slots=amb_result.missing_slots,
                     confidence=intent_result.confidence,

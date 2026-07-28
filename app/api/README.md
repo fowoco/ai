@@ -7,7 +7,7 @@
 
 | Swagger 태그 | 엔드포인트 |
 |---|---|
-| Analyses | `POST /api/v1/internal/v1/analyses` |
+| Analyses | `POST /internal/v1/analyses` |
 | Document Capabilities | `GET /api/v1/documents/capabilities` |
 | Document Templates | `GET /api/v1/documents/templates`, `GET /api/v1/documents/templates/{template_id}` |
 | Document Inspection | `POST /api/v1/documents/inspect` |
@@ -29,7 +29,7 @@
 |---|---|
 | Swagger UI | `GET /docs` |
 | OpenAPI JSON | `GET /openapi.json` |
-| 자연어 분석 | `POST /api/v1/internal/v1/analyses` |
+| 자연어 분석 | `POST /internal/v1/analyses` |
 | 문서 기능 조회 | `GET /api/v1/documents/capabilities` |
 | 템플릿 목록 | `GET /api/v1/documents/templates` |
 | 템플릿 상세 | `GET /api/v1/documents/templates/{template_id}` |

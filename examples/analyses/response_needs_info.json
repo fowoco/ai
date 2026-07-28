@@ -1,0 +1,33 @@
+{
+  "requestId": "10000000-0000-0000-0000-000000000001",
+  "outcome": "NEEDS_INFO",
+  "candidates": [
+    {
+      "candidateRef": "candidate-1",
+      "workerRef": "30000000-0000-0000-0000-000000000001",
+      "workflowId": "EXPIRY_RENEWAL",
+      "extractedSlots": {
+        "stay_expiry_date": "2026-12-31",
+        "worker_id": "30000000-0000-0000-0000-000000000001"
+      },
+      "missingSlots": [
+        "contract_end_date",
+        "monthly_wage"
+      ],
+      "confidence": 0.8
+    }
+  ],
+  "validationErrors": [],
+  "versions": {
+    "agentVersion": "0.1.0",
+    "modelProvider": "stub",
+    "modelName": "stub",
+    "modelVersion": "stub",
+    "promptVersion": "prompt-1",
+    "contextPackVersion": "0.2.0",
+    "workflowCatalogVersion": "0.2.0",
+    "contractVersion": "1.0.0"
+  },
+  "providerAttemptCount": 1,
+  "latencyMs": 12
+}
