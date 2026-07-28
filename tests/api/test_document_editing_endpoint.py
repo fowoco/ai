@@ -269,6 +269,7 @@ def test_openapi_exposes_separate_document_actions() -> None:
     assert "/api/v1/documents/templates/{template_id}" in paths
 
     assert [tag["name"] for tag in schema["tags"]] == [
+        "Analyses",
         "Document Capabilities",
         "Document Templates",
         "Document Inspection",
@@ -277,6 +278,10 @@ def test_openapi_exposes_separate_document_actions() -> None:
         "Document Conversion",
     ]
     assert [tag["description"] for tag in schema["tags"]] == [
+        (
+            "Server가 호출하는 핵심 분석 API. "
+            "PII-마스킹된 지시문에서 Intent 분류, Slot 추출, 모호성 검사를 수행한다."
+        ),
         "현재 서버에서 사용할 수 있는 문서 처리 기능과 변환 조합을 조회합니다.",
         "등록된 문서 템플릿 목록과 편집 가능한 필드를 조회합니다.",
         "업로드한 문서의 실제 포맷을 감지하고 일치하는 템플릿을 식별합니다.",

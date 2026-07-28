@@ -59,6 +59,15 @@ Server → API → agents
 - [Internal API 안내](app/api/README.md)
 - [문서 처리 아키텍처](app/documents/README.md)
 
+## Analyses (규칙 MVP)
+
+Server가 호출하는 핵심 분석 Internal API다. Intent 분류·Slot 추출·모호성
+검사를 규칙 기반으로 수행한다. LLM·knowledge 패키지 연동은 후속이다.
+
+```text
+POST /api/v1/internal/v1/analyses
+```
+
 ## 문서 API
 
 문서 API는 책임별로 분리한다.
