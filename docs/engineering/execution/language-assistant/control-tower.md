@@ -22,7 +22,7 @@
 
 | Task | Title | Status | Dependencies | Base | Branch | Packet | Implementation | Evidence | Merge | Integrated | Luna | Sol | User | Unverified |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T01 | Domain contracts | integrated | T0 | `cd3fabbfbf6e996f3ef1d068804e04cc9f85e07a` | `task/la-t01-domain-contracts` | `536dc6a36c66bdfe6346482748672b0882cb7c41` | `42f429cd67fbecaf5cff41eef22e2389f8d8ad60` | `cb3fd9812aff1bd299d6e498e23ebc44315aa453` | `ffc229fe2c87298074f94a5c3acd59c3a243db36` | pending ledger record | Hume / `019fc0ed-3801-7061-9d76-34cfc22f5e5f` | S1 | proceed | S1 review, user Gate, T02/T03, HTTP/LangGraph/provider/Qdrant/model production behavior, merge-after behavior, G1-G7 |
+| T01 | Domain contracts | integrated | T0 | `cd3fabbfbf6e996f3ef1d068804e04cc9f85e07a` | `task/la-t01-domain-contracts` | `536dc6a36c66bdfe6346482748672b0882cb7c41` | `42f429cd67fbecaf5cff41eef22e2389f8d8ad60` | `cb3fd9812aff1bd299d6e498e23ebc44315aa453` | `ffc229fe2c87298074f94a5c3acd59c3a243db36` | `63e2262d81eea8cd414f2ca57c392d9e5eee0832` | Hume / `019fc0ed-3801-7061-9d76-34cfc22f5e5f` | S1 | proceed | S1 review, user Gate, T02/T03, HTTP/LangGraph/provider/Qdrant/model production behavior, merge-after behavior, G1-G7 |
 | T02 | Language normalization | pending | T01 | — | `task/la-t02-language-normalization` | — | — | — | — | — | — | S1 | — | — |
 | T03 | Facts and queries | pending | T01 | — | `task/la-t03-facts-and-queries` | — | — | — | — | — | — | S1 | — | — |
 | T04 | Retrieval domain | pending | T02,T03 | — | `task/la-t04-retrieval-domain` | — | — | — | — | — | — | S2 | — | — |
