@@ -4,9 +4,9 @@
 
 - Integration branch: `feat/language-assistant`
 - Execution protocol: `docs/engineering/specs/2026-08-02-language-assistant-control-tower-design.md`
-- Current wave: `W0`
+- Current wave: `W1`
 - Current gate: `none`
-- State: `evidence_ready`
+- State: `active`
 - Maximum concurrent builders: `2`
 
 ## T0 Record
@@ -15,14 +15,14 @@
 - Evidence Pack commit: `d670faf7cb7c32178223b52d119f9990f1e9bf8a`
 - Luna Verifier: `unverified`
 - Sol Gate: `not applicable in W0`
-- User decision: `stop before T1`
-- Unverified: independent replay, T1 implementation, external G1-G7 evidence
+- User decision: `proceed to T1`
+- Unverified: independent T0 replay, T1 implementation/evidence/replay, external G1-G7 evidence
 
 ## Tasks
 
 | Task | Title | Status | Dependencies | Base | Branch | Packet | Implementation | Evidence | Merge | Integrated | Luna | Sol | User | Unverified |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T01 | Domain contracts | pending | T0 | — | `task/la-t01-domain-contracts` | — | — | — | — | — | — | S1 | — | — |
+| T01 | Domain contracts | active | T0 | `cd3fabbfbf6e996f3ef1d068804e04cc9f85e07a` | `task/la-t01-domain-contracts` | `536dc6a` | — | — | — | — | builder-active | S1 | proceed | implementation, evidence, independent replay |
 | T02 | Language normalization | pending | T01 | — | `task/la-t02-language-normalization` | — | — | — | — | — | — | S1 | — | — |
 | T03 | Facts and queries | pending | T01 | — | `task/la-t03-facts-and-queries` | — | — | — | — | — | — | S1 | — | — |
 | T04 | Retrieval domain | pending | T02,T03 | — | `task/la-t04-retrieval-domain` | — | — | — | — | — | — | S2 | — | — |
