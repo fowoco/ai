@@ -108,5 +108,5 @@ git status --short --branch
 - Luna 독립 검증은 Evidence Pack 커밋 후 별도 worktree에서 수행해야 한다.
 - T3는 `feat/language-assistant`에 통합하지 않았으므로 통합 후 재검증 결과는 없다.
 - 실제 Qdrant, EPS 데이터, 외부 LLM, 운영 API와의 통합 동작은 T3 범위에서 검증하지 않았다.
-- 전체 Ruff 저장소 기준선은 기존 114개 위반으로 여전히 실패한다.
+- 전체 Ruff 저장소 기준선은 기존 113개 위반으로 여전히 실패한다.
 - 표준 한국어의 외부 의미 동등성·다국어 생성·S1 review는 T3에서 검증하지 않았다.
