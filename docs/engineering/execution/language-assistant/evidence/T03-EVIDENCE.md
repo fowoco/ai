@@ -77,7 +77,7 @@ exit 0 — All checks passed!
 
 ```text
 RUFF_CACHE_DIR=/private/tmp/la-t03-ruff-cache .venv/bin/ruff check .
-exit 1 — 114 errors
+exit 1 — 113 errors
 ```
 
 전체 Ruff 실패는 T3 범위 밖의 기존 HWP/HWPX 및 crawler 파일 위반을 포함한다. T3 파일의 Ruff는 별도 focused 명령으로 통과했다.
