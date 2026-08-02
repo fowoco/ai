@@ -22,7 +22,7 @@
 
 | Task | Title | Status | Dependencies | Base | Branch | Packet | Implementation | Evidence | Merge | Integrated | Luna | Sol | User | Unverified |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T01 | Domain contracts | verifying | T0 | `cd3fabbfbf6e996f3ef1d068804e04cc9f85e07a` | `task/la-t01-domain-contracts` | `536dc6a36c66bdfe6346482748672b0882cb7c41` | `42f429cd67fbecaf5cff41eef22e2389f8d8ad60` | `cb3fd9812aff1bd299d6e498e23ebc44315aa453` | — | — | Hypatia / `019fc0e9-0364-7a10-b467-5c01c51672d6` | S1 | proceed | independent replay, S1 review, user Gate, merge |
+| T01 | Domain contracts | verifying | T0 | `cd3fabbfbf6e996f3ef1d068804e04cc9f85e07a` | `task/la-t01-domain-contracts` | `536dc6a36c66bdfe6346482748672b0882cb7c41` | `42f429cd67fbecaf5cff41eef22e2389f8d8ad60` | `cb3fd9812aff1bd299d6e498e23ebc44315aa453` | — | — | Hume / `019fc0ed-3801-7061-9d76-34cfc22f5e5f` | S1 | proceed | independent replay, S1 review, user Gate, merge |
 | T02 | Language normalization | pending | T01 | — | `task/la-t02-language-normalization` | — | — | — | — | — | — | S1 | — | — |
 | T03 | Facts and queries | pending | T01 | — | `task/la-t03-facts-and-queries` | — | — | — | — | — | — | S1 | — | — |
 | T04 | Retrieval domain | pending | T02,T03 | — | `task/la-t04-retrieval-domain` | — | — | — | — | — | — | S2 | — | — |
@@ -38,3 +38,8 @@
 | T14 | Privacy and resilience | pending | T11,T13 | — | `task/la-t14-privacy-resilience` | — | — | — | — | — | — | S4 | — | — |
 | T15 | Evaluation | pending | T14,S4 | — | `task/la-t15-evaluation` | — | — | — | — | — | — | S5 | — | — |
 | T16 | Verification handoff | pending | T14,T15 | — | `task/la-t16-verification-handoff` | — | — | — | — | — | — | S5 | — | — |
+
+## T01 Verification Attempts
+
+- Hypatia / `019fc0e9-0364-7a10-b467-5c01c51672d6`: C01-C04 passed; C05 exact schema-export replay was blocked by `PermissionError` because the verifier checkout was read-only. No repository files were modified.
+- Hume / `019fc0ed-3801-7061-9d76-34cfc22f5e5f`: rerunning from disposable writable detached checkout `/private/tmp/la-t01-verifier-cb3fd98` at the same `evidence_sha`; verdict pending.
