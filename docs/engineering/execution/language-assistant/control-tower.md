@@ -24,7 +24,7 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | T01 | Domain contracts | integrated | T0 | `cd3fabbfbf6e996f3ef1d068804e04cc9f85e07a` | `task/la-t01-domain-contracts` | `536dc6a36c66bdfe6346482748672b0882cb7c41` | `42f429cd67fbecaf5cff41eef22e2389f8d8ad60` | `cb3fd9812aff1bd299d6e498e23ebc44315aa453` | `ffc229fe2c87298074f94a5c3acd59c3a243db36` | `63e2262d81eea8cd414f2ca57c392d9e5eee0832` | Hume / `019fc0ed-3801-7061-9d76-34cfc22f5e5f` | S1 | proceed | S1 review, user Gate, T02/T03, HTTP/LangGraph/provider/Qdrant/model production behavior, merge-after behavior, G1-G7 |
 | T02 | Language normalization | approved | T01 | `bbba26e67fa392b0691f397df162ce07292c7932` | `task/la-t02-language-normalization` | `e41f66dbee21d6c9bb63d685882b1645de7a730b` | `5acaecb961ffbcaa56db80f21fa4571061f6c158` | `e91bb957ba347ad507009659caf5682842c900ef` | — | — | Lorentz / `019fc15d-d0ff-76f0-bec3-d315d78f2497` | S1 | proceed | merge, S1 review, user Gate, T3 onward, HTTP/LangGraph/provider/Qdrant/model production behavior, G1-G7 |
-| T03 | Facts and queries | pending | T01 | — | `task/la-t03-facts-and-queries` | — | — | — | — | — | — | S1 | — | — |
+| T03 | Facts and queries | evidence_ready | T01 | `13d088a7924f837b3c7caf476f62153bee903f2b` | `task/la-t03-facts-and-queries` | `6ac7477701a01b02dcbd0cfe0320dd92bce7f8e7` | `c18490c52830627ef8d126e84689f74e01c48a54` | `6c499ffcf2d375c0bc3b00ff840bfa6029874d6c` | — | — | Hubble / `019fc176-6a27-7473-aaa4-4f06c846352c` (pending) | S1 | proceed | Luna replay, merge, S1 review, user Gate, T04 onward, HTTP/LangGraph/provider/Qdrant/model production behavior, G1-G7 |
 | T04 | Retrieval domain | pending | T02,T03 | — | `task/la-t04-retrieval-domain` | — | — | — | — | — | — | S2 | — | — |
 | T05 | EPS index plan | pending | T02,T04 | — | `task/la-t05-eps-index-plan` | — | — | — | — | — | — | S2 | — | — |
 | T06 | Hybrid retrieval | pending | T04,T05 | — | `task/la-t06-hybrid-retrieval` | — | — | — | — | — | — | S2 | — | — |
@@ -43,6 +43,19 @@
 
 - Hypatia / `019fc0e9-0364-7a10-b467-5c01c51672d6`: C01-C04 passed; C05 exact schema-export replay was blocked by `PermissionError` because the verifier checkout was read-only. No repository files were modified.
 - Hume / `019fc0ed-3801-7061-9d76-34cfc22f5e5f`: approved C01-C05 from disposable detached checkout `/private/tmp/la-t01-verifier-cb3fd98` at the same `evidence_sha`; focused `27 passed`, full `88 passed`, Ruff passed, two schema exports were byte-stable, and final worktree was clean. The disposable checkout initially lacked `.venv`; a temporary symlink to the existing environment was used only for replay and removed afterward.
+
+## T03 Evidence and Verification
+
+- Evidence Pack: `docs/engineering/execution/language-assistant/evidence/T03-EVIDENCE.md`
+- Evidence SHA: `6c499ffcf2d375c0bc3b00ff840bfa6029874d6c`
+- Implementation SHA: `c18490c52830627ef8d126e84689f74e01c48a54`
+- Packet SHA: `6ac7477701a01b02dcbd0cfe0320dd92bce7f8e7`
+- Focused command: `PYTEST_ADDOPTS='' .venv/bin/python -m pytest tests/agents/language/test_protected_facts.py tests/agents/language/test_formatting.py tests/agents/language/test_queries.py -q` → exit `0`, `22 passed`.
+- Full command: `PYTEST_ADDOPTS='' .venv/bin/python -m pytest -o addopts='' --disable-warnings` → exit `0`, `132 passed`, one non-failing cache warning.
+- T3 Ruff command with `RUFF_CACHE_DIR=/private/tmp/la-t03-ruff-cache` → exit `0`, `All checks passed!`.
+- Whole-repository Ruff → exit `1`, existing 114 violations outside T3 scope; T3 changed-file Ruff remains passed.
+- `git diff --exit-code -- docs/contracts` → exit `0`; `git diff --check` → exit `0`; evidence worktree clean.
+- Luna independent verification is pending. T03 is not merged into `feat/language-assistant`.
 
 ## T01 Integration Replay
 
