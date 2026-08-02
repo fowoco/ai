@@ -22,7 +22,7 @@
 
 | Task | Title | Status | Dependencies | Base | Branch | Packet | Implementation | Evidence | Merge | Integrated | Luna | Sol | User | Unverified |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T01 | Domain contracts | approved | T0 | `cd3fabbfbf6e996f3ef1d068804e04cc9f85e07a` | `task/la-t01-domain-contracts` | `536dc6a36c66bdfe6346482748672b0882cb7c41` | `42f429cd67fbecaf5cff41eef22e2389f8d8ad60` | `cb3fd9812aff1bd299d6e498e23ebc44315aa453` | — | — | Hume / `019fc0ed-3801-7061-9d76-34cfc22f5e5f` | S1 | proceed | historical failing-test replay, HTTP/LangGraph/provider/Qdrant/model production behavior, merge behavior, S1 review, user Gate, G1-G7, T02 onward |
+| T01 | Domain contracts | integrated | T0 | `cd3fabbfbf6e996f3ef1d068804e04cc9f85e07a` | `task/la-t01-domain-contracts` | `536dc6a36c66bdfe6346482748672b0882cb7c41` | `42f429cd67fbecaf5cff41eef22e2389f8d8ad60` | `cb3fd9812aff1bd299d6e498e23ebc44315aa453` | `ffc229fe2c87298074f94a5c3acd59c3a243db36` | pending ledger record | Hume / `019fc0ed-3801-7061-9d76-34cfc22f5e5f` | S1 | proceed | S1 review, user Gate, T02/T03, HTTP/LangGraph/provider/Qdrant/model production behavior, merge-after behavior, G1-G7 |
 | T02 | Language normalization | pending | T01 | — | `task/la-t02-language-normalization` | — | — | — | — | — | — | S1 | — | — |
 | T03 | Facts and queries | pending | T01 | — | `task/la-t03-facts-and-queries` | — | — | — | — | — | — | S1 | — | — |
 | T04 | Retrieval domain | pending | T02,T03 | — | `task/la-t04-retrieval-domain` | — | — | — | — | — | — | S2 | — | — |
@@ -43,3 +43,19 @@
 
 - Hypatia / `019fc0e9-0364-7a10-b467-5c01c51672d6`: C01-C04 passed; C05 exact schema-export replay was blocked by `PermissionError` because the verifier checkout was read-only. No repository files were modified.
 - Hume / `019fc0ed-3801-7061-9d76-34cfc22f5e5f`: approved C01-C05 from disposable detached checkout `/private/tmp/la-t01-verifier-cb3fd98` at the same `evidence_sha`; focused `27 passed`, full `88 passed`, Ruff passed, two schema exports were byte-stable, and final worktree was clean. The disposable checkout initially lacked `.venv`; a temporary symlink to the existing environment was used only for replay and removed afterward.
+
+## T01 Integration Replay
+
+- `merge_sha`: `ffc229fe2c87298074f94a5c3acd59c3a243db36`
+- Focused command: `.venv/bin/python -m pytest tests/agents/language/test_contracts.py tests/agents/language/test_projection.py -q` → exit `0`; diagnostic summary `27 passed`; one non-failing pytest cache write warning.
+- Full command: `.venv/bin/python -m pytest -q` → exit `0`; diagnostic replay with `-o addopts='' -ra` collected and passed `110` tests; one non-failing pytest cache write warning.
+- Ruff command: `.venv/bin/python -m ruff check app tests scripts/export_language_schemas.py` first returned exit `2` because `.ruff_cache` could not create a temporary file; the same check with `RUFF_CACHE_DIR=/private/tmp/la-t01-ruff-cache` returned exit `0`, `All checks passed!`.
+- The earlier T01 Evidence Pack recorded `88 passed`; the post-merge replay observed `110 passed`. Existing evidence and implementation SHAs were not rewritten; `110 passed` is the integrated-branch result recorded here.
+- Worktree remained clean after the replay.
+
+## Commit Language Policy
+
+- From this ledger entry onward, newly created commit subjects and bodies must be written in Korean.
+- Only the Conventional Commits `type` remains English; the description and body are Korean.
+- Existing English commit messages and their SHAs are immutable. Do not amend, cherry-pick, squash, or rebase them.
+- Examples: `feat: Language Assistant 도메인 계약 정의`, `test: 도메인 계약 경계값 테스트 추가`, `docs: T1 독립 검증 결과 기록`, `fix: 요청 항목 빈 배열 검증 수정`.
