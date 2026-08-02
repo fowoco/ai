@@ -6,8 +6,17 @@
 - Execution protocol: `docs/engineering/specs/2026-08-02-language-assistant-control-tower-design.md`
 - Current wave: `W0`
 - Current gate: `none`
-- State: `bootstrapping`
+- State: `evidence_ready`
 - Maximum concurrent builders: `2`
+
+## T0 Record
+
+- Docs commit: `c2a6a716d05e5d420b95b3f580973c15a497986e`
+- Evidence Pack commit: `27c4b04bb225e1e2f33afba94f3a0fe271de5657`
+- Luna Verifier: `unverified`
+- Sol Gate: `not applicable in W0`
+- User decision: `stop before T1`
+- Unverified: independent replay, T1 implementation, external G1-G7 evidence
 
 ## Tasks
 
