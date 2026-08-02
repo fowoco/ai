@@ -16,7 +16,7 @@ evidence_sha: recorded in the Control Tower ledger after this docs-only commit
 
 | ID | Claim | Result |
 |---|---|---|
-| T0-C01 | Original checkout remains on develop at approved base with existing dirty HWPX work preserved. | supported by source status and dirty-file SHA manifest below; final post-commit recheck remains required |
+| T0-C01 | Original checkout remains on develop at approved base with existing dirty HWPX work preserved. | supported; post-ledger recheck at 57eb166 matched source status and all dirty-file SHA values |
 | T0-C02 | feat/language-assistant is an isolated worktree from origin/develop. | supported |
 | T0-C03 | Exactly three approved Language documents were imported byte-for-byte. | supported by SHA-256 and cmp results |
 | T0-C04 | Control Tower ledger and Task/Gate templates exist without recorded secrets or user payloads. | supported by artifact checks |
@@ -178,6 +178,30 @@ Collection confirmation:
 
 Exit code: 0. Existing test collection total: 61.
 
+## Post-pack verification
+
+At ledger commit 57eb166, the following fresh checks were run:
+
+~~~bash
+.venv/bin/python -m pytest -q
+.venv/bin/python -m ruff check app tests
+git status --short --branch
+git rev-parse HEAD
+git rev-parse origin/develop
+~~~
+
+Results:
+
+~~~text
+pytest -q: exit 0; 61 existing tests passed
+ruff check app tests: exit 0; All checks passed!
+target status: clean; feat/language-assistant...origin/develop [ahead 3]
+target HEAD: 57eb166
+origin/develop: 3d3fa198717d39272a71ea3d31dd282f3a69336d
+~~~
+
+The source checkout remained on develop at 3d3fa198717d39272a71ea3d31dd282f3a69336d. Its HWPX dirty path list and all 21 SHA-256 values matched the pre-T0 manifest above.
+
 ## Scope audit
 
 ~~~yaml
@@ -200,7 +224,7 @@ implementation_started: false
 - T1–T16 implementation has not started.
 - No Language Assistant production/provider/Qdrant/model behavior was tested.
 - External G1–G7 evidence remains open and was not inferred from baseline tests.
-- Final post-Evidence-Pack source dirty-file hash recheck is required before claiming preservation complete.
+- No remaining T0 verification item blocks handoff; independent Luna replay and later Wave work remain intentionally unrun.
 
 ## Rollback
 
