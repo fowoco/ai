@@ -1,0 +1,100 @@
+{
+  "$defs": {
+    "RequestContext": {
+      "additionalProperties": false,
+      "properties": {
+        "deadline": {
+          "format": "date",
+          "title": "Deadline",
+          "type": "string"
+        },
+        "request_reason": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Request Reason",
+          "type": "string"
+        },
+        "requested_items": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Requested Items",
+          "type": "array"
+        },
+        "submission_method": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Submission Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_reason",
+        "requested_items",
+        "deadline",
+        "submission_method"
+      ],
+      "title": "RequestContext",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "nationality_code": {
+      "anyOf": [
+        {
+          "maxLength": 8,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Nationality Code"
+    },
+    "preferred_language": {
+      "anyOf": [
+        {
+          "maxLength": 32,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Preferred Language"
+    },
+    "request_context": {
+      "$ref": "#/$defs/RequestContext"
+    },
+    "worker_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "type": "integer"
+        }
+      ],
+      "title": "Worker Id"
+    }
+  },
+  "required": [
+    "worker_id",
+    "request_context"
+  ],
+  "title": "LanguageAssistantInput",
+  "type": "object"
+}

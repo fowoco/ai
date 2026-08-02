@@ -1,0 +1,360 @@
+{
+  "$defs": {
+    "ComponentStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "easy_korean": {
+          "enum": [
+            "success",
+            "warning",
+            "failed"
+          ],
+          "title": "Easy Korean",
+          "type": "string"
+        },
+        "standard_korean": {
+          "enum": [
+            "success",
+            "warning",
+            "failed"
+          ],
+          "title": "Standard Korean",
+          "type": "string"
+        },
+        "translation": {
+          "enum": [
+            "success",
+            "warning",
+            "failed"
+          ],
+          "title": "Translation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "standard_korean",
+        "easy_korean",
+        "translation"
+      ],
+      "title": "ComponentStatus",
+      "type": "object"
+    },
+    "ComponentValidation": {
+      "additionalProperties": false,
+      "properties": {
+        "failed_checks": {
+          "default": [],
+          "items": {
+            "enum": [
+              "request_reason.present",
+              "requested_items.cardinality",
+              "requested_items.source_alignment",
+              "deadline.canonical_value",
+              "submission_method.present",
+              "machine_tokens.multiset",
+              "facts.no_addition",
+              "request_reason.semantic_equivalence",
+              "requested_items.semantic_equivalence",
+              "submission_method.semantic_equivalence",
+              "modality.obligation",
+              "modality.prohibition",
+              "modality.warning_strength",
+              "named_entities.semantic_preservation",
+              "places.semantic_preservation",
+              "documents.semantic_preservation",
+              "legal_terms.semantic_preservation",
+              "facts.no_semantic_addition"
+            ],
+            "type": "string"
+          },
+          "title": "Failed Checks",
+          "type": "array"
+        },
+        "inconclusive_checks": {
+          "default": [],
+          "items": {
+            "enum": [
+              "request_reason.present",
+              "requested_items.cardinality",
+              "requested_items.source_alignment",
+              "deadline.canonical_value",
+              "submission_method.present",
+              "machine_tokens.multiset",
+              "facts.no_addition",
+              "request_reason.semantic_equivalence",
+              "requested_items.semantic_equivalence",
+              "submission_method.semantic_equivalence",
+              "modality.obligation",
+              "modality.prohibition",
+              "modality.warning_strength",
+              "named_entities.semantic_preservation",
+              "places.semantic_preservation",
+              "documents.semantic_preservation",
+              "legal_terms.semantic_preservation",
+              "facts.no_semantic_addition"
+            ],
+            "type": "string"
+          },
+          "title": "Inconclusive Checks",
+          "type": "array"
+        },
+        "retry_count": {
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Retry Count",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "inconclusive",
+            "not_run"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "retry_count"
+      ],
+      "title": "ComponentValidation",
+      "type": "object"
+    },
+    "RetrievalMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Dataset Version"
+        },
+        "degraded_components": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Degraded Components",
+          "type": "array"
+        },
+        "fallback_used": {
+          "title": "Fallback Used",
+          "type": "boolean"
+        },
+        "query_strategies": {
+          "items": {
+            "enum": [
+              "canonical",
+              "reason_items",
+              "action_deadline"
+            ],
+            "type": "string"
+          },
+          "title": "Query Strategies",
+          "type": "array"
+        },
+        "reference_count": {
+          "minimum": 0,
+          "title": "Reference Count",
+          "type": "integer"
+        },
+        "reference_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reference Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dataset_version",
+        "query_strategies",
+        "reference_ids",
+        "reference_count",
+        "fallback_used",
+        "degraded_components"
+      ],
+      "title": "RetrievalMetadata",
+      "type": "object"
+    },
+    "ValidationSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "easy_korean": {
+          "$ref": "#/$defs/ComponentValidation"
+        },
+        "standard_korean": {
+          "$ref": "#/$defs/ComponentValidation"
+        },
+        "translation": {
+          "$ref": "#/$defs/ComponentValidation"
+        }
+      },
+      "required": [
+        "standard_korean",
+        "easy_korean",
+        "translation"
+      ],
+      "title": "ValidationSummary",
+      "type": "object"
+    },
+    "WarningCode": {
+      "enum": [
+        "LANGUAGE_CODE_NORMALIZED",
+        "LANGUAGE_INFERRED_FROM_NATIONALITY",
+        "LANGUAGE_DEFAULTED_TO_EN",
+        "DUPLICATE_REQUESTED_ITEM",
+        "RETRIEVAL_NO_MATCH",
+        "RETRIEVAL_UNAVAILABLE",
+        "RETRIEVAL_ENCODER_UNAVAILABLE",
+        "RETRIEVAL_QUERY_TOO_LONG",
+        "RETRIEVAL_DATASET_MISMATCH",
+        "RETRIEVAL_INDEX_PROVENANCE_MISMATCH",
+        "RETRIEVAL_SCHEMA_MISMATCH",
+        "RERANKER_UNAVAILABLE",
+        "EPS_CONTEXT_INSUFFICIENT",
+        "TRANSLATION_FALLBACK_USED",
+        "GENERATION_TIME_BUDGET_EXCEEDED",
+        "EASY_KOREAN_CONTEXT_PACK_UNAVAILABLE",
+        "STANDARD_KOREAN_FALLBACK",
+        "SEMANTIC_VALIDATION_INCONCLUSIVE",
+        "VALIDATION_RETRY_EXCEEDED",
+        "EASY_KOREAN_GENERATION_FAILED",
+        "TRANSLATION_GENERATION_FAILED"
+      ],
+      "title": "WarningCode",
+      "type": "string"
+    },
+    "WarningItem": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/WarningCode"
+        },
+        "component": {
+          "title": "Component",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "component",
+        "code",
+        "message"
+      ],
+      "title": "WarningItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "component_status": {
+      "$ref": "#/$defs/ComponentStatus"
+    },
+    "easy_korean_text": {
+      "title": "Easy Korean Text",
+      "type": "string"
+    },
+    "generation_status": {
+      "enum": [
+        "success",
+        "warning",
+        "failed"
+      ],
+      "title": "Generation Status",
+      "type": "string"
+    },
+    "requires_human_review": {
+      "title": "Requires Human Review",
+      "type": "boolean"
+    },
+    "retrieval_metadata": {
+      "$ref": "#/$defs/RetrievalMetadata"
+    },
+    "standard_korean_text": {
+      "title": "Standard Korean Text",
+      "type": "string"
+    },
+    "target_language": {
+      "enum": [
+        "en",
+        "zh-Hans",
+        "vi",
+        "th",
+        "fil",
+        "id",
+        "mn",
+        "si",
+        "ru",
+        "uz",
+        "ky",
+        "bn",
+        "ur",
+        "km",
+        "tet"
+      ],
+      "title": "Target Language",
+      "type": "string"
+    },
+    "translated_text": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Translated Text"
+    },
+    "validation": {
+      "$ref": "#/$defs/ValidationSummary"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/WarningItem"
+      },
+      "title": "Warnings",
+      "type": "array"
+    },
+    "worker_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "type": "integer"
+        }
+      ],
+      "title": "Worker Id"
+    }
+  },
+  "required": [
+    "worker_id",
+    "target_language",
+    "generation_status",
+    "requires_human_review",
+    "standard_korean_text",
+    "easy_korean_text",
+    "translated_text",
+    "component_status",
+    "validation",
+    "warnings",
+    "retrieval_metadata"
+  ],
+  "title": "LanguageAssistantOutput",
+  "type": "object"
+}

@@ -1,1 +1,5 @@
-"""Agent B (Language Assistant) — 구현 예정."""
+"""Language Assistant domain contracts and graph components."""
+
+from .contracts import LanguageAssistantInput, LanguageAssistantOutput
+
+__all__ = ["LanguageAssistantInput", "LanguageAssistantOutput"]
