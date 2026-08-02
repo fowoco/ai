@@ -22,7 +22,7 @@
 
 | Task | Title | Status | Dependencies | Base | Branch | Packet | Implementation | Evidence | Merge | Integrated | Luna | Sol | User | Unverified |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| T01 | Domain contracts | active | T0 | `cd3fabbfbf6e996f3ef1d068804e04cc9f85e07a` | `task/la-t01-domain-contracts` | `536dc6a` | — | — | — | — | builder-active | S1 | proceed | implementation, evidence, independent replay |
+| T01 | Domain contracts | evidence_ready | T0 | `cd3fabbfbf6e996f3ef1d068804e04cc9f85e07a` | `task/la-t01-domain-contracts` | `536dc6a36c66bdfe6346482748672b0882cb7c41` | `42f429cd67fbecaf5cff41eef22e2389f8d8ad60` | `cb3fd9812aff1bd299d6e498e23ebc44315aa453` | — | — | unverified | S1 | proceed | independent replay, S1 review, user Gate, merge |
 | T02 | Language normalization | pending | T01 | — | `task/la-t02-language-normalization` | — | — | — | — | — | — | S1 | — | — |
 | T03 | Facts and queries | pending | T01 | — | `task/la-t03-facts-and-queries` | — | — | — | — | — | — | S1 | — | — |
 | T04 | Retrieval domain | pending | T02,T03 | — | `task/la-t04-retrieval-domain` | — | — | — | — | — | — | S2 | — | — |
