@@ -12,7 +12,7 @@
 ## T0 Record
 
 - Docs commit: `c2a6a716d05e5d420b95b3f580973c15a497986e`
-- Evidence Pack commit: `27c4b04bb225e1e2f33afba94f3a0fe271de5657`
+- Evidence Pack commit: `d670faf7cb7c32178223b52d119f9990f1e9bf8a`
 - Luna Verifier: `unverified`
 - Sol Gate: `not applicable in W0`
 - User decision: `stop before T1`
