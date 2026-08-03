@@ -5,7 +5,7 @@
 - Integration branch: `feat/language-assistant`
 - Execution protocol: `docs/engineering/specs/2026-08-02-language-assistant-control-tower-design.md`
 - Current wave: `W1`
-- Current gate: `none`
+- Current gate: `S1 repair`
 - State: `active`
 - Maximum concurrent builders: `2`
 
@@ -38,6 +38,23 @@
 | T14 | Privacy and resilience | pending | T11,T13 | — | `task/la-t14-privacy-resilience` | — | — | — | — | — | — | S4 | — | — |
 | T15 | Evaluation | pending | T14,S4 | — | `task/la-t15-evaluation` | — | — | — | — | — | — | S5 | — | — |
 | T16 | Verification handoff | pending | T14,T15 | — | `task/la-t16-verification-handoff` | — | — | — | — | — | — | S5 | — | — |
+
+## S1 Repair Packet: T01·T03
+
+- repair id: `S1-REPAIR-T01-T03`
+- status: `packet_sealed`
+- packet SHA: `9e34b592f236231bf7a574b01f84f919655cd3c1`
+- base SHA: `2ce75957e1ba9bcb0af74a259eb5d959d4b57a6f`
+- task branch: `repair/la-t01-t03-s1`
+- worktree: `/Users/parktaejung/Desktop/workspace/ai-language-assistant-repair-t01-t03`
+- Packet: `docs/engineering/execution/language-assistant/tasks/S1-REPAIR-T01-T03.md`
+- scope: T01 deadline/fallback contracts and tests; T03 signed amount, currency, quantity unit, Korean-date tokenization, Query preservation, and tests
+- existing implementation/evidence/verifier SHA: immutable; no prior Evidence Pack is rewritten
+- `control-tower.md`: CT-only; repair branch must not modify it
+- implementation SHA: pending
+- evidence SHA: pending
+- Luna verifier: pending
+- stop: after repair Evidence Pack and independent verification; no S1 re-review, W2 opening, or repair merge in this session
 
 ## T01 Verification Attempts
 
