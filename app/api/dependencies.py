@@ -41,7 +41,7 @@ from app.documents.snapshots import DocumentSnapshotRepository
 
 
 @lru_cache
-# 설정(intent_mode)에 맞는 Intent 분류기 싱글톤
+# 재갱신 고정 Intent 분류기 싱글톤
 def get_intent_agent() -> IntentClassifier:
     return build_intent_agent()
 

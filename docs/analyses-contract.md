@@ -111,8 +111,8 @@ candidate / slots에서 Server가 worker·company 조회에 쓰는 값:
 |---|---|---|
 | `workerRef` / `extractedSlots.worker_id` | 요청 workers[].workerRef | 필수 |
 | `extractedSlots.company_id` | workers[].requestedFields.company_id | 권장 |
-| `extractedSlots.stay_expiry_date` | workers[] 또는 발화 추출 | 체류 경로 |
-| `extractedSlots.contract_end_date` | workers[] 또는 발화 추출 | 계약 경로 |
+| `extractedSlots.stay_expiry_date` | workers[] 또는 requestedFields | 체류 경로 |
+| `extractedSlots.contract_end_date` | workers[] 또는 requestedFields | 계약 경로 |
 
 `worker_id`·`company_id`는 `allowedSlotKeys`와 무관하게 응답 slots에 유지한다.
 

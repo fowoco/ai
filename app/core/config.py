@@ -42,9 +42,6 @@ class Settings(BaseSettings):
     knowledge_enabled: bool = False
     knowledge_root: str | None = None
 
-    # Intent — fixed_expiry_renewal(기본) | keyword(레거시). 나중에 external 등 확장
-    intent_mode: str = "fixed_expiry_renewal"
-
     # Supervisor — rules(기본) | llm(FOWOCO_LLM_* 필요, 실패 시 rules 폴백)
     supervisor_mode: str = "rules"
 

@@ -54,20 +54,6 @@ def test_ask_hr_when_identity_filled_but_contract_missing() -> None:
     assert "wage" in state["missing_slots"]
 
 
-def test_out_of_scope_cancels_with_keyword_intent() -> None:
-    """키워드 분류기일 때만 범위 밖 발화는 OUT_OF_SCOPE로 종료한다."""
-    from app.agents.intent import KeywordIntentSlotAgent
-    from app.agents.workflow_graph.nodes.language_stub import StubLanguageNode
-
-    orch = RenewalOrchestrator(
-        language_node=StubLanguageNode(intent_agent=KeywordIntentSlotAgent()),
-    )
-    state = orch.run(request_id="req-oos", instruction="오늘 날씨 어때?")
-    assert state["intent"] == "OUT_OF_SCOPE"
-    assert state["outcome"] == "OUT_OF_SCOPE"
-    assert state["status"] == "CANCELLED"
-
-
 def test_fixed_intent_treats_unrelated_as_expiry_renewal() -> None:
     """기본(고정) Intent는 무관한 문장도 EXPIRY_RENEWAL로 본다."""
     orch = RenewalOrchestrator()

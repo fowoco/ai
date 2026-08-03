@@ -280,17 +280,29 @@ reverse proxy에도 요청 크기와 timeout을 함께 설정해야 한다.
 ```text
 app/api/
 ├─ dependencies.py                 worker 단위 서비스·변환기 조립
+├─ openapi.py                      Swagger 태그 메타데이터
+├─ security.py                     Internal API 인증
 ├─ router.py                       `/api/v1` 하위 라우터 구성
-├─ routes/documents/
-│  ├─ capabilities.py              등록된 기능 조회
-│  ├─ templates.py                 템플릿 목록·상세
-│  ├─ inspect.py                   포맷·템플릿 식별
-│  ├─ edit.py                      업로드 문서 편집
-│  ├─ generate.py                  템플릿 문서 생성
-│  └─ convert.py                   업로드·변환·다운로드
-└─ schemas/documents/
-   ├─ capabilities.py              capability 응답 모델
-   └─ editing.py                   편집·생성·템플릿 모델
+├─ routes/
+│  ├─ analyses.py                  POST /internal/v1/analyses
+│  ├─ workflows.py                 POST /internal/v1/workflows/renewal/run
+│  └─ documents/
+│     ├─ capabilities.py           등록된 기능 조회
+│     ├─ templates.py              템플릿 목록·상세
+│     ├─ template_views.py         템플릿 응답 조립
+│     ├─ inspect.py                포맷·템플릿 식별
+│     ├─ edit.py                   업로드 문서 편집
+│     ├─ generate.py               템플릿·TXT 문서 생성
+│     ├─ convert.py                업로드·변환·다운로드
+│     ├─ uploads.py                업로드 공통 처리
+│     ├─ assets.py                 asset 파일 매핑
+│     └─ mutation_responses.py     편집·생성 응답 헤더
+└─ schemas/
+   ├─ analyses.py                  Analyses 요청·응답
+   ├─ workflows.py                 Workflows 요청·응답
+   └─ documents/
+      ├─ capabilities.py           capability 응답 모델
+      └─ editing.py                편집·생성·템플릿 모델
 ```
 
 새 API를 추가할 때 지킬 경계:

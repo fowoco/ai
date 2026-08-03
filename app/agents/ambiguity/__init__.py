@@ -1,4 +1,4 @@
-# Ambiguity Agent — 필수 slot 누락 + 모호표현 검출
+# Ambiguity Agent — Catalog 필수슬롯 누락 + Knowledge 모호표현
 
 from .service import AmbiguityAgent
 

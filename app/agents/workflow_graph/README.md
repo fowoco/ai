@@ -9,16 +9,24 @@
 
 ```text
 app/agents/workflow_graph/
-├─ state.py              Shared State (+ phase/step/evidence/progress)
-├─ phases.py             4 Phase · Step 신호
-├─ supervisor.py         슈퍼바이저 (rules | llm)
-├─ document_validation.py 여권×등록증 조합
-├─ subgraphs.py          language / ocr / document 서브그래프
-├─ status.py             TaskStatus
-├─ protocols.py          LanguageNode / OcrNode
-├─ nodes/                시나리오 신호·load_context
-├─ graph.py              메인 그래프 조립
-└─ service.py            RenewalOrchestrator
+├─ state.py                Shared State (+ phase/step/evidence/progress)
+├─ init_state.py           요청 → Shared State 초기화
+├─ phases.py               4 Phase · Step 신호
+├─ supervisor.py           슈퍼바이저 (rules | llm)
+├─ document_validation.py  여권×등록증 조합
+├─ document_field_map.py   슬롯 → 템플릿 필드 매핑
+├─ subgraphs.py            language / ocr / document 서브그래프
+├─ status.py               TaskStatus
+├─ protocols.py            LanguageNode / OcrNode
+├─ adapters.py             Language/OCR 어댑터
+├─ task_store.py           Task 상태 저장
+├─ nodes/
+│  ├─ actions.py           시나리오 신호·load_context
+│  ├─ document_generator.py 초안 4종 생성
+│  ├─ language_stub.py     안내문 stub (태정 교체점)
+│  └─ ocr_stub.py          OCR stub (주현 교체점)
+├─ graph.py                메인 그래프 조립
+└─ service.py              RenewalOrchestrator
 ```
 
 ## 최종 흐름
@@ -30,7 +38,7 @@ flowchart TB
   Server --> A["POST /analyses"]
   A --> P["pipeline.py"]
   P --> IA1["Intent 에이전트<br/>intent/service.py"]
-  IA1 --> FIX1["기본: 만료갱신 고정<br/>옵션: 키워드 분류"]
+  IA1 --> FIX1["만료갱신 고정<br/>WF: Knowledge Catalog"]
   FIX1 --> AMB1["모호성 + 슬롯 카탈로그"]
   AMB1 --> AR["응답: 슬롯 / 누락 / 근거"]
   AR --> Server
