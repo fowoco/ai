@@ -42,7 +42,7 @@
 ## S1 Repair Packet: T01·T03
 
 - repair id: `S1-REPAIR-T01-T03`
-- status: `packet_sealed`
+- status: `approved`
 - packet SHA: `9e34b592f236231bf7a574b01f84f919655cd3c1`
 - base SHA: `2ce75957e1ba9bcb0af74a259eb5d959d4b57a6f`
 - task branch: `repair/la-t01-t03-s1`
@@ -51,9 +51,19 @@
 - scope: T01 deadline/fallback contracts and tests; T03 signed amount, currency, quantity unit, Korean-date tokenization, Query preservation, and tests
 - existing implementation/evidence/verifier SHA: immutable; no prior Evidence Pack is rewritten
 - `control-tower.md`: CT-only; repair branch must not modify it
-- implementation SHA: pending
-- evidence SHA: pending
-- Luna verifier: pending
+- implementation SHA: `f00b9e5b6a9418488c39bf6d055860ccdab3cca4`
+- evidence SHA: `a7940d01895585e627e6fdd73fc7404bfa1f179f`
+- Luna verifier: Schrodinger / `019fc6be-b043-7861-a282-402fad46dd3b` — `APPROVED`
+- implementation commit: `fix: T01 T03 경계 보수 구현`
+- evidence commit: `docs: S1 T01 T03 보수 Evidence 기록`
+- verification:
+  - T01 focused: `.venv/bin/python -m pytest tests/agents/language/test_contracts.py tests/agents/language/test_projection.py -q` → exit `0`, `36 passed`
+  - T03 focused/token boundary: `.venv/bin/python -m pytest tests/agents/language/test_protected_facts.py tests/agents/language/test_queries.py -q` → exit `0`, `17 passed`
+  - full test: `PYTEST_ADDOPTS='' .venv/bin/python -m pytest -o addopts='' --disable-warnings` → exit `0`, `183 passed`, one warning
+  - changed-area Ruff: `RUFF_CACHE_DIR=/private/tmp/la-s1-repair-ruff-cache .venv/bin/ruff check app/agents/language/contracts.py app/agents/language/protected_facts.py app/agents/language/queries.py tests/agents/language/test_contracts.py tests/agents/language/test_protected_facts.py tests/agents/language/test_queries.py` → exit `0`, `All checks passed!`
+  - Luna replay: repair worktree lacked `.venv`; exact relative commands returned exit `127`, equivalent commands using `/Users/parktaejung/Desktop/workspace/ai-language-assistant/.venv/bin/` returned T01 `36 passed`, T03 `17 passed`, full `183 passed`, Ruff passed
+  - scope/schema: `git diff --exit-code -- docs/contracts` and `git diff --check` → exit `0`; repair worktree clean at evidence SHA
+- unverified: HTTP/API, LangGraph runtime, Qdrant, EPS ingest/retrieval, external LLM/provider, production configuration, external G1–G7, S1 re-review, user Gate, repair merge, and W2
 - stop: after repair Evidence Pack and independent verification; no S1 re-review, W2 opening, or repair merge in this session
 
 ## T01 Verification Attempts
