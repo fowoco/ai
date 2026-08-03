@@ -95,3 +95,36 @@ def test_state_contains_only_t3_owned_keys_in_addition_to_t1_keys():
     assert annotations["protected_facts"]
     assert annotations["standard_korean_text"] is str
     assert annotations["standard_validation"]
+
+
+def test_queries_preserve_all_new_machine_token_surfaces():
+    context = RequestContext(
+        request_reason="금액 -1,234.50 USD와 2026년 8월 10일",
+        requested_items=("수량 42개", "비율 -3.5%"),
+        deadline=date(2026, 8, 10),
+        submission_method="₩-10,000을 10kg 단위로 제출",
+    )
+    facts = ProtectedFacts.from_request_context(context)
+    queries = build_search_queries(context, facts)
+
+    new_token_surfaces = {
+        token.surface
+        for token in facts.machine_tokens
+        if token.surface in {
+            "-1,234.50",
+            "USD",
+            "2026년 8월 10일",
+            "42개",
+            "-3.5%",
+            "₩",
+            "-10,000",
+            "10kg",
+        }
+    }
+
+    assert new_token_surfaces
+    assert all(
+        token_surface in query.text
+        for query in queries
+        for token_surface in new_token_surfaces
+    )

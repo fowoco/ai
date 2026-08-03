@@ -192,8 +192,11 @@ class RequestContext(FrozenContract):
     def require_iso_date(cls, value: object) -> object:
         if isinstance(value, datetime):
             raise ValueError("deadline must be an ISO date, not datetime")
-        if isinstance(value, str) and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
-            raise ValueError("deadline must use YYYY-MM-DD")
+        if isinstance(value, str):
+            normalized = value.strip()
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", normalized):
+                raise ValueError("deadline must use YYYY-MM-DD")
+            return normalized
         return value
 
 
@@ -314,6 +317,28 @@ class LanguageAssistantOutput(FrozenContract):
             raise ValueError("successful easy Korean requires passed validation")
         if easy_status == "failed":
             raise ValueError("easy Korean must fall back with warning, not failed status")
+
+        has_standard_fallback_warning = any(
+            warning.code == WarningCode.STANDARD_KOREAN_FALLBACK
+            for warning in self.warnings
+        )
+        easy_matches_standard = self.easy_korean_text == self.standard_korean_text
+        if easy_status == "warning" and easy_validation.status == "not_run":
+            if not easy_matches_standard or not has_standard_fallback_warning:
+                raise ValueError(
+                    "no-candidate Easy fallback requires the standard text and warning"
+                )
+        if easy_status == "warning" and easy_matches_standard:
+            if easy_validation.status != "not_run" or not has_standard_fallback_warning:
+                raise ValueError(
+                    "a warning Easy candidate must differ from the Standard fallback"
+                )
+        if has_standard_fallback_warning and not (
+            easy_status == "warning"
+            and easy_validation.status == "not_run"
+            and easy_matches_standard
+        ):
+            raise ValueError("STANDARD_KOREAN_FALLBACK warning has inconsistent state")
 
         if self.translated_text is None:
             if translation_status != "failed":
