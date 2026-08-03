@@ -1,4 +1,5 @@
 import unicodedata
+from collections import Counter
 from datetime import date
 
 from app.agents.language.contracts import RequestContext
@@ -141,3 +142,39 @@ def test_protected_token_multiset_includes_source_paths():
     }
 
     assert unit_paths == {"request_reason", "requested_items[0]", "submission_method"}
+
+
+def test_protected_tokens_match_exact_counter_with_duplicate_occurrences():
+    context = RequestContext(
+        request_reason="금액 -1,234.50 USD와 -1,234.50 USD",
+        requested_items=("수량 42개와 42개", "비율 -3.5%"),
+        deadline=date(2026, 8, 10),
+        submission_method="₩-10,000을 10kg",
+    )
+
+    facts = ProtectedFacts.from_request_context(context)
+    expected = Counter(
+        {
+            ("amount", "request_reason", "-1,234.50", "-1234.50"): 2,
+            ("currency", "request_reason", "USD", "USD"): 2,
+            ("number", "requested_items[0]", "42", "42"): 2,
+            ("unit", "requested_items[0]", "42개", "42개"): 2,
+            ("unit", "requested_items[1]", "-3.5%", "-3.5%"): 1,
+            ("date", "deadline", "2026-08-10", "2026-08-10"): 1,
+            ("currency", "submission_method", "₩", "₩"): 1,
+            ("amount", "submission_method", "-10,000", "-10000"): 1,
+            ("number", "submission_method", "10", "10"): 1,
+            ("unit", "submission_method", "10kg", "10kg"): 1,
+        }
+    )
+    observed = Counter(
+        (
+            token.kind,
+            token.source_path,
+            token.surface,
+            token.canonical_value,
+        )
+        for token in facts.machine_tokens
+    )
+
+    assert observed == expected

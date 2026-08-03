@@ -1,4 +1,5 @@
 import inspect
+from collections import Counter
 from datetime import date
 
 from app.agents.language.contracts import RequestContext
@@ -128,3 +129,27 @@ def test_queries_preserve_all_new_machine_token_surfaces():
         for query in queries
         for token_surface in new_token_surfaces
     )
+
+
+def test_each_query_preserves_machine_token_surface_and_canonical_counts():
+    context = RequestContext(
+        request_reason="금액 -1,234.50 USD와 -1,234.50 USD",
+        requested_items=("수량 42개와 42개", "비율 -3.5%"),
+        deadline=date(2026, 8, 10),
+        submission_method="₩-10,000을 10kg",
+    )
+    facts = ProtectedFacts.from_request_context(context)
+    queries = build_search_queries(context, facts)
+    expected = Counter(
+        (token.surface, token.canonical_value) for token in facts.machine_tokens
+    )
+
+    for query in queries:
+        observed = Counter()
+        for (surface, canonical_value), count in expected.items():
+            observed[(surface, canonical_value)] = min(
+                query.text.count(surface),
+                query.text.count(canonical_value),
+                count,
+            )
+        assert observed == expected
