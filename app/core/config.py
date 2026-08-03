@@ -38,8 +38,18 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_model: str | None = None
 
+    # Knowledge — true일 때만 fowoco-knowledge 규칙을 Analyses에 연결
+    knowledge_enabled: bool = False
+    knowledge_root: str | None = None
 
-# Settings 싱글톤을 반환한다
+    # Supervisor — rules(기본) | llm(FOWOCO_LLM_* 필요, 실패 시 rules 폴백)
+    supervisor_mode: str = "rules"
+
+    # Server ↔ AI Internal 호출용 Bearer (#8). 비우면 로컬에서 인증 생략
+    internal_api_token: str | None = None
+
+
+# Settings 싱글톤을 반환
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

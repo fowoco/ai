@@ -1,0 +1,13 @@
+---
+description: Prefer short Korean # comments on modules, classes, and functions
+alwaysApply: true
+---
+# Code comments
+
+When adding or editing Python (and similar) code in this repo:
+
+- Prefer `#` one-line comments over `"""` docstrings for modules, classes, and functions/methods.
+- Put the `#` comment **immediately above** the module top / `class` / `def`.
+- Keep comments to **one short line**; explain *what/why*, not a restatement of the code.
+- Korean, noun-style preferred (avoid long `~한다` sentences).
+- Do not leave new public helpers uncommented.
