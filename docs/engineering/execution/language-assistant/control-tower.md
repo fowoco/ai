@@ -85,9 +85,9 @@
 - post-merge schema diff: unchanged, exit `0`
 - post-merge `git diff --check`: exit `0`
 - post-merge central worktree: clean
-- S1 re-review: required against the post-repair integrated SHA; not started
-- User Gate: not started
-- W2: blocked until S1 re-review and user `진행`
+- S1 re-review: was required at this historical checkpoint; completed later in the S1 Conditional T03 Reconciliation Integration record below
+- User Gate: not started at this historical checkpoint
+- W2: remained blocked at this historical checkpoint; current User Gate status is recorded below
 
 ## S1 Conditional T03 Reconciliation Integration
 
