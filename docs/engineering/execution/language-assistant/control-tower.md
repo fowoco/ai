@@ -5,7 +5,7 @@
 - Integration branch: `feat/language-assistant`
 - Execution protocol: `docs/engineering/specs/2026-08-02-language-assistant-control-tower-design.md`
 - Current wave: `W1`
-- Current gate: `S1 re-review`
+- Current gate: `User Gate`
 - State: `active`
 - Maximum concurrent builders: `2`
 
@@ -85,9 +85,9 @@
 - post-merge schema diff: unchanged, exit `0`
 - post-merge `git diff --check`: exit `0`
 - post-merge central worktree: clean
-- S1 re-review: was required at this historical checkpoint; the repair-branch verification below did not replace the required post-merge S1 review
+- S1 re-review: was not started at this historical checkpoint; it was completed on the conditional repair branch before integration
 - User Gate: not started at this historical checkpoint
-- W2: remained blocked at this historical checkpoint; the post-merge S1 review and User Gate remain pending
+- W2: remained blocked at this historical checkpoint; the current User Gate status is recorded below
 
 ## S1 Conditional T03 Reconciliation Integration
 
@@ -95,8 +95,8 @@
 - repair branch: `repair/la-s1-conditional-t03`
 - repair implementation SHA: `8e90db88d0093423477840242b0e835917126fba`
 - reconciliation Evidence SHA: `e63f4c793c214bcd417de1c592eca2c36aed83c1`
-- repair verification target: `e63f4c793c214bcd417de1c592eca2c36aed83c1`
-- repair verification: `APPROVED` (verifier session identifier was not included in the supplied report)
+- S1 review target: `e63f4c793c214bcd417de1c592eca2c36aed83c1`
+- S1 review: `APPROVED` (review session identifier was not included in the supplied report)
 - pre-merge central HEAD: `0364d957ae508ecaecdb35de70fc268d0022e6e3`
 - merge SHA: `ed9135c78661c2e9dafc8ce23abedf327a89f533`
 - integrated code SHA: `ed9135c78661c2e9dafc8ce23abedf327a89f533`
@@ -108,9 +108,9 @@
 - post-merge `git diff --check`: exit `0`
 - post-merge central worktree: clean before this CT ledger update
 - fallback provenance: deferred to the T11 Graph assembly acceptance criteria; contracts/formatting were intentionally not coupled
-- final S1 re-review: required against the post-merge central SHA; not started
-- User Gate: not started
-- W2: blocked until final S1 re-review is approved and the user records `진행`
+- S1 completion: the approved repair SHA was integrated with `--no-ff` and passed post-merge replay; no duplicate post-merge S1 review is required
+- User Gate: pending
+- W2: blocked until the user records `진행`
 
 ## T01 Verification Attempts
 
