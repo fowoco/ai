@@ -27,18 +27,27 @@ def build_search_queries(
     reason = protected_facts.request_reason
     deadline = protected_facts.deadline.isoformat()
     method = protected_facts.submission_method
+    canonical_values = ", ".join(
+        token.canonical_value
+        for token in protected_facts.machine_tokens
+        if token.canonical_value != token.surface
+    )
+    canonical_suffix = f"; 정규 보호값 {canonical_values}" if canonical_values else ""
     queries = (
         (
             "canonical",
-            f"요청 목적 {reason}; 자료 {items}; 기한 {deadline}; 방법 {method}",
+            f"요청 목적 {reason}; 자료 {items}; 기한 {deadline}; 방법 {method}"
+            f"{canonical_suffix}",
         ),
         (
             "reason_items",
-            f"요청 목적 {reason}; 자료 {items}; 방법 {method}; 기한 {deadline}",
+            f"요청 목적 {reason}; 자료 {items}; 방법 {method}; 기한 {deadline}"
+            f"{canonical_suffix}",
         ),
         (
             "action_deadline",
-            f"기한 {deadline}; 방법 {method}; 요청 목적 {reason}; 자료 {items}",
+            f"기한 {deadline}; 방법 {method}; 요청 목적 {reason}; 자료 {items}"
+            f"{canonical_suffix}",
         ),
     )
     for _, text in queries:
