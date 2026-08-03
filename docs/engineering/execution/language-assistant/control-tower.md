@@ -71,7 +71,7 @@
 
 - repair id: `S1-REPAIR-T01-T03`
 - merge SHA: `e6eb0f463458970b6c991415ffe93595461f6477`
-- integrated SHA: `pending ledger record`
+- integrated SHA: `f4480467d67ec4bd1c9ea51cfdef02decc744eac`
 - effective implementation SHA: `f00b9e5b6a9418488c39bf6d055860ccdab3cca4`
 - effective Evidence SHA: `a7940d01895585e627e6fdd73fc7404bfa1f179f`
 - central HEAD at merge: `e6eb0f463458970b6c991415ffe93595461f6477`
