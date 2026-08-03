@@ -47,6 +47,15 @@
 - T04 worktree status: `clean` at packet SHA; Builder session assignment pending
 - T04 implementation, Evidence, independent verification, merge, and S2 review: pending
 
+## Remote Push Policy — Effective W2
+
+- Task Builder worktrees and Task branches remain local during implementation.
+- W2 local integrations and pre-S2 verification do not push to `origin`.
+- The central `feat/language-assistant` branch may be pushed only after S2 returns `APPROVED` and the user records `진행`.
+- A `conditional`, `reject`, or incomplete S2 review keeps the work local for repair or re-verification.
+- The existing remote update that opened W2 is historical; this policy applies from the next W2 task change onward.
+- The final `feat/language-assistant → develop` PR remains gated by S5 and the user's final approval.
+
 ## T0 Record
 
 - Docs commit: `c2a6a716d05e5d420b95b3f580973c15a497986e`
