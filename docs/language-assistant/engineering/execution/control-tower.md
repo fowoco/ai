@@ -4,8 +4,8 @@
 
 - Integration branch: `feat/language-assistant`
 - Execution protocol: `docs/language-assistant/engineering/specs/2026-08-02-language-assistant-control-tower-design.md`
-- Current wave: `W1`
-- Current gate: `User Gate`
+- Current wave: `W2`
+- Current gate: `T04 Task Packet`
 - State: `active`
 - Maximum concurrent builders: `2`
 
@@ -25,8 +25,26 @@
 - post-sync whole-repository Ruff: exit `1`, `123 errors` in the existing broader repository baseline
 - post-sync schema hashes: input `de356f84e6be665e97aa15578827dba909e4dbc72407f9e638df7ff1a1ce49ac`, output `6fc746446196a47bf594157d75cb45f3f60cc8633bf98b662a59ccf0eb9b326d`
 - post-sync `git diff --check`: exit `0`
-- User Gate: pending
-- W2: not opened
+- User Gate: `proceed` (`진행`, 2026-08-04)
+- W2: `opened` at integrated SHA `f13487f540fed74cd336be4aa9df5802aedf7a57`
+
+## W2 Opening — User Gate and T04
+
+- S1 review status: `APPROVED` and integrated into `feat/language-assistant`
+- integrated base SHA: `f13487f540fed74cd336be4aa9df5802aedf7a57`
+- User Gate decision: `진행`
+- decision date: `2026-08-04`
+- W2 status: `opened`
+- execution order: `T04 → T05 → T06`
+- Sol Gate: `S2` after T06 verification and integration
+- T04 status: `ready`
+- T04 title: Retrieval domain models, ports, and deterministic cross-query RRF
+- T04 task branch: `task/la-t04-retrieval-domain`
+- T04 worktree: `/Users/parktaejung/Desktop/workspace/ai-language-assistant-t04-retrieval-domain`
+- T04 base SHA: `f13487f540fed74cd336be4aa9df5802aedf7a57`
+- T04 Packet: `docs/language-assistant/engineering/execution/tasks/T04-RETRIEVAL-DOMAIN.md`
+- T04 packet SHA: recorded after the docs-only sealing commit
+- T04 implementation, Evidence, independent verification, merge, and S2 review: pending
 
 ## T0 Record
 
@@ -44,7 +62,7 @@
 | T01 | Domain contracts | integrated | T0 | `cd3fabbfbf6e996f3ef1d068804e04cc9f85e07a` | `task/la-t01-domain-contracts` | `536dc6a36c66bdfe6346482748672b0882cb7c41` | `42f429cd67fbecaf5cff41eef22e2389f8d8ad60` | `cb3fd9812aff1bd299d6e498e23ebc44315aa453` | `ffc229fe2c87298074f94a5c3acd59c3a243db36` | `63e2262d81eea8cd414f2ca57c392d9e5eee0832` | Hume / `019fc0ed-3801-7061-9d76-34cfc22f5e5f` | S1 | proceed | S1 review, user Gate, T02/T03, HTTP/LangGraph/provider/Qdrant/model production behavior, merge-after behavior, G1-G7 |
 | T02 | Language normalization | integrated | T01 | `bbba26e67fa392b0691f397df162ce07292c7932` | `task/la-t02-language-normalization` | `e41f66dbee21d6c9bb63d685882b1645de7a730b` | `5acaecb961ffbcaa56db80f21fa4571061f6c158` | `e91bb957ba347ad507009659caf5682842c900ef` | `550fc47c329f2d049985df9ec552d981cbf53aaf` | `550fc47c329f2d049985df9ec552d981cbf53aaf` | Lorentz / `019fc15d-d0ff-76f0-bec3-d315d78f2497` | S1 | proceed | S1 review, user Gate, T04 onward, HTTP/LangGraph/provider/Qdrant/model production behavior, G1-G7 |
 | T03 | Facts and queries | integrated | T01 | `13d088a7924f837b3c7caf476f62153bee903f2b` | `task/la-t03-facts-and-queries` | `6ac7477701a01b02dcbd0cfe0320dd92bce7f8e7` | `c18490c52830627ef8d126e84689f74e01c48a54` | `ae836ab2cd0c9ba4b4aabe1816c63fe5a6826d5f` | `2ddb84cc3600fe2b7cd03577e5fa364174f19133` | `2ddb84cc3600fe2b7cd03577e5fa364174f19133` | Mill / `019fc180-ff45-76c0-ba48-813dee29f5d9` | S1 | proceed | S1 review, user Gate, T04 onward, HTTP/LangGraph/provider/Qdrant/model production behavior, G1-G7 |
-| T04 | Retrieval domain | pending | T02,T03 | — | `task/la-t04-retrieval-domain` | — | — | — | — | — | — | S2 | — | — |
+| T04 | Retrieval domain | ready | T02,T03 | `f13487f540fed74cd336be4aa9df5802aedf7a57` | `task/la-t04-retrieval-domain` | pending | — | — | — | — | — | S2 | proceed | implementation, Evidence, independent verification, merge, T05/T06, S2, external Qdrant/EPS/provider/G1-G7 |
 | T05 | EPS index plan | pending | T02,T04 | — | `task/la-t05-eps-index-plan` | — | — | — | — | — | — | S2 | — | — |
 | T06 | Hybrid retrieval | pending | T04,T05 | — | `task/la-t06-hybrid-retrieval` | — | — | — | — | — | — | S2 | — | — |
 | T07 | Generation resources | pending | T01,T04,S2 | — | `task/la-t07-generation-resources` | — | — | — | — | — | — | S3 | — | — |
