@@ -3,7 +3,7 @@
 ## Authority
 
 - Integration branch: `feat/language-assistant`
-- Execution protocol: `docs/engineering/specs/2026-08-02-language-assistant-control-tower-design.md`
+- Execution protocol: `docs/language-assistant/engineering/specs/2026-08-02-language-assistant-control-tower-design.md`
 - Current wave: `W1`
 - Current gate: `User Gate`
 - State: `active`
@@ -47,7 +47,7 @@
 - base SHA: `2ce75957e1ba9bcb0af74a259eb5d959d4b57a6f`
 - task branch: `repair/la-t01-t03-s1`
 - worktree: `/Users/parktaejung/Desktop/workspace/ai-language-assistant-repair-t01-t03`
-- Packet: `docs/engineering/execution/language-assistant/tasks/S1-REPAIR-T01-T03.md`
+- Packet: `docs/language-assistant/engineering/execution/tasks/S1-REPAIR-T01-T03.md`
 - scope: T01 deadline/fallback contracts and tests; T03 signed amount, currency, quantity unit, Korean-date tokenization, Query preservation, and tests
 - existing implementation/evidence/verifier SHA: immutable; no prior Evidence Pack is rewritten
 - `control-tower.md`: CT-only; repair branch must not modify it
@@ -119,7 +119,7 @@
 
 ## T03 Evidence and Verification
 
-- Evidence Pack: `docs/engineering/execution/language-assistant/evidence/T03-EVIDENCE.md`
+- Evidence Pack: `docs/language-assistant/engineering/execution/evidence/T03-EVIDENCE.md`
 - Evidence SHA: `ae836ab2cd0c9ba4b4aabe1816c63fe5a6826d5f`
 - Implementation SHA: `c18490c52830627ef8d126e84689f74e01c48a54`
 - Packet SHA: `6ac7477701a01b02dcbd0cfe0320dd92bce7f8e7`
