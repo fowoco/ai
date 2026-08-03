@@ -5,7 +5,7 @@
 - Integration branch: `feat/language-assistant`
 - Execution protocol: `docs/engineering/specs/2026-08-02-language-assistant-control-tower-design.md`
 - Current wave: `W1`
-- Current gate: `S1 repair`
+- Current gate: `S1 re-review`
 - State: `active`
 - Maximum concurrent builders: `2`
 
@@ -53,6 +53,7 @@
 - `control-tower.md`: CT-only; repair branch must not modify it
 - implementation SHA: `f00b9e5b6a9418488c39bf6d055860ccdab3cca4`
 - evidence SHA: `a7940d01895585e627e6fdd73fc7404bfa1f179f`
+- integration status: `integrated`
 - Luna verifier: Schrodinger / `019fc6be-b043-7861-a282-402fad46dd3b` — `APPROVED`
 - implementation commit: `fix: T01 T03 경계 보수 구현`
 - evidence commit: `docs: S1 T01 T03 보수 Evidence 기록`
@@ -63,8 +64,30 @@
   - changed-area Ruff: `RUFF_CACHE_DIR=/private/tmp/la-s1-repair-ruff-cache .venv/bin/ruff check app/agents/language/contracts.py app/agents/language/protected_facts.py app/agents/language/queries.py tests/agents/language/test_contracts.py tests/agents/language/test_protected_facts.py tests/agents/language/test_queries.py` → exit `0`, `All checks passed!`
   - Luna replay: repair worktree lacked `.venv`; exact relative commands returned exit `127`, equivalent commands using `/Users/parktaejung/Desktop/workspace/ai-language-assistant/.venv/bin/` returned T01 `36 passed`, T03 `17 passed`, full `183 passed`, Ruff passed
   - scope/schema: `git diff --exit-code -- docs/contracts` and `git diff --check` → exit `0`; repair worktree clean at evidence SHA
-- unverified: HTTP/API, LangGraph runtime, Qdrant, EPS ingest/retrieval, external LLM/provider, production configuration, external G1–G7, S1 re-review, user Gate, repair merge, and W2
-- stop: after repair Evidence Pack and independent verification; no S1 re-review, W2 opening, or repair merge in this session
+- unverified: HTTP/API, LangGraph runtime, Qdrant, EPS ingest/retrieval, external LLM/provider, production configuration, external G1–G7, S1 re-review, user Gate, and W2
+- historical stop: repair Evidence Pack and independent verification were completed before the repair merge; S1 re-review and W2 opening remained closed at that point
+
+## S1 Repair Integration Replay
+
+- repair id: `S1-REPAIR-T01-T03`
+- merge SHA: `e6eb0f463458970b6c991415ffe93595461f6477`
+- integrated SHA: `pending ledger record`
+- effective implementation SHA: `f00b9e5b6a9418488c39bf6d055860ccdab3cca4`
+- effective Evidence SHA: `a7940d01895585e627e6fdd73fc7404bfa1f179f`
+- central HEAD at merge: `e6eb0f463458970b6c991415ffe93595461f6477`
+- merge method: `--no-ff`
+- repair branch: `repair/la-t01-t03-s1`
+- post-merge focused T01: `36 passed`, exit `0`
+- post-merge focused T03: `17 passed`, exit `0`
+- post-merge full test: `183 passed`, exit `0`, one non-failing cache warning
+- post-merge changed-area Ruff: `All checks passed!`, exit `0`
+- post-merge whole-repository Ruff: exit `1`, existing baseline `113 errors`
+- post-merge schema diff: unchanged, exit `0`
+- post-merge `git diff --check`: exit `0`
+- post-merge central worktree: clean
+- S1 re-review: required against the post-repair integrated SHA; not started
+- User Gate: not started
+- W2: blocked until S1 re-review and user `진행`
 
 ## T01 Verification Attempts
 
