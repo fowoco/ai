@@ -1,0 +1,25 @@
+﻿{
+  "requestId": "req-renewal-003",
+  "taskId": "task-abc123",
+  "intent": "EXPIRY_RENEWAL",
+  "workflowId": "WF-STY-001",
+  "confidence": 0.8,
+  "status": "NEEDS_INFO",
+  "outcome": "NEEDS_INFO",
+  "scenario": "ask_hr",
+  "slots": {
+    "worker_id": "WRK-001",
+    "stay_expiry_date": "2026-12-31",
+    "passport_number": "P-STUB-0001",
+    "alien_registration_number": "000000-0000000",
+    "nationality": "VN",
+    "full_name": "STUB WORKER",
+    "date_of_birth": "1990-01-01"
+  },
+  "missingSlots": ["wage", "working_hours", "job_description", "work_location", "lodging", "contract_period"],
+  "guideMessage": "재갱신에 필요한 정보가 부족합니다. 다음 항목을 입력해 주세요: wage, working_hours, job_description, work_location, lodging, contract_period",
+  "workerRequestMessage": null,
+  "ocrResult": null,
+  "generatedDocuments": [],
+  "errors": []
+}

@@ -1,4 +1,4 @@
-# FOWOCO AI Agent Server
+﻿# FOWOCO AI Agent Server
 
 FastAPI 기반 자연어 업무 처리 및 문서 생성·변환 서버다. 문서 처리는 한컴오피스,
 COM, `win32com`, `pywin32` 없이 Linux Docker 환경에서 동작한다.
@@ -37,16 +37,36 @@ docker compose down
 
 ```text
 app/
-├─ agents/       자연어 의도 분석, 값 추출, 누락 정보 확인
-├─ api/          FastAPI Internal API, 요청·응답과 서비스 조립
-├─ documents/    HWP/HWPX/XML/PDF 처리, 편집, 변환, 스냅샷
-└─ core/         환경설정 등 공통 기반
+├─ agents/
+│  ├─ intent/            Analyses Intent·슬롯
+│  ├─ ambiguity/         모호성·누락 판단
+│  ├─ workflow/          Knowledge Catalog 조회
+│  ├─ workflow_graph/    재갱신 LangGraph 오케스트레이션
+│  ├─ language/          Language 노드 (구현 예정)
+│  ├─ pipeline.py        Analyses 파이프라인
+│  └─ slot_catalog.py    슬롯 카탈로그
+├─ api/
+│  ├─ routes/            analyses · workflows · documents
+│  ├─ schemas/           요청·응답 모델
+│  ├─ dependencies.py    서비스·변환기 조립
+│  └─ router.py          `/api/v1` 라우터
+├─ db/                   worker/company 조회·신분 슬롯 저장
+├─ documents/
+│  ├─ common/            포맷 enum·감지
+│  ├─ editing/           HWP/HWPX 편집·생성 facade
+│  ├─ hwp5/ · hwpx/      포맷별 편집·템플릿
+│  ├─ conversion/        변환기·외부 엔진
+│  ├─ records/           TXT/DB 레코드 → XML 기입
+│  ├─ snapshots/         XML 왕복 스냅샷
+│  └─ xml/               XML 전용 확장 위치
+└─ core/                 환경설정 등 공통 기반
 ```
 
 의존 방향은 다음 원칙을 따른다.
 
 ```text
-Server → API → agents
+Server → API → agents (workflow_graph)
+             ├→ db
              └→ documents
 ```
 
@@ -58,6 +78,18 @@ Server → API → agents
 
 - [Internal API 안내](app/api/README.md)
 - [문서 처리 아키텍처](app/documents/README.md)
+- [재갱신 워크플로 노드 통합](app/agents/workflow_graph/README.md)
+
+## Analyses / Workflows
+
+```text
+POST /internal/v1/analyses
+POST /internal/v1/workflows/renewal/run
+```
+
+- Analyses: 재갱신 고정 Intent + Catalog 필수슬롯·Knowledge 모호표현 ([docs/analyses-contract.md](docs/analyses-contract.md))
+- Workflows: 재갱신 LangGraph — 슈퍼바이저 → 안내문(태정) / OCR(주현) / 초안 4종 — [docs/workflows-contract.md](docs/workflows-contract.md)
+- 최종 흐름도: [app/agents/workflow_graph/README.md](app/agents/workflow_graph/README.md)
 
 ## 문서 API
 

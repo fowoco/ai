@@ -1,0 +1,10 @@
+{
+  "requestId": "req-renewal-002",
+  "instruction": "체류기간 ?�장 갱신",
+  "workerId": "worker-001",
+  "taskId": "task-abc123",
+  "documents": [
+    {"documentType": "passport", "filename": "pass.jpg"},
+    {"documentType": "alien_registration", "filename": "arc.jpg"}
+  ]
+}
