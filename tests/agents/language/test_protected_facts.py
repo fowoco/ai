@@ -80,3 +80,64 @@ def test_protected_facts_normalize_unicode_to_nfc():
 
     assert facts.request_reason == unicodedata.normalize("NFC", decomposed)
     assert facts.request_reason == "안녕"
+
+
+def test_protected_tokens_preserve_signed_amount_currency_and_units():
+    context = RequestContext(
+        request_reason="금액 -1,234.50 USD, ₩-10,000, 100만원, 비율 -3.5%",
+        requested_items=("수량 42개", "무게 10kg"),
+        deadline=date(2026, 8, 10),
+        submission_method="KRW로 42개 제출",
+    )
+
+    facts = ProtectedFacts.from_request_context(context)
+    token_values = {
+        (token.kind, token.surface, token.canonical_value)
+        for token in facts.machine_tokens
+    }
+
+    assert ("amount", "-1,234.50", "-1234.50") in token_values
+    assert ("amount", "-10,000", "-10000") in token_values
+    assert ("currency", "USD", "USD") in token_values
+    assert ("currency", "KRW", "KRW") in token_values
+    assert ("currency", "₩", "₩") in token_values
+    assert ("currency", "만원", "만원") in token_values
+    assert ("unit", "-3.5%", "-3.5%") in token_values
+    assert ("unit", "42개", "42개") in token_values
+    assert ("unit", "10kg", "10kg") in token_values
+
+
+def test_protected_tokens_canonicalize_korean_dates():
+    context = RequestContext(
+        request_reason="방문일은 2026년 8월 10일입니다.",
+        requested_items=("여권",),
+        deadline=date(2026, 8, 10),
+        submission_method="이메일",
+    )
+
+    facts = ProtectedFacts.from_request_context(context)
+
+    assert any(
+        token.kind == "date"
+        and token.surface == "2026년 8월 10일"
+        and token.canonical_value == "2026-08-10"
+        for token in facts.machine_tokens
+    )
+
+
+def test_protected_token_multiset_includes_source_paths():
+    context = RequestContext(
+        request_reason="수량 42개",
+        requested_items=("수량 42개",),
+        deadline=date(2026, 8, 10),
+        submission_method="수량 42개 제출",
+    )
+
+    facts = ProtectedFacts.from_request_context(context)
+    unit_paths = {
+        token.source_path
+        for token in facts.machine_tokens
+        if token.kind == "unit" and token.surface == "42개"
+    }
+
+    assert unit_paths == {"request_reason", "requested_items[0]", "submission_method"}

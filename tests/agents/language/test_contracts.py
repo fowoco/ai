@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 import pytest
@@ -86,6 +86,39 @@ def test_accepts_structured_request_context() -> None:
 
     assert value.request_context.requested_items == ("여권 사본", "외국인등록증")
     assert value.request_context.deadline == date(2026, 8, 10)
+
+
+def test_accepts_deadline_with_surrounding_whitespace() -> None:
+    value = LanguageAssistantInput.model_validate(
+        input_data(
+            request_context={
+                **input_data()["request_context"],
+                "deadline": "  2026-08-10  ",
+            }
+        )
+    )
+
+    assert value.request_context.deadline == date(2026, 8, 10)
+
+
+@pytest.mark.parametrize("deadline", [datetime(2026, 8, 10), "2026-08-10T00:00:00"])
+def test_rejects_datetime_objects_and_datetime_strings(deadline: object) -> None:
+    with pytest.raises(ValidationError):
+        LanguageAssistantInput.model_validate(
+            input_data(request_context={**input_data()["request_context"], "deadline": deadline})
+        )
+
+
+def test_rejects_invalid_calendar_dates() -> None:
+    with pytest.raises(ValidationError):
+        LanguageAssistantInput.model_validate(
+            input_data(
+                request_context={
+                    **input_data()["request_context"],
+                    "deadline": "2026-02-30",
+                }
+            )
+        )
 
 
 @pytest.mark.parametrize("field", ["source_text", "message_context"])
@@ -322,6 +355,115 @@ def test_easy_standard_fallback_requires_not_run_validation_and_warning_status()
     )
 
     assert value.easy_korean_text == value.standard_korean_text
+
+
+def fallback_output_data(**overrides: Any) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        "generation_status": "warning",
+        "requires_human_review": True,
+        "easy_korean_text": "표준 요청",
+        "component_status": {
+            "standard_korean": "success",
+            "easy_korean": "warning",
+            "translation": "success",
+        },
+        "validation": {
+            "standard_korean": validation(),
+            "easy_korean": validation("not_run"),
+            "translation": validation(),
+        },
+        "warnings": (
+            WarningItem(
+                component="easy_korean",
+                code=WarningCode.STANDARD_KOREAN_FALLBACK,
+                message="쉬운 한국어 후보가 없어 일반 한국어를 사용했습니다.",
+            ),
+        ),
+    }
+    data.update(overrides)
+    return output_data(**data)
+
+
+def test_easy_standard_fallback_rejects_changed_text() -> None:
+    with pytest.raises(ValidationError):
+        LanguageAssistantOutput.model_validate(
+            fallback_output_data(easy_korean_text="임의로 바꾼 fallback")
+        )
+
+
+def test_easy_standard_fallback_requires_fallback_warning() -> None:
+    with pytest.raises(ValidationError):
+        LanguageAssistantOutput.model_validate(fallback_output_data(warnings=()))
+
+
+def test_easy_warning_with_last_candidate_is_not_fallback() -> None:
+    value = LanguageAssistantOutput.model_validate(
+        output_data(
+            generation_status="warning",
+            requires_human_review=True,
+            easy_korean_text="쉬운 후보",
+            component_status={
+                "standard_korean": "success",
+                "easy_korean": "warning",
+                "translation": "success",
+            },
+            validation={
+                "standard_korean": validation(),
+                "easy_korean": validation(
+                    "inconclusive",
+                    inconclusive_checks=("facts.no_semantic_addition",),
+                ),
+                "translation": validation(),
+            },
+            warnings=(
+                WarningItem(
+                    component="easy_korean",
+                    code=WarningCode.SEMANTIC_VALIDATION_INCONCLUSIVE,
+                    message="쉬운 한국어 의미 검증이 완료되지 않았습니다.",
+                ),
+            ),
+        )
+    )
+
+    assert value.easy_korean_text != value.standard_korean_text
+
+
+def test_easy_warning_with_matching_text_requires_fallback_state() -> None:
+    with pytest.raises(ValidationError):
+        LanguageAssistantOutput.model_validate(
+            output_data(
+                generation_status="warning",
+                requires_human_review=True,
+                easy_korean_text="표준 요청",
+                component_status={
+                    "standard_korean": "success",
+                    "easy_korean": "warning",
+                    "translation": "success",
+                },
+                validation={
+                    "standard_korean": validation(),
+                    "easy_korean": validation(
+                        "inconclusive",
+                        inconclusive_checks=("facts.no_semantic_addition",),
+                    ),
+                    "translation": validation(),
+                },
+                warnings=(
+                    WarningItem(
+                        component="easy_korean",
+                        code=WarningCode.SEMANTIC_VALIDATION_INCONCLUSIVE,
+                        message="쉬운 한국어 의미 검증이 완료되지 않았습니다.",
+                    ),
+                ),
+            )
+        )
+
+
+def test_fallback_generation_status_requires_human_review() -> None:
+    with pytest.raises(ValidationError):
+        LanguageAssistantOutput.model_validate(
+            fallback_output_data(generation_status="success", requires_human_review=False)
+        )
 
 
 def test_output_schema_has_no_removed_fields() -> None:
