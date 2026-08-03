@@ -1,4 +1,4 @@
-﻿import tempfile
+import tempfile
 from functools import lru_cache
 from pathlib import Path
 
@@ -42,10 +42,13 @@ class Settings(BaseSettings):
     knowledge_enabled: bool = False
     knowledge_root: str | None = None
 
-    # Intent — fixed_expiry_renewal(기본) | keyword(레거시)
+    # Intent — fixed_expiry_renewal(기본) | keyword(레거시). 나중에 external 등 확장
     intent_mode: str = "fixed_expiry_renewal"
 
-    # Server ↔ AI Internal 호출용 Bearer. 비우면 로컬에서 인증 생략
+    # Supervisor — rules(기본) | llm(FOWOCO_LLM_* 필요, 실패 시 rules 폴백)
+    supervisor_mode: str = "rules"
+
+    # Server ↔ AI Internal 호출용 Bearer (#8). 비우면 로컬에서 인증 생략
     internal_api_token: str | None = None
 
 

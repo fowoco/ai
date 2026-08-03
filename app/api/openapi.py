@@ -1,6 +1,7 @@
 ﻿"""OpenAPI 태그 이름과 Swagger 표시 정보 관리"""
 
 ANALYSES_TAG = "Analyses"
+WORKFLOWS_TAG = "Workflows"
 DOCUMENT_CAPABILITIES_TAG = "Document Capabilities"
 DOCUMENT_TEMPLATES_TAG = "Document Templates"
 DOCUMENT_INSPECTION_TAG = "Document Inspection"
@@ -14,6 +15,13 @@ OPENAPI_TAGS_METADATA = [
         "description": (
             "Server가 호출하는 핵심 분석 API. "
             "analysisInput 지시문에서 Intent 분류, Slot 추출, 모호성 검사 수행"
+        ),
+    },
+    {
+        "name": WORKFLOWS_TAG,
+        "description": (
+            "재갱신 등 LangGraph 오케스트레이션 API. "
+            "담당자 입력(슬롯)·근로자 서류(OCR) 분기와 문서생성 stub 실행"
         ),
     },
     {

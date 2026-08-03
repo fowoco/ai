@@ -270,6 +270,7 @@ def test_openapi_exposes_separate_document_actions() -> None:
 
     assert [tag["name"] for tag in schema["tags"]] == [
         "Analyses",
+        "Workflows",
         "Document Capabilities",
         "Document Templates",
         "Document Inspection",
@@ -281,6 +282,10 @@ def test_openapi_exposes_separate_document_actions() -> None:
         (
             "Server가 호출하는 핵심 분석 API. "
             "analysisInput 지시문에서 Intent 분류, Slot 추출, 모호성 검사 수행"
+        ),
+        (
+            "재갱신 등 LangGraph 오케스트레이션 API. "
+            "담당자 입력(슬롯)·근로자 서류(OCR) 분기와 문서생성 stub 실행"
         ),
         "현재 서버에서 사용할 수 있는 문서 처리 기능과 변환 조합을 조회합니다.",
         "등록된 문서 템플릿 목록과 편집 가능한 필드를 조회합니다.",

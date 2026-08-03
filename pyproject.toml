@@ -1,4 +1,4 @@
-﻿[build-system]
+[build-system]
 requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
@@ -21,6 +21,7 @@ dependencies = [
   "ms-cfb==0.0.6",
   "Pillow>=11.3,<12",
   "hwp2hwpx==1.0.1",
+  "langgraph>=0.2,<1",
 ]
 
 [project.optional-dependencies]
@@ -41,9 +42,13 @@ include = ["app*"]
 "app.documents.hwpx.templates" = ["*.hwpx"]
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
+addopts = "-q"
 testpaths = ["tests"]
+asyncio_mode = "auto"
 
 [tool.ruff]
-line-length = 100
 target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]

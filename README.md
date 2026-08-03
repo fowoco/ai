@@ -1,4 +1,4 @@
-# FOWOCO AI Agent Server
+﻿# FOWOCO AI Agent Server
 
 FastAPI 기반 자연어 업무 처리 및 문서 생성·변환 서버다. 문서 처리는 한컴오피스,
 COM, `win32com`, `pywin32` 없이 Linux Docker 환경에서 동작한다.
@@ -37,8 +37,9 @@ docker compose down
 
 ```text
 app/
-├─ agents/       자연어 의도 분석, 값 추출, 누락 정보 확인
+├─ agents/       의도 분석, LangGraph 오케스트레이션, Language/OCR 노드
 ├─ api/          FastAPI Internal API, 요청·응답과 서비스 조립
+├─ db/           work/company 조회·신분 슬롯 저장 어댑터
 ├─ documents/    HWP/HWPX/XML/PDF 처리, 편집, 변환, 스냅샷
 └─ core/         환경설정 등 공통 기반
 ```
@@ -46,7 +47,8 @@ app/
 의존 방향은 다음 원칙을 따른다.
 
 ```text
-Server → API → agents
+Server → API → agents (workflow_graph)
+             ├→ db
              └→ documents
 ```
 
@@ -58,14 +60,18 @@ Server → API → agents
 
 - [Internal API 안내](app/api/README.md)
 - [문서 처리 아키텍처](app/documents/README.md)
+- [재갱신 워크플로 노드 통합](app/agents/workflow_graph/README.md)
 
+## Analyses / Workflows
 
-## Analyses
-
-\\	ext
+```text
 POST /internal/v1/analyses
-\
-- Intent·Slot·모호성 규칙 MVP ([docs/analyses-contract.md](docs/analyses-contract.md))
+POST /internal/v1/workflows/renewal/run
+```
+
+- Analyses: Intent·Slot·모호성 규칙 MVP ([docs/analyses-contract.md](docs/analyses-contract.md))
+- Workflows: 재갱신 LangGraph — 슈퍼바이저 → 안내문(태정) / OCR(주현) / 초안 4종 — [docs/workflows-contract.md](docs/workflows-contract.md)
+- 최종 흐름도: [app/agents/workflow_graph/README.md](app/agents/workflow_graph/README.md)
 
 ## 문서 API
 

@@ -1,0 +1,173 @@
+{
+  "requestId": "10000000-0000-0000-0000-000000000001",
+  "attemptId": "20000000-0000-0000-0000-000000000002",
+  "taskId": "50000000-0000-0000-0000-000000000001",
+  "intent": "EXPIRY_RENEWAL",
+  "workflowId": "WF-STY-001",
+  "confidence": 0.95,
+  "status": "READY_FOR_REVIEW",
+  "outcome": "REVIEW_REQUIRED",
+  "scenario": "generate",
+  "phase": "PHASE_3_EXTRACTION_DOCUMENT",
+  "step": "STEP_13_DOCUMENT_DRAFT",
+  "slots": {
+    "worker_id": "30000000-0000-0000-0000-000000000001",
+    "company_id": "40000000-0000-0000-0000-000000000001",
+    "display_name": "응웬반안",
+    "full_name": "NGUYEN VAN AN",
+    "nationality_code": "VN",
+    "nationality": "VN",
+    "preferred_language": "vi",
+    "work_status": "ACTIVE",
+    "stay_expiry_date": "2026-12-31",
+    "contract_start_date": "2026-01-01",
+    "contract_end_date": "2026-12-31",
+    "date_of_birth": "1990-03-15",
+    "passport_number": "M12345678",
+    "alien_registration_number": "900315-5123456",
+    "phone": "010-1234-5678",
+    "email": "worker@example.com",
+    "wage": "2500000",
+    "working_hours": "09:00-18:00",
+    "job_description": "제조",
+    "work_location": "경기도 안산시 단원구",
+    "lodging": "기숙사",
+    "contract_period": "12",
+    "employer_name": "김담당",
+    "business_number": "123-45-67890",
+    "enterprise_name": "포워코 제조",
+    "enterprise_phone": "031-123-4567",
+    "industry": "제조업"
+  },
+  "missingSlots": [],
+  "requestedFields": [],
+  "guideMessage": null,
+  "workerRequestMessage": null,
+  "ocrResult": null,
+  "generatedDocuments": [
+    {
+      "template_id": "standard_labor_contract_v6",
+      "name": "[별지 제6호서식] 표준근로계약서(Standard Labor Contract)(외국인근로자의 고용 등에 관한 법률 시행규칙)",
+      "format": "hwp",
+      "status": "stub",
+      "mapped_fields": [
+        "business_number",
+        "contract_months",
+        "employee_birthdate",
+        "employee_name",
+        "employer_name",
+        "enterprise_name",
+        "enterprise_phone",
+        "industry",
+        "job_description"
+      ]
+    },
+    {
+      "template_id": "employment_extension_application_v12_3",
+      "name": "[별지 제12호의3서식] 취업기간 만료자 취업활동 기간 연장신청서(외국인근로자의 고용 등에 관한 법률 시행규칙)",
+      "format": "hwp",
+      "status": "stub",
+      "mapped_fields": [
+        "business_number",
+        "business_type",
+        "employee_1_expiry_date",
+        "employee_1_name",
+        "employee_1_nationality",
+        "employee_1_passport_number",
+        "employee_1_resident_number",
+        "representative",
+        "workplace_address",
+        "workplace_name",
+        "workplace_phone"
+      ]
+    },
+    {
+      "template_id": "immigration_integrated_application_v34",
+      "name": "통합신청서(신고서)",
+      "format": "hwp",
+      "status": "stub",
+      "mapped_fields": [
+        "address_in_korea",
+        "annual_income",
+        "application_stay_extension",
+        "birth_day",
+        "birth_month",
+        "birth_year",
+        "current_business_number",
+        "current_workplace",
+        "current_workplace_phone",
+        "family_name",
+        "given_names",
+        "nationality",
+        "occupation",
+        "passport_number"
+      ]
+    },
+    {
+      "template_id": "identity_guaranty_v129",
+      "name": "신원보증서(한글)",
+      "format": "hwp",
+      "status": "stub",
+      "mapped_fields": [
+        "foreign_birthdate",
+        "foreign_korea_address",
+        "foreign_name",
+        "foreign_nationality",
+        "foreign_passport",
+        "foreign_phone",
+        "guarantor_name",
+        "guarantor_phone",
+        "relationship",
+        "stay_purpose",
+        "workplace",
+        "workplace_address"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "kind": "identity",
+      "detail": "passport+alien present in slots"
+    }
+  ],
+  "documentValidation": {
+    "passport": "present",
+    "alienRegistration": "present",
+    "combo": "both_present",
+    "missingIdentitySlots": []
+  },
+  "caseSignals": [
+    "GENERATE_DRAFTS",
+    "READY_FOR_REVIEW"
+  ],
+  "progressEvents": [
+    {
+      "phase": "PHASE_1_INTAKE_ANALYSIS",
+      "step": "STEP_2_INTENT_SLOT",
+      "message": "load_context: worker/company 조회",
+      "subgraph": "main"
+    },
+    {
+      "phase": "PHASE_1_INTAKE_ANALYSIS",
+      "step": "STEP_2_INTENT_SLOT",
+      "message": "Language 서브그래프: Intent·Slot 분석",
+      "subgraph": "language"
+    },
+    {
+      "phase": "PHASE_3_EXTRACTION_DOCUMENT",
+      "step": "STEP_13_DOCUMENT_DRAFT",
+      "message": "Supervisor→generate: 슬롯·서류 충분 → 초안 생성",
+      "subgraph": "supervisor"
+    },
+    {
+      "phase": "PHASE_3_EXTRACTION_DOCUMENT",
+      "step": "STEP_13_DOCUMENT_DRAFT",
+      "message": "Document 서브그래프: 초안 생성",
+      "subgraph": "document"
+    }
+  ],
+  "supervisorReason": "슬롯·서류 충분 → 초안 생성",
+  "supervisorSource": "rules",
+  "activeSubgraph": "document",
+  "errors": []
+}

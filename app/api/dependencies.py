@@ -1,4 +1,4 @@
-﻿# Cached application services injected into Internal API routes
+# Cached application services injected into Internal API routes
 
 from functools import lru_cache
 
@@ -12,7 +12,15 @@ from app.agents.knowledge_support import (
 )
 from app.agents.pipeline import AnalysisPipeline
 from app.agents.workflow import WorkflowAgent
+from app.agents.workflow_graph import RenewalOrchestrator
+from app.agents.workflow_graph.nodes.document_generator import (
+    EditingServiceDocumentGenerator,
+)
+from app.agents.workflow_graph.nodes.language_stub import StubLanguageNode
+from app.agents.workflow_graph.nodes.ocr_stub import StubOcrNode
+from app.agents.workflow_graph.task_store import InMemoryTaskStore
 from app.core.config import get_settings
+from app.db.memory import InMemoryDb
 from app.documents import (
     DocumentConversionService,
     DocumentEditingService,
@@ -61,26 +69,58 @@ def get_analysis_pipeline() -> AnalysisPipeline:
 
 
 @lru_cache
+# 재갱신 조회/저장용 인메모리 DB 싱글톤
+def get_in_memory_db() -> InMemoryDb:
+    return InMemoryDb()
+
+
+@lru_cache
+# 재갱신 태스크 재개용 인메모리 저장소
+def get_task_store() -> InMemoryTaskStore:
+    return InMemoryTaskStore()
+
+
+@lru_cache
+# 재갱신 LangGraph 오케스트레이터 싱글톤 (Language/OCR stub + 문서생성 훅)
+def get_renewal_orchestrator() -> RenewalOrchestrator:
+    db = get_in_memory_db()
+    return RenewalOrchestrator(
+        language_node=StubLanguageNode(intent_agent=get_intent_agent()),
+        ocr_node=StubOcrNode(),
+        lookup=db,
+        store=db,
+        document_generator=EditingServiceDocumentGenerator(
+            get_document_editing_service()
+        ),
+        task_store=get_task_store(),
+    )
+
+
+@lru_cache
 # Return one immutable-template registry per API worker process
 def get_hwp5_document_service() -> Hwp5DocumentService:
+
     return Hwp5DocumentService()
 
 
 @lru_cache
 # Return one HWPX template registry per API worker process
 def get_hwpx_document_service() -> HwpxDocumentService:
+
     return HwpxDocumentService()
 
 
 @lru_cache
 # Return the persistent package snapshot repository for this worker
 def get_document_snapshot_repository() -> DocumentSnapshotRepository:
+
     return DocumentSnapshotRepository(get_settings().document_snapshot_dir)
 
 
 @lru_cache
 # Return the format-dispatching document editor for this worker
 def get_document_editing_service() -> DocumentEditingService:
+
     return DocumentEditingService(
         get_hwp5_document_service(),
         get_hwpx_document_service(),
@@ -90,12 +130,14 @@ def get_document_editing_service() -> DocumentEditingService:
 @lru_cache
 # Return the TXT/DB-record rule-based document generator
 def get_document_record_generation_service() -> DocumentRecordGenerationService:
+
     return DocumentRecordGenerationService(get_hwpx_document_service())
 
 
 @lru_cache
 # Return the converter registry for one API worker process
 def get_document_conversion_service() -> DocumentConversionService:
+
     hwpx_service = get_hwpx_document_service()
     snapshot_repository = get_document_snapshot_repository()
     converters = [
@@ -150,5 +192,8 @@ __all__ = [
     "get_document_snapshot_repository",
     "get_hwp5_document_service",
     "get_hwpx_document_service",
+    "get_in_memory_db",
     "get_intent_agent",
+    "get_renewal_orchestrator",
+    "get_task_store",
 ]

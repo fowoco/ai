@@ -3,10 +3,12 @@
 ## Swagger 태그 구성
 
 문서 API의 URL은 `/api/v1/documents` 아래에 유지하고 Swagger UI에서는 기능별로
-다음 여섯 그룹을 분리한다.
+그룹을 분리한다. Internal 분석·워크플로 API는 `/internal/v1` 아래에 둔다.
 
 | Swagger 태그 | 엔드포인트 |
 |---|---|
+| Analyses | `POST /internal/v1/analyses` |
+| Workflows | `POST /internal/v1/workflows/renewal/run` |
 | Document Capabilities | `GET /api/v1/documents/capabilities` |
 | Document Templates | `GET /api/v1/documents/templates`, `GET /api/v1/documents/templates/{template_id}` |
 | Document Inspection | `POST /api/v1/documents/inspect` |
@@ -21,15 +23,6 @@
 `app/api`는 FastAPI 라우팅, 요청·응답 검증, 파일 전송, 문서 서비스 조립을 담당한다.
 실제 HWP/HWPX 편집이나 외부 변환 프로세스 실행 코드는 `app/documents`에 둔다.
 내부 문서 처리 방식은 [문서 처리 아키텍처](../documents/README.md)를 참고한다.
-
-
-## Analyses Internal API
-
-| 항목 | 주소 |
-|---|---|
-| 분석 실행 | \POST /internal/v1/analyses\ |
-
-계약: [analyses-contract.md](../../docs/analyses-contract.md)
 
 ## 진입점
 
