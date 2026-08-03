@@ -1,4 +1,4 @@
-import tempfile
+﻿import tempfile
 from functools import lru_cache
 from pathlib import Path
 
@@ -38,8 +38,18 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_model: str | None = None
 
+    # Knowledge — true일 때만 fowoco-knowledge 규칙을 Analyses에 연결
+    knowledge_enabled: bool = False
+    knowledge_root: str | None = None
 
-# Settings 싱글톤을 반환한다
+    # Intent — fixed_expiry_renewal(기본) | keyword(레거시)
+    intent_mode: str = "fixed_expiry_renewal"
+
+    # Server ↔ AI Internal 호출용 Bearer. 비우면 로컬에서 인증 생략
+    internal_api_token: str | None = None
+
+
+# Settings 싱글톤을 반환
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

@@ -1,7 +1,17 @@
-"""Cached application services injected into Internal API routes."""
+﻿# Cached application services injected into Internal API routes
 
 from functools import lru_cache
 
+from app.agents.ambiguity import AmbiguityAgent
+from app.agents.intent import IntentClassifier, build_intent_agent
+from app.agents.knowledge_support import (
+    load_ambiguity_patterns,
+    load_required_slots,
+    load_workflow_catalog,
+    try_get_repository,
+)
+from app.agents.pipeline import AnalysisPipeline
+from app.agents.workflow import WorkflowAgent
 from app.core.config import get_settings
 from app.documents import (
     DocumentConversionService,
@@ -23,30 +33,54 @@ from app.documents.snapshots import DocumentSnapshotRepository
 
 
 @lru_cache
-def get_hwp5_document_service() -> Hwp5DocumentService:
-    """Return one immutable-template registry per API worker process."""
+# 설정(intent_mode)에 맞는 Intent 분류기 싱글톤
+def get_intent_agent() -> IntentClassifier:
+    return build_intent_agent()
 
+
+@lru_cache
+# Analyses 파이프라인 싱글톤 (선택적 knowledge 연동)
+def get_analysis_pipeline() -> AnalysisPipeline:
+    settings = get_settings()
+    intent_agent = get_intent_agent()
+    if not settings.knowledge_enabled:
+        return AnalysisPipeline(intent_agent=intent_agent)
+
+    repository = try_get_repository(settings.knowledge_root)
+    if repository is None:
+        return AnalysisPipeline(intent_agent=intent_agent)
+
+    return AnalysisPipeline(
+        intent_agent=intent_agent,
+        ambiguity_agent=AmbiguityAgent(
+            required_slots=load_required_slots(repository),
+            ambiguity_patterns=load_ambiguity_patterns(repository),
+        ),
+        workflow_agent=WorkflowAgent(catalog=load_workflow_catalog(repository)),
+    )
+
+
+@lru_cache
+# Return one immutable-template registry per API worker process
+def get_hwp5_document_service() -> Hwp5DocumentService:
     return Hwp5DocumentService()
 
 
 @lru_cache
+# Return one HWPX template registry per API worker process
 def get_hwpx_document_service() -> HwpxDocumentService:
-    """Return one HWPX template registry per API worker process."""
-
     return HwpxDocumentService()
 
 
 @lru_cache
+# Return the persistent package snapshot repository for this worker
 def get_document_snapshot_repository() -> DocumentSnapshotRepository:
-    """Return the persistent package snapshot repository for this worker."""
-
     return DocumentSnapshotRepository(get_settings().document_snapshot_dir)
 
 
 @lru_cache
+# Return the format-dispatching document editor for this worker
 def get_document_editing_service() -> DocumentEditingService:
-    """Return the format-dispatching document editor for this worker."""
-
     return DocumentEditingService(
         get_hwp5_document_service(),
         get_hwpx_document_service(),
@@ -54,16 +88,14 @@ def get_document_editing_service() -> DocumentEditingService:
 
 
 @lru_cache
+# Return the TXT/DB-record rule-based document generator
 def get_document_record_generation_service() -> DocumentRecordGenerationService:
-    """Return the TXT/DB-record rule-based document generator."""
-
     return DocumentRecordGenerationService(get_hwpx_document_service())
 
 
 @lru_cache
+# Return the converter registry for one API worker process
 def get_document_conversion_service() -> DocumentConversionService:
-    """Return the converter registry for one API worker process."""
-
     hwpx_service = get_hwpx_document_service()
     snapshot_repository = get_document_snapshot_repository()
     converters = [
@@ -111,10 +143,12 @@ def get_document_conversion_service() -> DocumentConversionService:
 
 
 __all__ = [
+    "get_analysis_pipeline",
     "get_document_conversion_service",
     "get_document_editing_service",
     "get_document_record_generation_service",
     "get_document_snapshot_repository",
     "get_hwp5_document_service",
     "get_hwpx_document_service",
+    "get_intent_agent",
 ]

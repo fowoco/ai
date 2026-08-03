@@ -1,5 +1,6 @@
-"""OpenAPI 태그 이름과 Swagger 표시 정보를 관리한다."""
+﻿"""OpenAPI 태그 이름과 Swagger 표시 정보 관리"""
 
+ANALYSES_TAG = "Analyses"
 DOCUMENT_CAPABILITIES_TAG = "Document Capabilities"
 DOCUMENT_TEMPLATES_TAG = "Document Templates"
 DOCUMENT_INSPECTION_TAG = "Document Inspection"
@@ -8,6 +9,13 @@ DOCUMENT_GENERATION_TAG = "Document Generation"
 DOCUMENT_CONVERSION_TAG = "Document Conversion"
 
 OPENAPI_TAGS_METADATA = [
+    {
+        "name": ANALYSES_TAG,
+        "description": (
+            "Server가 호출하는 핵심 분석 API. "
+            "analysisInput 지시문에서 Intent 분류, Slot 추출, 모호성 검사 수행"
+        ),
+    },
     {
         "name": DOCUMENT_CAPABILITIES_TAG,
         "description": "현재 서버에서 사용할 수 있는 문서 처리 기능과 변환 조합을 조회합니다.",

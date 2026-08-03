@@ -59,6 +59,14 @@ Server → API → agents
 - [Internal API 안내](app/api/README.md)
 - [문서 처리 아키텍처](app/documents/README.md)
 
+
+## Analyses
+
+\\	ext
+POST /internal/v1/analyses
+\
+- Intent·Slot·모호성 규칙 MVP ([docs/analyses-contract.md](docs/analyses-contract.md))
+
 ## 문서 API
 
 문서 API는 책임별로 분리한다.

@@ -1,9 +1,10 @@
-from fastapi import FastAPI, Request
+﻿from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app import __version__
 from app.api.openapi import OPENAPI_TAGS_METADATA
 from app.api.router import api_router
+from app.api.routes.analyses import router as analyses_router
 from app.core.config import get_settings
 from app.documents.conversion import ConversionEngineUnavailableError
 
@@ -34,6 +35,8 @@ def create_app() -> FastAPI:
             content={"detail": str(exc)},
         )
 
+    # Server 계약: /internal/v1/* 는 /api/v1 prefix 없음
+    app.include_router(analyses_router)
     app.include_router(api_router, prefix="/api/v1")
     return app
 

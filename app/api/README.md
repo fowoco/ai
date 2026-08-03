@@ -22,6 +22,15 @@
 실제 HWP/HWPX 편집이나 외부 변환 프로세스 실행 코드는 `app/documents`에 둔다.
 내부 문서 처리 방식은 [문서 처리 아키텍처](../documents/README.md)를 참고한다.
 
+
+## Analyses Internal API
+
+| 항목 | 주소 |
+|---|---|
+| 분석 실행 | \POST /internal/v1/analyses\ |
+
+계약: [analyses-contract.md](../../docs/analyses-contract.md)
+
 ## 진입점
 
 | 항목 | 주소 |

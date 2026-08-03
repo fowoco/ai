@@ -1,4 +1,4 @@
-[build-system]
+﻿[build-system]
 requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
@@ -29,6 +29,8 @@ dev = [
   "pytest-asyncio>=0.25,<1",
   "ruff>=0.12,<1",
 ]
+# 로컬: pip install -e ../knowledge/fowoco-knowledge
+knowledge = []
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -39,13 +41,9 @@ include = ["app*"]
 "app.documents.hwpx.templates" = ["*.hwpx"]
 
 [tool.pytest.ini_options]
-addopts = "-q"
-testpaths = ["tests"]
 asyncio_mode = "auto"
+testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py311"
 line-length = 100
-
-[tool.ruff.lint]
-select = ["B", "E", "F", "I", "UP"]
+target-version = "py311"
