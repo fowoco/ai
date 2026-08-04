@@ -64,6 +64,7 @@ class Settings(BaseSettings):
             "clova_ocr_invoke_url": self.clova_ocr_invoke_url,
             "clova_ocr_secret": self.clova_ocr_secret,
             "database_url": self.database_url,
+            "internal_api_token": self.internal_api_token,
         }
         missing = [name for name, value in required.items() if not value]
         if missing:

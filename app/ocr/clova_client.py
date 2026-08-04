@@ -83,6 +83,12 @@ class ClovaTemplateOcrClient:
             raise ClovaProviderError("CLOVA returned an invalid response") from exc
         if not isinstance(decoded, Mapping):
             raise ClovaProviderError("CLOVA returned an invalid response")
+        images = decoded.get("images")
+        if isinstance(images, list) and any(
+            isinstance(image, Mapping) and image.get("inferResult") == "ERROR"
+            for image in images
+        ):
+            raise ClovaProviderError("CLOVA reported a recognition error")
         return dict(decoded)
 
     async def _read_response(self, response: httpx.Response) -> bytes:

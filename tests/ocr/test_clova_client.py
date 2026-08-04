@@ -128,3 +128,28 @@ async def test_invalid_json_object_response_is_rejected(response_content: bytes)
         )
         with pytest.raises(ClovaProviderError, match="invalid response"):
             await client.infer(sample_file(), (43019,), REQUEST_ID)
+
+
+@pytest.mark.asyncio
+async def test_http_success_with_inference_error_is_a_provider_failure() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "images": [
+                    {
+                        "inferResult": "ERROR",
+                        "message": "sensitive-provider-message",
+                    }
+                ]
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        client = ClovaTemplateOcrClient(
+            "https://example.invalid/infer", "secret-value", 30.0, http_client
+        )
+        with pytest.raises(ClovaProviderError, match="recognition error") as exc:
+            await client.infer(sample_file(), (43019,), REQUEST_ID)
+
+    assert "sensitive-provider-message" not in str(exc.value)

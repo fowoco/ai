@@ -80,9 +80,9 @@ FOWOCO_DATABASE_URL=postgresql://<restricted-role>@<host>/<database>
 FOWOCO_INTERNAL_API_TOKEN=<internal bearer token>
 ```
 
-OCR은 기본적으로 비활성화된다. 활성화했는데 invoke URL, secret 또는 DB URL이
-없으면 애플리케이션이 기동 전에 실패한다. secret과 DB 자격 증명은 환경변수로만
-주입하며 커밋하거나 로그로 출력하지 않는다.
+OCR은 기본적으로 비활성화된다. 활성화했는데 invoke URL, secret, DB URL 또는 내부
+Bearer 토큰이 없으면 애플리케이션이 기동 전에 실패한다. secret과 DB 자격 증명은
+환경변수로만 주입하며 커밋하거나 로그로 출력하지 않는다.
 
 ## 외부 DB 선행 조건
 

@@ -207,6 +207,7 @@ def test_review_required_is_returned_with_http_200(authenticated_client) -> None
         ("FOWOCO_CLOVA_OCR_INVOKE_URL", "clova_ocr_invoke_url"),
         ("FOWOCO_CLOVA_OCR_SECRET", "clova_ocr_secret"),
         ("FOWOCO_DATABASE_URL", "database_url"),
+        ("FOWOCO_INTERNAL_API_TOKEN", "internal_api_token"),
     ],
 )
 def test_enabled_ocr_rejects_missing_required_startup_setting(
@@ -218,6 +219,7 @@ def test_enabled_ocr_rejects_missing_required_startup_setting(
     monkeypatch.setenv("FOWOCO_CLOVA_OCR_INVOKE_URL", "https://example.invalid/infer")
     monkeypatch.setenv("FOWOCO_CLOVA_OCR_SECRET", "local-test-secret")
     monkeypatch.setenv("FOWOCO_DATABASE_URL", "postgresql://example.invalid/test")
+    monkeypatch.setenv("FOWOCO_INTERNAL_API_TOKEN", "internal-test-token")
     monkeypatch.delenv(missing_name, raising=False)
     get_settings.cache_clear()
 
