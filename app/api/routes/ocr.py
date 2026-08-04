@@ -13,6 +13,7 @@ from app.ocr.models import (
     OcrCommand,
     OcrFile,
     OcrPersistenceError,
+    OcrRequestSuperseded,
     OcrScope,
     OcrUpstreamFailure,
     OcrUpstreamTimeout,
@@ -82,6 +83,11 @@ async def recognize_worker_document(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="OCR persistence failed",
+        ) from exc
+    except OcrRequestSuperseded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="OCR request was superseded",
         ) from exc
 
     return OcrResponse(

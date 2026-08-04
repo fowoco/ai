@@ -8,6 +8,7 @@ from app.ocr.models import (
     DocumentType,
     NormalizedOcrResult,
     OcrPersistenceError,
+    OcrRequestSuperseded,
     OcrScope,
 )
 
@@ -127,15 +128,19 @@ class PsycopgWorkerDocumentOcrRepository:
         scope: OcrScope,
         result: NormalizedOcrResult,
         processed_at: datetime,
+        request_id: UUID,
     ) -> None:
         assignments = (
             "ocr_status = %s",
             "ocr_template_id = %s",
             "ocr_document_side = %s",
-            "ocr_field_confidences = %s",
+            (
+                "ocr_field_confidences = "
+                "COALESCE(ocr_field_confidences, '{}'::jsonb) || %s::jsonb"
+            ),
             "ocr_error_code = %s",
             "ocr_processed_at = %s",
-            *(f"{column} = %s" for column in STRUCTURED_OCR_COLUMNS),
+            *(f"{column} = COALESCE(%s, {column})" for column in STRUCTURED_OCR_COLUMNS),
         )
         values = (
             result.status.value,
@@ -151,6 +156,7 @@ class PsycopgWorkerDocumentOcrRepository:
             processed_at,
             *(result.fields.get(column) for column in STRUCTURED_OCR_COLUMNS),
             *_scope_params(scope),
+            request_id,
         )
         try:
             async with self._pool.connection() as connection:
@@ -160,9 +166,14 @@ class PsycopgWorkerDocumentOcrRepository:
                         await cursor.execute(
                             f"""UPDATE public.worker_document
                             SET {", ".join(assignments)}
-                            {_SCOPE_PREDICATE}""",
+                            {_SCOPE_PREDICATE}
+                              AND ocr_request_id = %s""",
                             values,
                         )
+                        if cursor.rowcount != 1:
+                            raise OcrRequestSuperseded("OCR request was superseded")
+        except OcrRequestSuperseded:
+            raise
         except Exception as exc:
             raise OcrPersistenceError("database operation failed") from exc
 
@@ -184,13 +195,15 @@ class PsycopgWorkerDocumentOcrRepository:
                                 ocr_request_id = %s,
                                 ocr_error_code = %s,
                                 ocr_processed_at = %s
-                            {_SCOPE_PREDICATE}""",
+                            {_SCOPE_PREDICATE}
+                              AND ocr_request_id = %s""",
                             (
                                 "FAILED",
                                 request_id,
                                 error_code,
                                 processed_at,
                                 *_scope_params(scope),
+                                request_id,
                             ),
                         )
         except Exception as exc:

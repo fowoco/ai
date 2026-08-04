@@ -11,6 +11,7 @@ from app.ocr.models import (
     InvalidOcrRequest,
     OcrPersistenceError,
     OcrProcessResult,
+    OcrRequestSuperseded,
     OcrStatus,
     OcrUpstreamFailure,
     OcrUpstreamTimeout,
@@ -167,6 +168,7 @@ def test_missing_passport_country_returns_400(authenticated_client) -> None:
         (OcrUpstreamFailure("provider failed"), 502),
         (OcrUpstreamTimeout("provider timed out"), 504),
         (OcrPersistenceError("database operation failed"), 500),
+        (OcrRequestSuperseded("OCR request was superseded"), 409),
     ],
 )
 def test_application_errors_are_translated_to_safe_http_statuses(

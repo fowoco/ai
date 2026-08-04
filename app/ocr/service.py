@@ -77,7 +77,12 @@ class OcrService:
             self._confidence_threshold,
             self._resolver,
         )
-        await self._repository.save_result(command.scope, result, self._clock())
+        await self._repository.save_result(
+            command.scope,
+            result,
+            self._clock(),
+            command.request_id,
+        )
         return OcrProcessResult(
             request_id=command.request_id,
             worker_document_id=command.scope.worker_document_id,

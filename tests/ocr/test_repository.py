@@ -10,6 +10,7 @@ from app.ocr.models import (
     DocumentType,
     NormalizedOcrResult,
     OcrPersistenceError,
+    OcrRequestSuperseded,
     OcrScope,
     OcrStatus,
 )
@@ -29,6 +30,7 @@ class FakeCursor:
     def __init__(self, pool: "FakePool") -> None:
         self.pool = pool
         self.current_sql = ""
+        self.rowcount = -1
 
     async def __aenter__(self) -> "FakeCursor":
         return self
@@ -39,6 +41,8 @@ class FakeCursor:
     async def execute(self, sql: str, params: tuple[Any, ...] = ()) -> None:
         self.current_sql = " ".join(sql.split())
         self.pool.executions.append((self.current_sql, params))
+        if self.current_sql.startswith("UPDATE"):
+            self.rowcount = self.pool.update_rowcount
         if self.pool.fail_on_execution == len(self.pool.executions):
             raise RuntimeError("synthetic database failure")
 
@@ -86,10 +90,12 @@ class FakePool:
         existing_columns: set[str] | None = None,
         scope_exists: bool = True,
         fail_on_execution: int | None = None,
+        update_rowcount: int = 1,
     ) -> None:
         self.existing_columns = existing_columns or set(REQUIRED_SCHEMA_COLUMNS)
         self.scope_exists = scope_exists
         self.fail_on_execution = fail_on_execution
+        self.update_rowcount = update_rowcount
         self.executions: list[tuple[str, tuple[Any, ...]]] = []
 
     def connection(self) -> FakeConnectionContext:
@@ -154,7 +160,7 @@ async def test_every_scoped_operation_sets_tenant_before_worker_document_access(
     elif operation == "mark_processing":
         await repository.mark_processing(scope(), REQUEST_ID)
     elif operation == "save_result":
-        await repository.save_result(scope(), normalized_result(), PROCESSED_AT)
+        await repository.save_result(scope(), normalized_result(), PROCESSED_AT, REQUEST_ID)
     else:
         await repository.mark_failed(scope(), REQUEST_ID, "CLOVA_ERROR", PROCESSED_AT)
 
@@ -166,8 +172,12 @@ async def test_every_scoped_operation_sets_tenant_before_worker_document_access(
     assert "WHERE worker_document_id = %s" in document_sql
     assert "AND worker_id = %s" in document_sql
     assert "AND company_id = %s" in document_sql
-    scope_params = document_params[:3] if operation == "verify_scope" else document_params[-3:]
-    assert scope_params == (DOCUMENT_ID, WORKER_ID, COMPANY_ID)
+    assert DOCUMENT_ID in document_params
+    assert WORKER_ID in document_params
+    assert COMPANY_ID in document_params
+    if operation in {"save_result", "mark_failed"}:
+        assert "AND ocr_request_id = %s" in document_sql
+        assert document_params[-1] == REQUEST_ID
 
 
 @pytest.mark.asyncio
@@ -188,7 +198,7 @@ async def test_save_result_uses_fixed_columns_and_native_values() -> None:
     pool = FakePool()
     repository = PsycopgWorkerDocumentOcrRepository(pool)
 
-    await repository.save_result(scope(), normalized_result(), PROCESSED_AT)
+    await repository.save_result(scope(), normalized_result(), PROCESSED_AT, REQUEST_ID)
 
     sql, params = pool.executions[1]
     assignments = sql.split(" SET ", 1)[1].split(" WHERE ", 1)[0]
@@ -199,6 +209,33 @@ async def test_save_result_uses_fixed_columns_and_native_values() -> None:
     assert "expiry_date" not in assigned_columns
     assert "updated_at" not in assigned_columns
     assert "version" not in assigned_columns
+    assert (
+        "ocr_field_confidences = "
+        "COALESCE(ocr_field_confidences, '{}'::jsonb) || %s::jsonb"
+    ) in assignments
+    for column in assigned_columns & {
+        "passport_number",
+        "surname",
+        "given_names",
+        "nationality",
+        "date_of_birth",
+        "sex",
+        "passport_issue_date",
+        "passport_expiry_date",
+        "alien_registration_number",
+        "full_name",
+        "visa_type",
+        "alien_registration_issue_date",
+        "stay_permit_date",
+        "stay_expiration_date",
+        "residence_report_date_1",
+        "residence_confirmation_1",
+        "residence_address_1",
+        "residence_report_date_2",
+        "residence_confirmation_2",
+        "residence_address_2",
+    }:
+        assert f"{column} = COALESCE(%s, {column})" in assignments
     assert date(2000, 1, 2) in params
     confidence_json = next(
         item for item in params if isinstance(item, str) and item.startswith("{")
@@ -207,6 +244,14 @@ async def test_save_result_uses_fixed_columns_and_native_values() -> None:
         "date_of_birth": 0.98,
         "passport_number": 0.99,
     }
+
+
+@pytest.mark.asyncio
+async def test_save_result_rejects_a_response_superseded_by_a_newer_request() -> None:
+    repository = PsycopgWorkerDocumentOcrRepository(FakePool(update_rowcount=0))
+
+    with pytest.raises(OcrRequestSuperseded, match="superseded"):
+        await repository.save_result(scope(), normalized_result(), PROCESSED_AT, REQUEST_ID)
 
 
 @pytest.mark.asyncio

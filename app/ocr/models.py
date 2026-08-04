@@ -100,6 +100,10 @@ class OcrPersistenceError(RuntimeError):
     """A safe wrapper for database failures."""
 
 
+class OcrRequestSuperseded(RuntimeError):
+    """A newer OCR request owns the worker document update."""
+
+
 class InvalidOcrRequest(ValueError):
     """The OCR command is invalid before any provider call."""
 

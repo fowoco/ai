@@ -118,10 +118,17 @@ class FakeRepository:
     async def mark_processing(self, scope: OcrScope, request_id: UUID) -> None:
         self._record("mark_processing")
 
-    async def save_result(self, scope: OcrScope, result: Any, processed_at: datetime) -> None:
+    async def save_result(
+        self,
+        scope: OcrScope,
+        result: Any,
+        processed_at: datetime,
+        request_id: UUID,
+    ) -> None:
         self._record("save_result")
         self.saved_result = result
         assert processed_at == NOW
+        assert request_id == REQUEST_ID
 
     async def mark_failed(
         self,
