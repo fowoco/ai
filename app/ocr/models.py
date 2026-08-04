@@ -86,3 +86,15 @@ class ClovaTimeoutError(RuntimeError):
 
 class ClovaProviderError(RuntimeError):
     """CLOVA returned an unusable transport response."""
+
+
+class DatabaseSchemaMismatch(RuntimeError):
+    """The externally managed worker_document table lacks OCR columns."""
+
+    def __init__(self, missing_columns: tuple[str, ...]) -> None:
+        self.missing_columns = missing_columns
+        super().__init__(f"missing OCR database columns: {', '.join(missing_columns)}")
+
+
+class OcrPersistenceError(RuntimeError):
+    """A safe wrapper for database failures."""
