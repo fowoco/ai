@@ -16,7 +16,7 @@ from app.agents.language.generation.models import (
 from app.agents.language.graph import (
     build_language_assistant_graph,
 )
-from app.agents.language.ports import SemanticValidationDecision, TraceSink
+from app.agents.language.ports import SemanticValidationDecision, TraceEvent, TraceSink
 from app.agents.language.queries import SearchQuery
 from app.agents.language.retrieval.models import (
     EpsReference,
@@ -129,7 +129,7 @@ class FakeValidator:
 
 
 class FakeTraceSink(TraceSink):
-    def emit(self, event_name: str, payload: dict[str, object]) -> None:
+    def emit(self, event: TraceEvent) -> None:
         pass
 
 

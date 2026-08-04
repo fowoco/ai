@@ -6,10 +6,31 @@ import httpx
 from pydantic import BaseModel
 
 from app.agents.language.generation.models import DraftT
+from app.agents.language.observability import sanitize_user_input
 from app.agents.language.ports import GenerationOperation, StructuredGenerationPort
 from app.agents.language.resources.prompts import load_prompt
 
 T = TypeVar("T", bound=BaseModel)
+
+
+def _sanitize_payload(payload: Mapping[str, object]) -> dict[str, object]:
+    """페이로드 문자열 값에서 프롬프트 인젝션 패턴 제거.
+
+    LLM 전송 직전 최후 방어선 — 상위 레이어 sanitize 실패 시에도 보호.
+    """
+    result: dict[str, object] = {}
+    for key, value in payload.items():
+        if isinstance(value, str):
+            result[key] = sanitize_user_input(value)
+        elif isinstance(value, list):
+            result[key] = [
+                sanitize_user_input(item) if isinstance(item, str) else item
+                for item in value
+            ]
+        else:
+            result[key] = value
+    return result
+
 
 
 class GenerationError(Exception):
@@ -60,6 +81,8 @@ class OpenAICompatibleGenerationPort(StructuredGenerationPort):
         response_model: type[DraftT],
     ) -> DraftT:
         system_prompt = self.get_system_prompt(operation)
+        # T14: 프롬프트 인젝션 최후 방어선 — 페이로드 문자열 값 sanitize
+        safe_payload = _sanitize_payload(payload)
 
         headers = {"Content-Type": "application/json"}
         if self.api_key:
@@ -70,7 +93,7 @@ class OpenAICompatibleGenerationPort(StructuredGenerationPort):
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                {"role": "user", "content": json.dumps(safe_payload, ensure_ascii=False)},
             ],
             "temperature": 0,
             "response_format": {
