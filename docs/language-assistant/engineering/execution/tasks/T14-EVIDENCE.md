@@ -21,7 +21,7 @@ date: 2026-08-04
 | C2 | TraceEvent 원문 텍스트 없음 | `test_trace_event_no_raw_text_attributes` — model_dump() 키 검사 | ✅ |
 | C3 | 사용자 입력 인젝션 패턴 제거 | `test_sanitize_user_input_*` 4개 — SYSTEM:, [INST], <<SYS>>, 코드블록 제거 | ✅ |
 | C4 | build_safe_payload 시스템 지시 결합 방지 | `test_build_safe_payload_*` 2개 — JSON 구조 검사 | ✅ |
-| C5 | with_fault_isolation 장애 미전파 | `test_fault_isolation_*` 3개 — 예외→(None, WarningItem) 변환 검증 | ✅ |
+| C5 | with_fault_isolation 장애 미전파 및 Graph 노드 배선 | `nodes.py` (run_easy_branch, run_translation_branch) 배선 및 `test_subgraph_unhandled_exception_fault_isolated` 통과 | ✅ |
 | C6 | WarningCode 21개 전부 존재 | `test_all_expected_warning_codes_present`, `test_warning_code_count_exactly_21` | ✅ |
 | C7 | generation layer 최후 방어선 | openai_compatible.py `_sanitize_payload()` + `generate()` 내 적용 | ✅ |
 | C8 | TraceSink.emit(TraceEvent) 시그니처 계약 | `test_trace_sink_emit_accepts_trace_event` — NoopTraceSink 통과 | ✅ |
@@ -31,8 +31,8 @@ date: 2026-08-04
 ## 테스트 결과
 
 ```
-전체: 443 passed, 1 skipped (T01~T14 포함)
-T14 신규: 19 tests (test_observability.py)
+전체: 444 passed, 1 skipped (T01~T14 포함)
+T14 신규: 20 tests (test_observability.py: 19, test_graph.py fault isolation: 1)
 Ruff: 0 errors
 git diff --check: ok
 ```

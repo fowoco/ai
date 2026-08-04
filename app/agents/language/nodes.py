@@ -1,23 +1,27 @@
 from app.agents.language.codes import resolve_target_language
 from app.agents.language.contracts import (
     ComponentStatus,
+    ComponentValidation,
     GenerationStatus,
     LanguageAssistantOutput,
     LanguageExecutionPolicy,
     RetrievalMetadata,
     ValidationSummary,
+    WarningCode,
     WarningItem,
 )
-from app.agents.language.easy_korean import build_easy_korean_subgraph
+from app.agents.language.easy_korean import EasyKoreanResult, build_easy_korean_subgraph
 from app.agents.language.formatting import (
     assert_standard_formatter_invariants,
     format_standard_korean,
 )
 from app.agents.language.generation.models import StructuredGenerator
+from app.agents.language.observability import with_fault_isolation
 from app.agents.language.ports import EpsRetriever, SemanticValidationPort, TraceSink
 from app.agents.language.protected_facts import ProtectedFacts
+from app.agents.language.retrieval.models import RetrievalResult
 from app.agents.language.state import LanguageAssistantState
-from app.agents.language.translation import build_translation_subgraph
+from app.agents.language.translation import TranslationResult, build_translation_subgraph
 
 
 class LanguageNodeSet:
@@ -71,9 +75,7 @@ class LanguageNodeSet:
         inp = state["input"]
         facts = state["protected_facts"]
         std_text = format_standard_korean(inp.request_context, facts)
-        std_val = assert_standard_formatter_invariants(
-            inp.request_context, std_text, facts
-        )
+        std_val = assert_standard_formatter_invariants(inp.request_context, std_text, facts)
 
         return {
             "standard_korean_text": std_text,
@@ -90,8 +92,36 @@ class LanguageNodeSet:
             "protected_facts": facts,
             "standard_korean_text": std_text,
         }
-        res = self.easy_subgraph.invoke(branch_input)
-        return {"easy_result": res["easy_result"]}
+        res_dict, warning = with_fault_isolation("easy_korean")(self.easy_subgraph.invoke)(
+            branch_input
+        )
+        if res_dict is not None and "easy_result" in res_dict:
+            return {"easy_result": res_dict["easy_result"]}
+
+        fallback_warning = warning or WarningItem(
+            component="easy_korean",
+            code=WarningCode.EASY_KOREAN_GENERATION_FAILED,
+            message="Unhandled exception in easy_korean",
+        )
+        easy_res = EasyKoreanResult(
+            text=std_text,
+            status="failed",
+            validation=ComponentValidation(
+                status="failed",
+                missing_items=(),
+                corrupted_dates=(),
+                corrupted_cardinality=(),
+                unauthorized_modifications=(),
+                semantic_passed=False,
+                failure_reasons=("Subgraph exception isolated",),
+            ),
+            warnings=(fallback_warning,),
+            attempt_count=0,
+            used_standard_fallback=True,
+            context_pack_version="unknown",
+            prompt_version="easy_korean.v1",
+        )
+        return {"easy_result": easy_res}
 
     def run_translation_branch(self, state: LanguageAssistantState) -> dict[str, object]:
         inp = state["input"]
@@ -105,8 +135,44 @@ class LanguageNodeSet:
             "protected_facts": facts,
             "standard_korean_text": std_text,
         }
-        res = self.translation_subgraph.invoke(branch_input)
-        return {"translation_result": res["translation_result"]}
+        res_dict, warning = with_fault_isolation("translation")(self.translation_subgraph.invoke)(
+            branch_input
+        )
+        if res_dict is not None and "translation_result" in res_dict:
+            return {"translation_result": res_dict["translation_result"]}
+
+        fallback_warning = warning or WarningItem(
+            component="translation",
+            code=WarningCode.TRANSLATION_GENERATION_FAILED,
+            message="Unhandled exception in translation",
+        )
+        empty_retrieval = RetrievalResult(
+            query_strategies=(),
+            candidates=(),
+            contexts=(),
+            warnings=(fallback_warning,),
+            degraded_components=("retrieval",),
+            fallback_used=True,
+            dataset_version="eps_language_db_v1",
+        )
+        trans_res = TranslationResult(
+            text=None,
+            status="failed",
+            validation=ComponentValidation(
+                status="failed",
+                missing_items=(),
+                corrupted_dates=(),
+                corrupted_cardinality=(),
+                unauthorized_modifications=(),
+                semantic_passed=False,
+                failure_reasons=("Subgraph exception isolated",),
+            ),
+            warnings=(fallback_warning,),
+            attempt_count=0,
+            retrieval=empty_retrieval,
+            prompt_version="translation.v1",
+        )
+        return {"translation_result": trans_res}
 
     def assemble_output(self, state: LanguageAssistantState) -> dict[str, object]:
         inp = state["input"]
