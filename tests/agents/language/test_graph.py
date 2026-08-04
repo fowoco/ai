@@ -315,3 +315,25 @@ def test_target_language_change_keeps_standard_easy_protected_facts_equal(
 
     assert out_en.standard_korean_text == out_vi.standard_korean_text
     assert out_en.easy_korean_text == out_vi.easy_korean_text
+
+
+def test_subgraph_unhandled_exception_fault_isolated(
+    sample_input: LanguageAssistantInput,
+) -> None:
+
+    class CrashingGenerator(FakeGenerator):
+        def generate(self, prompt: str, schema_class: type[object]) -> object:
+            raise RuntimeError("Unexpected LLM socket crash")
+
+    graph = build_language_assistant_graph(
+        retriever=FakeRetriever(),
+        generator=CrashingGenerator(),
+        semantic_validator=FakeValidator(),
+        trace_sink=FakeTraceSink(),
+        execution_policy=LanguageExecutionPolicy(),
+        allow_draft_context_pack=True,
+    )
+    output = graph.invoke(sample_input)
+    assert output.generation_status == "failed"
+    assert output.requires_human_review is True
+    assert any(w.component in ("easy_korean", "translation") for w in output.warnings)

@@ -17,7 +17,7 @@ date: 2026-08-04
 
 | # | 클레임 | 검증 방법 | 결과 |
 |---|--------|----------|------|
-| C1 | Qdrant 서비스 내부전용, 호스트 포트 노출 없음 | `test_qdrant_service_no_external_ports` | ✅ |
+| C1 | Qdrant 서비스 내부전용, 호스트 포트 노출 없음 (프로덕션) | `test_qdrant_service_no_external_ports` — `compose.yml`(prod) expose 6333만 설정, ports 없음. `compose.test.yml`(test) 127.0.0.1:16333 격리 포트 | ✅ |
 | C2 | 프로덕션/테스트 Qdrant 볼륨 완전 격리 | `test_compose_test_qdrant_uses_separate_volume` | ✅ |
 | C3 | Qdrant 1.18.3 이미지 고정 | `test_qdrant_service_uses_pinned_image` | ✅ |
 | C4 | 모델 리비전 고정 (BGE-M3, Reranker) | `test_manifest_constants_defined` | ✅ |
