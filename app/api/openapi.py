@@ -2,6 +2,7 @@
 
 ANALYSES_TAG = "Analyses"
 WORKFLOWS_TAG = "Workflows"
+OCR_TAG = "OCR"
 DOCUMENT_CAPABILITIES_TAG = "Document Capabilities"
 DOCUMENT_TEMPLATES_TAG = "Document Templates"
 DOCUMENT_INSPECTION_TAG = "Document Inspection"
@@ -23,6 +24,10 @@ OPENAPI_TAGS_METADATA = [
             "재갱신 등 LangGraph 오케스트레이션 API. "
             "담당자 입력(슬롯)·근로자 서류(OCR) 분기와 문서생성 stub 실행"
         ),
+    },
+    {
+        "name": OCR_TAG,
+        "description": "CLOVA Template OCR를 실행하고 worker_document에 결과를 저장합니다.",
     },
     {
         "name": DOCUMENT_CAPABILITIES_TAG,

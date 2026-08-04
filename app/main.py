@@ -5,9 +5,11 @@ from app import __version__
 from app.api.openapi import OPENAPI_TAGS_METADATA
 from app.api.router import api_router
 from app.api.routes.analyses import router as analyses_router
+from app.api.routes.ocr import router as ocr_router
 from app.api.routes.workflows import router as workflows_router
 from app.core.config import get_settings
 from app.documents.conversion import ConversionEngineUnavailableError
+from app.ocr.runtime import create_ocr_lifespan
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -23,6 +25,7 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         default_response_class=UTF8JSONResponse,
         openapi_tags=OPENAPI_TAGS_METADATA,
+        lifespan=create_ocr_lifespan(settings),
     )
 
     @app.exception_handler(ConversionEngineUnavailableError)
@@ -38,6 +41,7 @@ def create_app() -> FastAPI:
 
     # Server 계약: /internal/v1/* 는 /api/v1 prefix 없음
     app.include_router(analyses_router)
+    app.include_router(ocr_router)
     app.include_router(workflows_router)
     app.include_router(api_router, prefix="/api/v1")
     return app
