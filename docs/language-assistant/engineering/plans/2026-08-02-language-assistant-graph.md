@@ -1,6 +1,6 @@
 # Language Assistant Graph Implementation Plan
 
-> **For agentic workers:** REQUIRED EXECUTION PROTOCOL: follow `docs/engineering/specs/2026-08-02-language-assistant-control-tower-design.md`. Luna Builder와 독립 Luna Verifier는 모두 추론 강도 매우 높음을 사용하고, Sol은 지정된 S1–S5 Gate에서만 read-only 검토한다. 일반 `subagent-driven-development`나 단일 세션 일괄 실행으로 이 프로토콜을 대체하지 않는다. Steps use checkbox (`- [ ]`) syntax for the technical plan; execution truth lives in the Control Tower ledger.
+> **For agentic workers:** REQUIRED EXECUTION PROTOCOL: follow `docs/engineering/specs/2026-08-02-language-assistant-control-tower-design.md`. Luna Builder와 독립 Luna Verifier는 모두 추론 강도 매우 높음을 사용하고, Sol은 지정된 S1–S5 Gate에서만 read-only 검토한다. 일반 `subagent-driven-development`나 단일 세션 일괄 실행으로 이 프로토콜을 대체하지 않는다. Steps use checkbox (`- [x]`) syntax for the technical plan; execution truth lives in the Control Tower ledger.
 
 **Goal:** 구조화된 `request_context` 하나만 사실 원천으로 사용해 일반 한국어·쉬운 한국어·15개 지원 언어 번역문을 생성하는 독립 실행 가능 LangGraph를 구현하고, 미래 Parent Graph에는 projection adapter로 안전하게 연결한다.
 
@@ -349,7 +349,7 @@ This DAG is the technical dependency authority: a Task may become `ready` only a
 
 **Acceptance:** HWPX changes remain byte-for-byte untouched in the original worktree; the new worktree starts from current `origin/develop`; exactly three reviewed Language documents are imported; the Control Tower ledger and non-sensitive Task/Gate templates exist in the isolated worktree.
 
-- [ ] **Step 1: Re-check source worktree and remote refs**
+- [x] **Step 1: Re-check source worktree and remote refs**
 
 Run:
 
@@ -368,7 +368,7 @@ Expected:
 - `origin/develop` resolves to a commit.
 - No existing worktree uses `/Users/parktaejung/Desktop/workspace/ai-language-assistant`.
 
-- [ ] **Step 2: Create the isolated worktree**
+- [x] **Step 2: Create the isolated worktree**
 
 If the branch does not exist:
 
@@ -378,7 +378,7 @@ git worktree add /Users/parktaejung/Desktop/workspace/ai-language-assistant -b f
 
 If the branch already exists, stop and inspect it; do not delete or overwrite it.
 
-- [ ] **Step 3: Import only the three reviewed Language documents**
+- [x] **Step 3: Import only the three reviewed Language documents**
 
 Run:
 
@@ -392,7 +392,7 @@ cp /Users/parktaejung/Desktop/workspace/ai/docs/engineering/plans/2026-08-02-lan
 
 Do not copy the whole untracked `docs/engineering` directory.
 
-- [ ] **Step 4: Record a clean baseline**
+- [x] **Step 4: Record a clean baseline**
 
 Run:
 
@@ -412,7 +412,7 @@ Expected:
 - `.venv/bin/python --version` reports Python 3.12.x; do not use macOS `/usr/bin/python3` 3.9.6.
 - Existing test failures, if any, are recorded before feature work and are not silently attributed to Language Assistant.
 
-- [ ] **Step 5: Create the Control Tower ledger**
+- [x] **Step 5: Create the Control Tower ledger**
 
 Create `docs/engineering/execution/language-assistant/control-tower.md` with this initial content. An em dash means no SHA or verdict exists yet; it is not a completion claim.
 
@@ -450,7 +450,7 @@ Create `docs/engineering/execution/language-assistant/control-tower.md` with thi
 | T16 | Verification handoff | pending | T14,T15 | — | `task/la-t16-verification-handoff` | — | — | — | — | — | — | S5 | — | — |
 ```
 
-- [ ] **Step 6: Create the Task record template**
+- [x] **Step 6: Create the Task record template**
 
 Create `docs/engineering/execution/language-assistant/tasks/TASK-TEMPLATE.md`:
 
@@ -511,7 +511,7 @@ merge_method: --no-ff
 ```
 ````
 
-- [ ] **Step 7: Create the Sol Gate review template**
+- [x] **Step 7: Create the Sol Gate review template**
 
 Create `docs/engineering/execution/language-assistant/reviews/GATE-REVIEW-TEMPLATE.md`:
 
@@ -541,7 +541,7 @@ Review only:
 3. Is there a reason not to open the next Wave?
 ````
 
-- [ ] **Step 8: Validate the bootstrap artifacts**
+- [x] **Step 8: Validate the bootstrap artifacts**
 
 Run:
 
@@ -555,7 +555,7 @@ rg -n "API[_ -]?key|password|worker_documents|raw_prompt|raw_response" docs/engi
 
 Expected: all three files exist; the first `rg` finds the declared branch and merge policy; the sensitive-data `rg` returns no matches.
 
-- [ ] **Step 9: Commit reviewed design and execution artifacts**
+- [x] **Step 9: Commit reviewed design and execution artifacts**
 
 ```bash
 git add docs/engineering/specs/2026-08-02-language-assistant-graph-design.md docs/engineering/specs/2026-08-02-language-assistant-control-tower-design.md docs/engineering/plans/2026-08-02-language-assistant-graph.md docs/engineering/execution/language-assistant
@@ -579,7 +579,7 @@ git commit -m "docs: define language assistant graph plan"
 
 **Acceptance:** strict graph input accepts only the four approved top-level fields; all four request fields are mandatory; projection never leaks Parent DB fields; output can represent success, warning, failed, partial result, validation details, and retrieval degradation; exported schemas contain no removed fields.
 
-- [ ] **Step 1: Write failing contract tests**
+- [x] **Step 1: Write failing contract tests**
 
 Add these tests:
 
@@ -610,7 +610,7 @@ Run:
 
 Expected: FAIL with missing `app.agents.language.contracts`.
 
-- [ ] **Step 2: Implement exact Pydantic contracts**
+- [x] **Step 2: Implement exact Pydantic contracts**
 
 Define these aliases first:
 
@@ -748,7 +748,7 @@ class LanguageAssistantOutput(FrozenContract):
 
 Enforce these exact status/text invariants: Standard Korean component and validation are always `success/passed`; Easy Korean is `success` only with `passed`, otherwise `warning` and always has text because it falls back to Standard Korean; Translation is `failed` iff `translated_text is None`, and then its validation is `not_run`; overall status is `failed` iff Translation is `failed`; otherwise any component warning, warning item, or non-`passed` validation makes the overall status `warning`. `deadline` must serialize as ISO `YYYY-MM-DD`; a `mode="before"` validator rejects datetime objects, datetime strings, and locale-formatted strings before Pydantic date coercion.
 
-- [ ] **Step 3: Define state with branch-owned keys**
+- [x] **Step 3: Define state with branch-owned keys**
 
 ```python
 class LanguageAssistantState(TypedDict, total=False):
@@ -762,7 +762,7 @@ Task 3 adds `protected_facts`, `standard_korean_text`, and `standard_validation`
 
 Do not define a shared branch `warnings` reducer. Easy and Translation results own their warnings; merge sorts them deterministically by `(component, code)`.
 
-- [ ] **Step 4: Write failing projection metamorphic tests**
+- [x] **Step 4: Write failing projection metamorphic tests**
 
 Build two Parent states with identical approved fields and different values for:
 
@@ -789,7 +789,7 @@ Run:
 
 Expected: FAIL with missing `project_language_input`.
 
-- [ ] **Step 5: Implement projection**
+- [x] **Step 5: Implement projection**
 
 ```python
 LANGUAGE_INPUT_KEYS = (
@@ -806,7 +806,7 @@ def project_language_input(parent_state: Mapping[str, object]) -> LanguageAssist
 
 Never call `model_validate(parent_state)` directly and never mutate `parent_state`.
 
-- [ ] **Step 6: Export and snapshot JSON Schemas**
+- [x] **Step 6: Export and snapshot JSON Schemas**
 
 `scripts/export_language_schemas.py` must use `model_json_schema(mode="validation")`, stable JSON sorting, UTF-8, and a trailing newline. Add a test that regenerates into `tmp_path` and compares parsed JSON with committed schema files.
 
@@ -819,7 +819,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/agents/language tests/agents/language scripts/export_language_schemas.py docs/contracts
@@ -835,7 +835,7 @@ git commit -m "feat: define language assistant contracts"
 
 **Acceptance:** every canonical code maps to exactly one EPS code; preferred language wins; nationality is only fallback; explicit invalid language fails; English default is warned; legacy normalization is explicit; `fil`/`tet` and language/country `tl` ambiguity cannot silently collide.
 
-- [ ] **Step 1: Write parameterized failing tests for all 15 languages**
+- [x] **Step 1: Write parameterized failing tests for all 15 languages**
 
 ```text
 test_all_15_canonical_codes_map_to_eps_codes
@@ -859,7 +859,7 @@ Run:
 
 Expected: FAIL with missing code registry.
 
-- [ ] **Step 2: Implement exact resolution type and four separate functions**
+- [x] **Step 2: Implement exact resolution type and four separate functions**
 
 ```text
 LanguageResolution:
@@ -926,7 +926,7 @@ vn → vi, cn → zh-Hans, ph → fil, pk → ur, lk → si,
 kg → ky, bd → bn, kh → km, tl → tet
 ```
 
-- [ ] **Step 3: Implement target resolution policy**
+- [x] **Step 3: Implement target resolution policy**
 
 ```text
 preferred present + valid → canonical preferred
@@ -937,7 +937,7 @@ preferred absent + nationality absent/unmapped → en + warning
 
 The exception exposes only a stable error code, never the rejected value. Standalone callers receive the domain error; Task 12 maps only this known input error to HTTP 422. It must not be caught as a runtime degradation or silently replaced with nationality/English.
 
-- [ ] **Step 4: Run focused and contract regressions**
+- [x] **Step 4: Run focused and contract regressions**
 
 ```bash
 .venv/bin/python scripts/export_language_schemas.py
@@ -947,7 +947,7 @@ git diff --exit-code -- docs/contracts/language-assistant-input.schema.json docs
 
 Expected: tests PASS and schema snapshots remain unchanged.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/agents/language/codes.py tests/agents/language/test_codes.py
@@ -968,7 +968,7 @@ git commit -m "feat: normalize language and EPS codes"
 
 **Acceptance:** formatter output is deterministic and only contains request facts; `ProtectedFacts` is built from request fields, not DB or generated text; exactly three distinct queries preserve every protected value.
 
-- [ ] **Step 1: Write failing protected-fact tests**
+- [x] **Step 1: Write failing protected-fact tests**
 
 Cover:
 
@@ -987,7 +987,7 @@ Unicode NFC
 
 The expected source paths must remain distinguishable, for example `requested_items[0]` versus `submission_method`.
 
-- [ ] **Step 2: Implement `ProtectedFacts.from_request_context()`**
+- [x] **Step 2: Implement `ProtectedFacts.from_request_context()`**
 
 Build structural copies first, then machine tokens. Never inspect Parent Context and never use standard Korean as input.
 
@@ -1017,7 +1017,7 @@ class SearchQuery(BaseModel):
     text: str
 ```
 
-- [ ] **Step 3: Write failing formatter tests**
+- [x] **Step 3: Write failing formatter tests**
 
 ```text
 test_formatter_is_deterministic
@@ -1031,7 +1031,7 @@ test_standard_formatter_sets_passing_validation
 test_standard_formatter_invariant_violation_raises
 ```
 
-- [ ] **Step 4: Implement one canonical formatter**
+- [x] **Step 4: Implement one canonical formatter**
 
 Output structure:
 
@@ -1050,7 +1050,7 @@ No particle inference and no LLM call.
 
 After rendering, call a Task 3-local pure helper named `assert_standard_formatter_invariants(request_context, rendered_text, protected_facts)`. It checks the canonical section structure, item order/cardinality, ISO deadline, verbatim normalized field values, and machine-token multiset. Only then set `standard_validation=ComponentValidation(status="passed", retry_count=0)`. A formatter invariant failure is a programming error, not an LLM fallback. Task 8 moves shared comparison primitives into `validation.py` and makes this helper delegate to them without changing behavior.
 
-- [ ] **Step 5: Write failing Multi-Query tests**
+- [x] **Step 5: Write failing Multi-Query tests**
 
 ```text
 test_generates_exactly_three_queries_in_stable_order
@@ -1063,7 +1063,7 @@ test_queries_add_no_new_fact
 test_db_context_cannot_change_queries
 ```
 
-- [ ] **Step 6: Implement deterministic Query builder**
+- [x] **Step 6: Implement deterministic Query builder**
 
 Use stable kinds:
 
@@ -1081,7 +1081,7 @@ standard_korean_text: str
 standard_validation: ComponentValidation
 ```
 
-- [ ] **Step 7: Run focused tests**
+- [x] **Step 7: Run focused tests**
 
 ```bash
 .venv/bin/python -m pytest \
@@ -1092,7 +1092,7 @@ standard_validation: ComponentValidation
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add app/agents/language/protected_facts.py app/agents/language/formatting.py app/agents/language/queries.py app/agents/language/state.py tests/agents/language
@@ -1112,7 +1112,7 @@ git commit -m "feat: preserve request facts and build search queries"
 
 **Acceptance:** domain and graph code do not import Qdrant or FlagEmbedding; Point ID dedupe and RRF are deterministic; reranker sees only fused candidates; all ports have fakes.
 
-- [ ] **Step 1: Write failing model and fusion tests**
+- [x] **Step 1: Write failing model and fusion tests**
 
 ```text
 test_hybrid_vector_rejects_dimension_mismatch
@@ -1227,7 +1227,7 @@ Tie-break:
 fusion_score DESC, best_rank ASC, point_id ASC
 ```
 
-- [ ] **Step 2: Define Protocols**
+- [x] **Step 2: Define Protocols**
 
 Define the shared port types in `ports.py` before the Protocols:
 
@@ -1307,7 +1307,7 @@ Use domain models in signatures; no vendor types cross the port boundary.
 
 MVP ports are synchronous. The FastAPI route runs the whole service in Starlette's threadpool; do not mix sync Graph nodes with nested event-loop runners. A later async adapter may replace a port without changing Domain contracts.
 
-- [ ] **Step 3: Implement pure fusion**
+- [x] **Step 3: Implement pure fusion**
 
 Default inputs:
 
@@ -1319,7 +1319,7 @@ candidate_limit=30
 
 Store contribution metadata internally but expose only reference IDs in public output.
 
-- [ ] **Step 4: Add deterministic fakes**
+- [x] **Step 4: Add deterministic fakes**
 
 Fakes must support:
 
@@ -1333,7 +1333,7 @@ verified/mismatched/schema-invalid store contract outcomes
 verified physical-handle capture independent of later alias changes
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 ```bash
 .venv/bin/python -m pytest tests/agents/language/test_fusion.py -q
@@ -1341,7 +1341,7 @@ verified physical-handle capture independent of later alias changes
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/agents/language/ports.py app/agents/language/retrieval tests/agents/language/fakes.py tests/agents/language/test_fusion.py
@@ -1360,7 +1360,7 @@ git commit -m "feat: define language retrieval ports and fusion"
 
 **Acceptance:** current JSON deterministically yields 17,902 usable unique records; blank translations are excluded; pronunciation is never prepared; Point IDs and collection names are reproducible; the vendor-neutral plan enforces build-verify-alias-switch with a fake store and no Qdrant/model import.
 
-- [ ] **Step 1: Create a minimal fixture and failing cleaner tests**
+- [x] **Step 1: Create a minimal fixture and failing cleaner tests**
 
 Fixture must include:
 
@@ -1389,7 +1389,7 @@ test_payload_has_no_pronunciation
 test_source_record_order_does_not_change_ids
 ```
 
-- [ ] **Step 2: Implement pure cleaning and Point preparation**
+- [x] **Step 2: Implement pure cleaning and Point preparation**
 
 Point ID input:
 
@@ -1427,7 +1427,7 @@ For the reviewed snapshot and encoder revision, expected collection name is:
 eps_language_phrases_29106c33d43c_5617a9f61b02
 ```
 
-- [ ] **Step 3: Write failing collection lifecycle tests against a fake store**
+- [x] **Step 3: Write failing collection lifecycle tests against a fake store**
 
 ```text
 test_reindex_is_idempotent
@@ -1438,7 +1438,7 @@ test_payload_indexes_are_requested
 test_index_verification_requires_one_exact_provenance_for_every_point
 ```
 
-- [ ] **Step 4: Implement index plan**
+- [x] **Step 4: Implement index plan**
 
 ```text
 read JSON
@@ -1479,7 +1479,7 @@ swap_alias(alias_name, collection_name)
 
 The fake implements this Protocol in Task 5. `QdrantStore` implements both `EpsIndexStore` and `HybridSearchStore` in Task 6. `build_index_plan(..., expected_index_contract, switch_alias=False)` is the default; the contract is copied into every Point payload. Alias swap occurs only when explicitly true and only after `verify_collection` proves that every Point has the same exact dataset revision, encoder repo/full revision, and index-contract version.
 
-- [ ] **Step 5: Add a current-data dry-run test**
+- [x] **Step 5: Add a current-data dry-run test**
 
 Run the cleaner without model inference and assert:
 
@@ -1493,7 +1493,7 @@ languages = 15
 source SHA-256 matches the reviewed design
 ```
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 ```bash
 .venv/bin/python -m pytest tests/agents/language/test_indexer.py -q
@@ -1501,7 +1501,7 @@ source SHA-256 matches the reviewed design
 
 Expected: PASS without Qdrant or model download.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/agents/language/ports.py app/agents/language/retrieval/indexer.py app/agents/language/retrieval/models.py tests/agents/language/test_indexer.py tests/fixtures/language/eps_minimal.json
@@ -1524,7 +1524,7 @@ git commit -m "feat: prepare EPS data for versioned indexing"
 
 **Acceptance:** one BGE-M3 call returns dense and sparse representations for all three Query strings; every Query runs a language-filtered Dense+Sparse Qdrant RRF request; cross-query RRF and one reranker call produce top-5 Context; all expected failures return typed degradation instead of aborting the graph; unit tests do not download models.
 
-- [ ] **Step 1: Add bounded dependencies and resolve the lock**
+- [x] **Step 1: Add bounded dependencies and resolve the lock**
 
 Add base dependencies:
 
@@ -1552,7 +1552,7 @@ UV_CACHE_DIR=.cache/uv uv sync --frozen --extra dev
 
 Expected: the lock resolves LangGraph 1.2.x, qdrant-client 1.18.x, and the optional FlagEmbedding 1.4.x graph without changing the project Python floor. The unit-test environment installs `dev` only; heavyweight model packages enter the runtime image and explicit model smoke environment through `--extra language-models`.
 
-- [ ] **Step 2: Write failing encoder adapter tests with a fake backend**
+- [x] **Step 2: Write failing encoder adapter tests with a fake backend**
 
 ```text
 test_encoder_batches_all_three_queries_once
@@ -1584,7 +1584,7 @@ RawBgeBatch:
   lexical_weights: tuple[Mapping[int, float], ...]
 ```
 
-- [ ] **Step 3: Implement lazy local-path BGE adapter**
+- [x] **Step 3: Implement lazy local-path BGE adapter**
 
 Production constructor inputs:
 
@@ -1600,7 +1600,7 @@ Startup must fail the retrieval component closed if the local revision manifest 
 
 Count tokens before encoding. If any faithful Query exceeds 128 model tokens, do not truncate or drop protected values. Return typed `RETRIEVAL_QUERY_TOO_LONG`, omit EPS Context, and continue with general LLM translation.
 
-- [ ] **Step 4: Write failing Qdrant request-shape tests**
+- [x] **Step 4: Write failing Qdrant request-shape tests**
 
 For each Query assert:
 
@@ -1636,7 +1636,7 @@ source_url
 
 The three index-provenance fields are mandatory Qdrant filters but are not included in the response payload allowlist because callers do not need to see them.
 
-- [ ] **Step 5: Implement Qdrant batch search adapter**
+- [x] **Step 5: Implement Qdrant batch search adapter**
 
 Use `query_batch_points` so the three Query requests are submitted together. The adapter owns Qdrant vendor models and converts responses to domain `PerQueryRanking` values before returning.
 
@@ -1660,7 +1660,7 @@ sparse_vectors_config={
 }
 ```
 
-- [ ] **Step 6: Implement the production indexing CLI and write real-store tests**
+- [x] **Step 6: Implement the production indexing CLI and write real-store tests**
 
 `scripts/index_eps_language.py` assembles the Task 5 cleaner/index plan with the local BGE encoder and `QdrantStore`. It accepts only explicit options:
 
@@ -1698,7 +1698,7 @@ test_real_store_returns_payload_without_vectors
 
 Use a run-unique alias and collection prefix under the test-only Qdrant volume. Cleanup may remove only names created by that test; assert the prefix before deletion.
 
-- [ ] **Step 7: Write failing reranker tests**
+- [x] **Step 7: Write failing reranker tests**
 
 ```text
 test_reranker_receives_only_cross_query_top_30
@@ -1715,7 +1715,7 @@ Production revision:
 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e
 ```
 
-- [ ] **Step 8: Write failing retrieval-service degradation tests**
+- [x] **Step 8: Write failing retrieval-service degradation tests**
 
 ```text
 test_success_returns_five_contexts
@@ -1733,7 +1733,7 @@ test_reranker_failure_contexts_have_no_fabricated_reranker_score
 test_retrieval_never_changes_or_adds_request_facts
 ```
 
-- [ ] **Step 9: Implement `HybridEpsRetriever.retrieve()`**
+- [x] **Step 9: Implement `HybridEpsRetriever.retrieve()`**
 
 Construct it with all retrieval adapters plus the immutable expected index contract:
 
@@ -1765,7 +1765,7 @@ Populate `RetrievalResult.dataset_version` only from `VerifiedCollectionHandle.d
 
 Do not add `MIN_RERANK_SCORE` before Task 15 calibration. A valid candidate with required payload may be supplied as optional reference; the generation Prompt remains authoritative about its evidence-only status.
 
-- [ ] **Step 10: Run unit tests**
+- [x] **Step 10: Run unit tests**
 
 ```bash
 .venv/bin/python -m pytest \
@@ -1775,7 +1775,7 @@ Do not add `MIN_RERANK_SCORE` before Task 15 calibration. A valid candidate with
 
 Expected: PASS without external services or model weights.
 
-- [ ] **Step 11: Validate integration-test collection without running Docker yet**
+- [x] **Step 11: Validate integration-test collection without running Docker yet**
 
 Run collection/import checks with a fake client:
 
@@ -1786,7 +1786,7 @@ Run collection/import checks with a fake client:
 
 Expected: integration tests collect; dry-run reports `17,902` usable rows and performs no network/model call. Real container execution is Task 16 Step 4.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add pyproject.toml uv.lock app/agents/language/retrieval scripts/index_eps_language.py tests/agents/language/test_retrieval_service.py tests/integration/language/test_qdrant_retrieval.py
@@ -1815,7 +1815,7 @@ git commit -m "feat: add hybrid EPS retrieval adapters"
 
 **Acceptance:** generation is behind a protocol; every response is validated into a field-wise Pydantic draft; prompts are versioned package resources; Parent DB objects cannot appear in captured requests; Context Pack is selected deterministically and never fetched at runtime.
 
-- [ ] **Step 1: Write failing draft-schema tests**
+- [x] **Step 1: Write failing draft-schema tests**
 
 Define and test:
 
@@ -1840,7 +1840,7 @@ The deadline is not model-generated. Renderer injects the canonical date. Bound 
 
 Tests must reject wrong item cardinality, unknown fields, empty/oversized strings, and malformed validation codes.
 
-- [ ] **Step 2: Write failing HTTP adapter tests with `httpx.MockTransport`**
+- [x] **Step 2: Write failing HTTP adapter tests with `httpx.MockTransport`**
 
 ```text
 test_adapter_sends_versioned_system_prompt
@@ -1864,7 +1864,7 @@ non-retryable: other 4xx, schema-invalid response
 
 Transport retry and semantic correction are separate counters. One logical generation or validation call may issue at most two HTTP attempts (initial plus one transient transport retry). One Branch may issue at most three logical generation/correction calls and three semantic-validation calls: six HTTP attempts for generation/correction, six for validation, and 12 total in the theoretical fast-failure worst case. Both Branches therefore have a theoretical ceiling of 24 attempts, but the Task 8 Branch time budget stops scheduling new calls earlier. Schema-invalid output is not retried inside the adapter; it becomes a typed Branch attempt failure for the bounded controller.
 
-- [ ] **Step 3: Implement `OpenAICompatibleGenerationPort`**
+- [x] **Step 3: Implement `OpenAICompatibleGenerationPort`**
 
 Use the existing `httpx` dependency and injected settings:
 
@@ -1889,7 +1889,7 @@ Build `response_format` from `response_model.model_json_schema(mode="validation"
 
 G2 must confirm that the selected runtime implements this Chat-Completions-compatible shape. If it uses a Responses-style or provider-specific structured-output API, add another adapter and select it in dependency assembly; do not put provider branches in graph nodes or silently reinterpret the response.
 
-- [ ] **Step 4: Write failing Context Pack tests**
+- [x] **Step 4: Write failing Context Pack tests**
 
 ```text
 test_pack_has_semver_and_source_metadata
@@ -1903,7 +1903,7 @@ test_production_loader_rejects_draft_unreviewed_or_checksum_invalid_pack
 test_production_loader_accepts_only_approved_pack_with_reviewer_and_date
 ```
 
-- [ ] **Step 5: Create Context Pack v1**
+- [x] **Step 5: Create Context Pack v1**
 
 Use this reviewed primary source record:
 
@@ -1937,7 +1937,7 @@ Terms include at least:
 
 Do not copy the entire source PDF. Store only service-specific, reviewed rules and short examples.
 
-- [ ] **Step 6: Add package data rules**
+- [x] **Step 6: Add package data rules**
 
 Add the two package marker files listed above, then update `pyproject.toml` with this exact package-data rule:
 
@@ -1948,7 +1948,7 @@ Add the two package marker files listed above, then update `pyproject.toml` with
 
 Preserve the existing HWP/HWPX package-data entries in the same table. Verify resources through `importlib.resources.files("app.agents.language.resources")`, not repository-relative paths.
 
-- [ ] **Step 7: Run focused tests**
+- [x] **Step 7: Run focused tests**
 
 ```bash
 .venv/bin/python -m pytest \
@@ -1958,7 +1958,7 @@ Preserve the existing HWP/HWPX package-data entries in the same table. Verify re
 
 Expected: PASS with `MockTransport`; no live LLM calls.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add app/agents/language/generation app/agents/language/context_pack.py app/agents/language/resources pyproject.toml tests/agents/language/test_generation_port.py tests/agents/language/test_context_pack.py
@@ -1976,7 +1976,7 @@ git commit -m "feat: add structured language generation resources"
 
 **Acceptance:** machine-checkable facts are compared canonically; semantic checks are explicit and can be inconclusive; correction is capped at two; only failed Branches retry; the last candidate is retained.
 
-- [ ] **Step 1: Write failing hard-validation tests**
+- [x] **Step 1: Write failing hard-validation tests**
 
 ```text
 test_date_surface_forms_normalize_to_same_date
@@ -1990,7 +1990,7 @@ test_same_number_in_two_paths_is_not_collapsed
 test_validator_uses_request_context_not_standard_text
 ```
 
-- [ ] **Step 2: Implement deterministic validators**
+- [x] **Step 2: Implement deterministic validators**
 
 Return check IDs, not prose-only errors. Stable check IDs:
 
@@ -2004,7 +2004,7 @@ machine_tokens.multiset
 facts.no_addition
 ```
 
-- [ ] **Step 3: Write failing semantic-validator tests**
+- [x] **Step 3: Write failing semantic-validator tests**
 
 ```text
 test_semantic_validator_receives_request_context_and_candidate_only
@@ -2034,7 +2034,7 @@ facts.no_semantic_addition
 
 Do not claim regex-level entity recognition for untyped Korean text. Exact field preservation protects Standard Korean and all Query strings; native-language entity transliteration/translation is a semantic check and becomes `inconclusive` when the validator cannot establish equivalence.
 
-- [ ] **Step 4: Implement the generated semantic validator and bounded correction controller**
+- [x] **Step 4: Implement the generated semantic validator and bounded correction controller**
 
 Implement `GeneratedSemanticValidator(SemanticValidationPort)`. It calls `StructuredGenerationPort.generate(operation="semantic_validation", payload=validation_payload, response_model=SemanticValidationDraft)`; `validation_payload` contains only `request_context`, canonical target language when needed, candidate text, and allowed `ValidationCheckId` values. The generation adapter selects the versioned semantic-validation Prompt from `operation`. It must never receive EPS Context, Standard Korean as truth, or Parent data. Convert its validated `SemanticValidationDraft` to `SemanticValidationDecision`; provider/schema failure becomes a typed unavailable/inconclusive result rather than a false pass.
 
@@ -2063,7 +2063,7 @@ The Branch-specific terminal policy is exact: Translation returns `text=None` an
 
 Correction payloads are narrow and field-wise. Easy correction receives `request_context`, the last Easy draft, failed/inconclusive check IDs, and the already selected Context Pack rules/version. Translation correction receives `request_context`, canonical target language, the last Translation draft, and check IDs; it does not receive EPS body again. Both return a complete replacement draft under the original response schema. Neither correction receives Parent Context, `worker_id`, raw Prompt/response, or a newly generated deadline.
 
-- [ ] **Step 5: Write retry-boundary tests**
+- [x] **Step 5: Write retry-boundary tests**
 
 ```text
 test_initial_plus_two_corrections_only
@@ -2080,7 +2080,7 @@ test_policy_retry_override_zero_disables_corrections
 test_policy_budget_override_changes_scheduling_boundary
 ```
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 
 ```bash
 .venv/bin/python -m pytest tests/agents/language/test_validation.py -q
@@ -2088,7 +2088,7 @@ test_policy_budget_override_changes_scheduling_boundary
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/agents/language/validation.py app/agents/language/contracts.py app/agents/language/generation/models.py tests/agents/language/test_validation.py
@@ -2106,7 +2106,7 @@ git commit -m "feat: validate and correct generated messages"
 
 **Acceptance:** Easy Korean uses the selected Context Pack, returns field-wise controlled rewrite, preserves every request fact, retries only itself, and falls back to standard Korean when no valid candidate exists.
 
-- [ ] **Step 1: Write failing behavior tests**
+- [x] **Step 1: Write failing behavior tests**
 
 ```text
 test_easy_prompt_uses_request_context_standard_text_and_context_pack_only
@@ -2123,7 +2123,7 @@ test_easy_hard_failure_falls_back_to_standard_korean
 test_unapproved_context_pack_skips_provider_and_falls_back_to_standard
 ```
 
-- [ ] **Step 2: Implement the branch-local Easy state, result, and nodes**
+- [x] **Step 2: Implement the branch-local Easy state, result, and nodes**
 
 ```text
 select_context_pack
@@ -2165,11 +2165,11 @@ Define `EasyKoreanResult`, `EasyBranchInput`, `EasyBranchOutput`, `EasyBranchSta
 
 Do not import or extend `LanguageAssistantState` in this task. `tests/agents/language/test_easy_korean.py` invokes the compiled Easy Branch directly through its narrow input contract. T11 later imports `EasyKoreanResult` and connects the Branch to the Parent State.
 
-- [ ] **Step 3: Build final Easy text deterministically**
+- [x] **Step 3: Build final Easy text deterministically**
 
 The generation model returns only field translations/rewrite. The renderer controls section order, item list, and ISO date. Do not accept a model-authored deadline.
 
-- [ ] **Step 4: Test typed provider and validator outages**
+- [x] **Step 4: Test typed provider and validator outages**
 
 Expected policies:
 
@@ -2186,7 +2186,7 @@ Its `ComponentValidation.status` is `not_run` because no generated Easy candidat
 
 If the Context Pack is not approved or fails integrity validation, do not count a generation attempt and do not call the provider. Return the same Standard fallback with `attempt_count=0`, `EASY_KOREAN_CONTEXT_PACK_UNAVAILABLE`, and `STANDARD_KOREAN_FALLBACK`; validation is `not_run`. Tests reject counts outside `0..3` and prove the no-provider path is exactly zero.
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 ```bash
 .venv/bin/python -m pytest \
@@ -2196,7 +2196,7 @@ If the Context Pack is not approved or fails integrity validation, do not count 
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/agents/language/easy_korean.py tests/agents/language/test_easy_korean.py
@@ -2215,7 +2215,7 @@ git commit -m "feat: add easy Korean generation subgraph"
 
 **Acceptance:** Translation uses target-language EPS references when available, treats them as evidence, falls back to general LLM translation on retrieval failure/no-match, validates against request context, retries only generation/validation, and retains the last candidate.
 
-- [ ] **Step 1: Write failing happy-path tests**
+- [x] **Step 1: Write failing happy-path tests**
 
 ```text
 test_translation_builds_three_queries_before_retrieval
@@ -2229,7 +2229,7 @@ test_translation_renderer_preserves_item_order_and_iso_deadline
 test_translation_metadata_returns_reference_ids_only
 ```
 
-- [ ] **Step 2: Write failing fallback matrix tests**
+- [x] **Step 2: Write failing fallback matrix tests**
 
 ```text
 test_no_match_uses_general_llm_and_sets_fallback
@@ -2245,7 +2245,7 @@ test_invalid_context_payload_is_excluded
 test_fallback_still_validates_against_request_context
 ```
 
-- [ ] **Step 3: Implement the branch-local Translation state and nodes**
+- [x] **Step 3: Implement the branch-local Translation state and nodes**
 
 ```text
 build_multi_queries
@@ -2259,7 +2259,7 @@ build_multi_queries
 
 Define the Translation nodes, `TranslationBranchState`, and `build_translation_subgraph()` in `translation.py`. The retrieval service internally owns per-query RRF, cross-query RRF, and reranking. Graph nodes must not import Qdrant.
 
-- [ ] **Step 4: Implement structured field rendering**
+- [x] **Step 4: Implement structured field rendering**
 
 Model output:
 
@@ -2302,7 +2302,7 @@ Define `TranslationResult`, `TranslationBranchInput`, and `TranslationBranchOutp
 
 Do not import or extend `LanguageAssistantState` in this task. `tests/agents/language/test_translation.py` invokes the compiled Translation Branch directly through its narrow input contract. T11 later imports `TranslationResult` and connects the Branch to the Parent State.
 
-- [ ] **Step 5: Write retry and failure tests**
+- [x] **Step 5: Write retry and failure tests**
 
 ```text
 test_translation_retry_does_not_repeat_queries_or_retrieval
@@ -2334,7 +2334,7 @@ reference_ids:
   only Point IDs actually included in the translation Prompt
 ```
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 ```bash
 .venv/bin/python -m pytest \
@@ -2345,7 +2345,7 @@ reference_ids:
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/agents/language/translation.py app/agents/language/retrieval/service.py tests/agents/language/test_translation.py
@@ -2366,7 +2366,7 @@ git commit -m "feat: add EPS-assisted translation subgraph"
 
 **Acceptance:** T11 is the sole owner of shared Parent State and wrapper nodes; public facade supports `invoke(LanguageAssistantInput | Mapping)` with the four top-level fields while the private compiled graph owns its internal `input` State key; Easy and Translation start from the same parent node and have no edge between them; branch writes are disjoint; expected branch failure does not erase the other result; parent adapter returns one namespaced partial update and does not mutate the parent.
 
-- [ ] **Step 1: Write failing graph-shape tests**
+- [x] **Step 1: Write failing graph-shape tests**
 
 ```text
 test_graph_has_expected_named_nodes
@@ -2398,7 +2398,7 @@ builder.add_edge("assemble_output", END)
 
 Easy and Translation are compiled with their own State schemas, then invoked through Parent wrapper nodes. Never add either compiled subgraph directly as a Parent node and never add reducers to shared immutable fact keys merely to suppress an [`INVALID_CONCURRENT_GRAPH_UPDATE`](https://docs.langchain.com/oss/python/langgraph/errors/INVALID_CONCURRENT_GRAPH_UPDATE) error.
 
-- [ ] **Step 2: Write failing standalone invocation test**
+- [x] **Step 2: Write failing standalone invocation test**
 
 Use fakes only:
 
@@ -2422,7 +2422,7 @@ result = language_assistant_graph.invoke(
 
 Assert all three text results, canonical target language, validation summary, warnings, and retrieval metadata.
 
-- [ ] **Step 3: Connect the approved Branch result types to shared Parent State**
+- [x] **Step 3: Connect the approved Branch result types to shared Parent State**
 
 In `state.py`, import the two result types from their independently verified Branch modules and add only these disjoint result keys to the existing `LanguageAssistantState`:
 
@@ -2444,7 +2444,7 @@ class LanguageAssistantState(TypedDict, total=False):
 
 Do not add a reducer to immutable fact keys and do not move Branch-internal draft, Query, retrieval, or retry keys into the Parent State.
 
-- [ ] **Step 4: Implement shared wrapper nodes and graph factory with dependency injection**
+- [x] **Step 4: Implement shared wrapper nodes and graph factory with dependency injection**
 
 Build narrow wrappers first:
 
@@ -2551,11 +2551,11 @@ def build_language_assistant_graph(
 
 Export no eagerly connected production singleton from module import. `app.api.dependencies` owns production assembly.
 
-- [ ] **Step 5: Verify real parallel start without wall-clock assertions**
+- [x] **Step 5: Verify real parallel start without wall-clock assertions**
 
 Use fake Branch nodes with a `threading.Barrier` or events. Each Branch signals entry before either may finish. Assert both entered; do not rely on “elapsed < N seconds” flaky tests.
 
-- [ ] **Step 6: Test branch isolation**
+- [x] **Step 6: Test branch isolation**
 
 ```text
 test_easy_failure_preserves_translation
@@ -2570,7 +2570,7 @@ test_target_language_change_keeps_standard_easy_protected_facts_and_queries_equa
 test_target_language_change_affects_only_target_translation_and_retrieval_selection
 ```
 
-- [ ] **Step 7: Implement service and Parent wrapper**
+- [x] **Step 7: Implement service and Parent wrapper**
 
 ```python
 class LanguageAssistantService:
@@ -2605,7 +2605,7 @@ component status is failed only when it has no usable candidate
 requires_human_review = generation_status != success
 ```
 
-- [ ] **Step 8: Run focused tests**
+- [x] **Step 8: Run focused tests**
 
 ```bash
 .venv/bin/python -m pytest tests/agents/language/test_graph.py -q
@@ -2613,7 +2613,7 @@ requires_human_review = generation_status != success
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add app/agents/language/graph.py app/agents/language/service.py app/agents/language/nodes.py app/agents/language/state.py app/agents/language/projection.py app/agents/language/__init__.py tests/agents/language/test_graph.py
@@ -2639,7 +2639,7 @@ git commit -m "feat: assemble language assistant graph"
 
 **Acceptance:** endpoint path is unambiguous; transport can receive opaque shared Parent fields but projects only approved fields; `source_text` is absent from the declared contract and cannot affect Child input; dependency overrides allow fake graph tests; app import/OpenAPI generation never connects to Qdrant or loads models.
 
-- [ ] **Step 1: Verify the Control Tower synchronized `origin/develop` before sealing T12**
+- [x] **Step 1: Verify the Control Tower synchronized `origin/develop` before sealing T12**
 
 ```bash
 git status --short
@@ -2650,7 +2650,7 @@ git log -1 --format=%H
 
 Expected: `git status --short` is empty and `origin/develop` is an ancestor of the Task branch HEAD. If the ancestor check fails, stop T12. CT-W3 must `--no-ff` merge `origin/develop` into `feat/language-assistant`, preserve newly merged `/internal/v1/analyses` and Coordinator routes, rerun T1–T11 regression, record the new `integrated_sha`, and seal a new T12 Packet. Do not rebase verified Task commits.
 
-- [ ] **Step 2: Save and test the real backend fixture**
+- [x] **Step 2: Save and test the real backend fixture**
 
 Save the redacted Server payload as `tests/fixtures/language/backend-language-request.json` and the expected response shape as `tests/fixtures/language/backend-language-response.json`, with exact field names and worker ID type. Confirm these four values can be projected:
 
@@ -2663,7 +2663,7 @@ request_context
 
 Do not reuse `AnalysisRequest` or `maskedInstruction`.
 
-- [ ] **Step 3: Write failing transport-schema tests**
+- [x] **Step 3: Write failing transport-schema tests**
 
 ```text
 test_http_request_accepts_required_language_fields
@@ -2676,7 +2676,7 @@ test_http_schema_declares_only_language_fields_and_allows_parent_extras
 
 Transport model uses `extra="allow"` for the shared Parent envelope, but declares only `worker_id`, `preferred_language`, `nationality_code`, and `request_context`. The service receives a separately built `extra="forbid"` strict model. A metamorphic test changes `source_text` and every DB extra while holding the four approved fields fixed; projected input and output remain identical.
 
-- [ ] **Step 4: Write failing endpoint tests**
+- [x] **Step 4: Write failing endpoint tests**
 
 Endpoint:
 
@@ -2706,7 +2706,7 @@ Run:
 
 Expected: FAIL with 404 or missing schema.
 
-- [ ] **Step 5: Implement route and dependency assembly boundary**
+- [x] **Step 5: Implement route and dependency assembly boundary**
 
 ```python
 router = APIRouter(prefix="/internal/v1", tags=[LANGUAGE_ASSISTANT_TAG])
@@ -2742,7 +2742,7 @@ At the end of Task 12, production runtime composition is intentionally not yet e
 
 The route is an internal service boundary, not a public API. Do not invent endpoint-local authentication in this task. Record G6: either the deployment gateway/private network already enforces service identity, or a shared API authentication dependency must be approved and applied consistently before production exposure. Core Graph and fake endpoint tests may proceed while G6 is open; production exposure may not.
 
-- [ ] **Step 6: Export HTTP schema and run OpenAPI tests**
+- [x] **Step 6: Export HTTP schema and run OpenAPI tests**
 
 ```bash
 .venv/bin/python scripts/export_language_schemas.py
@@ -2751,7 +2751,7 @@ The route is an internal service boundary, not a public API. Do not invent endpo
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/api app/main.py scripts/export_language_schemas.py docs/contracts/language-assistant-http-request.schema.json tests/api/test_language_endpoint.py tests/fixtures/language
@@ -2784,7 +2784,7 @@ git commit -m "feat: expose language assistant internal API"
 
 **Acceptance:** Qdrant is internal-only and persistent; exact model revisions are atomically preloaded into a volume and never downloaded by a request; missing dependencies produce an internal typed runtime status without preventing existing document endpoints from booting; indexing is explicit and repeatable; Docker build uses the lock; production and integration Qdrant volumes are isolated; the production volume can be rebuilt from source JSON and local model cache.
 
-- [ ] **Step 1: Write failing settings tests**
+- [x] **Step 1: Write failing settings tests**
 
 Add tests for defaults and bounds:
 
@@ -2813,7 +2813,7 @@ warmup_on_start=false
 
 Do not add a default reranker score threshold.
 
-- [ ] **Step 2: Implement settings**
+- [x] **Step 2: Implement settings**
 
 Environment names:
 
@@ -2850,7 +2850,7 @@ FOWOCO_LLM_TIMEOUT_SECONDS
 
 Preserve the existing meanings of `llm_provider`, `llm_api_key`, and `llm_model`; add only the missing base URL and timeout fields. Language dependency assembly accepts the provider only when `llm_provider="openai-compatible"` and G2 is satisfied. Missing or unsupported provider configuration leaves the Language generation component unavailable without changing existing document endpoints.
 
-- [ ] **Step 3: Implement exact-revision model preload script**
+- [x] **Step 3: Implement exact-revision model preload script**
 
 The script downloads only:
 
@@ -2893,7 +2893,7 @@ Exact manifest shape:
 
 The numeric sizes and hashes above show field types, not accepted fixture values. Download into a sibling staging directory, verify every regular file and checksum, then rename it to the revision-specific final directory only when that directory is absent. If a final directory exists and verifies, reuse it; if it exists but fails verification, stop without deleting or replacing it. Write `manifest.json.tmp` and `os.replace` it last. Future revisions use new directory names. Runtime treats a missing, partial, revision-mismatched, path-escaping, or checksum-mismatched manifest as unavailable and never repairs it during a request.
 
-- [ ] **Step 4: Update Docker installation to consume `uv.lock`**
+- [x] **Step 4: Update Docker installation to consume `uv.lock`**
 
 Use the locally verified `uv 0.11.32` image and a frozen two-phase sync. Adapt the existing Dockerfile without removing the rhwp, LibreOffice, JRE, font, or document-volume setup:
 
@@ -2931,7 +2931,7 @@ The repository-local `.cache/` exclusion is mandatory: Task 15 stores the uv cac
 
 The model volume mounts read-only into the running AI container after preload.
 
-- [ ] **Step 5: Add Qdrant to Compose**
+- [x] **Step 5: Add Qdrant to Compose**
 
 ```yaml
 qdrant:
@@ -3000,7 +3000,7 @@ volumes:
 
 `test_compose_config.py` runs `docker compose config --format json` for the default file and for the merged files. It asserts: default Qdrant `ports` is absent, default storage source is `fowoco-qdrant-data`, merged host binding is `127.0.0.1:16333`, merged storage source is `fowoco-language-test-qdrant-data`, and merged model-cache source is `fowoco-language-test-model-cache`. This is the proof; `config --quiet` alone is only syntax validation.
 
-- [ ] **Step 6: Add production composition root, model singleton, and warmup lifecycle**
+- [x] **Step 6: Add production composition root, model singleton, and warmup lifecycle**
 
 Rules:
 
@@ -3055,7 +3055,7 @@ warning_codes: tuple[WarningCode, ...]
 
 Tests cover missing manifest, wrong revision, checksum mismatch, staging-only cache, path traversal, concurrent first load, one-time singleton creation, missing/unsupported generation provider, draft/unapproved Context Pack, disabled/enabled warmup, existing app import with empty cache, and zero network calls during request-time model load. Readiness is inspected through this internal object and structured logs; no new public readiness endpoint is added in this scope.
 
-- [ ] **Step 7: Document operational commands**
+- [x] **Step 7: Document operational commands**
 
 Runbook includes:
 
@@ -3086,7 +3086,7 @@ G7 EPS/model provenance and approved deployment scope
 why docker compose down -v is destructive
 ```
 
-- [ ] **Step 8: Verify Compose and package resources**
+- [x] **Step 8: Verify Compose and package resources**
 
 ```bash
 docker compose config --quiet
@@ -3136,7 +3136,7 @@ PY
 
 Expected: PASS; the smoke process runs from the temporary directory with isolated Python path handling, verifies the imported module lives under that venv's `site-packages`, and reads all six JSON/checksum/Markdown resources from the installed wheel rather than the source tree. Parsed default Compose config has no published Qdrant port; parsed merged test config publishes only `127.0.0.1:16333` and resolves both test-only volume names. Record the temporary directory; no cleanup command is required for this verification.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add app/agents/language/runtime.py app/core/config.py app/api/dependencies.py app/main.py compose.yml compose.test.yml Dockerfile .dockerignore README.md app/api/README.md tests/conftest.py tests/api/test_language_endpoint.py tests/agents/language/test_runtime_config.py tests/agents/language/test_model_cache.py tests/integration/language/test_compose_config.py pyproject.toml uv.lock scripts/download_language_models.py docs/language-assistant-operations.md
@@ -3157,7 +3157,7 @@ git commit -m "feat: add language assistant runtime services"
 
 **Acceptance:** traces contain no raw PII, DB objects, Prompt, Query, or response text; EPS and request data are quoted as untrusted data; all documented failure classes map to stable warning codes; parallel expected failures stay isolated.
 
-- [ ] **Step 1: Write failing trace allowlist tests**
+- [x] **Step 1: Write failing trace allowlist tests**
 
 Allowed attributes:
 
@@ -3189,13 +3189,13 @@ API key
 Parent DB object
 ```
 
-- [ ] **Step 2: Implement run-scoped trace events**
+- [x] **Step 2: Implement run-scoped trace events**
 
 Generate an internal run ID. Do not hash raw worker ID into telemetry; the API response already provides correlation to the caller.
 
 Emit start/end/failure events per node with monotonic duration. The default `TraceSink` may use structured logging; tests use a capture sink.
 
-- [ ] **Step 3: Write prompt-injection boundary tests**
+- [x] **Step 3: Write prompt-injection boundary tests**
 
 Use values such as:
 
@@ -3208,7 +3208,7 @@ HTML and Markdown control strings
 
 Assert they are serialized only inside delimited JSON data blocks and never concatenated into the system instruction.
 
-- [ ] **Step 4: Implement stable warning taxonomy**
+- [x] **Step 4: Implement stable warning taxonomy**
 
 Use only the exact `WarningCode` enum created in Task 1; unknown strings fail schema validation. Verify every code has a data-free default message:
 
@@ -3238,7 +3238,7 @@ TRANSLATION_GENERATION_FAILED
 
 Codes are stable enum values. Messages contain no user data.
 
-- [ ] **Step 5: Test the complete fault matrix**
+- [x] **Step 5: Test the complete fault matrix**
 
 ```text
 Qdrant down
@@ -3260,7 +3260,7 @@ translation succeeds/easy fails
 both branches fail
 ```
 
-- [ ] **Step 6: Run focused tests**
+- [x] **Step 6: Run focused tests**
 
 ```bash
 .venv/bin/python -m pytest \
@@ -3272,7 +3272,7 @@ both branches fail
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/agents/language/observability.py app/agents/language/nodes.py app/agents/language/generation/openai_compatible.py app/agents/language/retrieval/service.py app/api/dependencies.py tests/agents/language
@@ -3301,7 +3301,7 @@ git commit -m "feat: add language graph safety telemetry"
 
 All evaluation requests are synthetic or explicitly redacted. Never copy production worker identifiers, messages, company data, or provider raw logs into committed fixtures or reports.
 
-- [ ] **Step 1: Select truthful evaluation mode**
+- [x] **Step 1: Select truthful evaluation mode**
 
 Record the state and evidence owner of:
 
@@ -3333,7 +3333,7 @@ release_decision: NOT_EVALUATED
 
 Do not insert dummy scores, guessed thresholds, empty reviewer names, or a production-ready claim. A measured Retrieval section does not make Translation production-ready, and vice versa. Task 16 may verify the implemented Core while reporting either measured acceptance as open.
 
-- [ ] **Step 2: Define evaluator contracts and unit tests**
+- [x] **Step 2: Define evaluator contracts and unit tests**
 
 `request_context_cases.json` contains a small synthetic contract-smoke set available in both modes. Write tests for JSONL schema validation, duplicate case IDs, all metric formulas, stable ordering, deterministic report serialization, missing gate metadata, and `--validate-only` mode.
 
@@ -3347,7 +3347,7 @@ Run:
 
 Expected: PASS with no network/model calls.
 
-- [ ] **Step 3: Build the reviewed 60-case retrieval set when G4 is closed**
+- [x] **Step 3: Build the reviewed 60-case retrieval set when G4 is closed**
 
 Use four structural scenarios for each of 15 languages:
 
@@ -3371,7 +3371,7 @@ reviewer and reviewed_at metadata
 
 Do not use EPS foreign text as unquestioned translation ground truth.
 
-- [ ] **Step 4: Implement retrieval ablations**
+- [x] **Step 4: Implement retrieval ablations**
 
 Compare:
 
@@ -3397,7 +3397,7 @@ RSS and VRAM where available
 
 Every report records dataset SHA, verified physical collection name, alias target, full encoder/reranker revisions, `index_contract_version`, device, dtype, batch size, concurrency, Qdrant version, and Git commit.
 
-- [ ] **Step 5: Build the reviewed 60-case generation set when G2 and G5 are closed**
+- [x] **Step 5: Build the reviewed 60-case generation set when G2 and G5 are closed**
 
 Reuse the four scenarios × 15 languages. Store:
 
@@ -3445,7 +3445,7 @@ naturalness
 obligation/prohibition/warning strength
 ```
 
-- [ ] **Step 6: Prepare an isolated measured-evaluation runtime and run both evaluators**
+- [x] **Step 6: Prepare an isolated measured-evaluation runtime and run both evaluators**
 
 Do this step for either enabled measured track. The model download is explicit and may require approval. Use the test Compose override and alias; never point an evaluator at the default persistent production-like volume. Run only the evaluator command(s) for the enabled track(s).
 
@@ -3517,7 +3517,7 @@ trap - EXIT
 
 Expected: each enabled track's output JSON contains measured records for all 60 cases and full environment provenance. A disabled track has no measured output and remains `NOT_RUN`. Evaluator failure leaves that track `FAILED` or `NOT_RUN`; it never falls back to fabricated metrics.
 
-- [ ] **Step 7: Apply relative retrieval release gates**
+- [x] **Step 7: Apply relative retrieval release gates**
 
 Before absolute calibration, require:
 
@@ -3530,7 +3530,7 @@ All result orderings are reproducible with the same revisions/config
 
 Use labeled score distributions and PR curves to propose reranker/context sufficiency thresholds. Do not treat normalized reranker score as probability.
 
-- [ ] **Step 8: Apply human release gates**
+- [x] **Step 8: Apply human release gates**
 
 Require before production:
 
@@ -3542,7 +3542,7 @@ all score-1 outputs corrected or blocked from release
 Easy Korean reviewed separately by Korean-language reviewer
 ```
 
-- [ ] **Step 9: Run offline revision smoke**
+- [x] **Step 9: Run offline revision smoke**
 
 In measured mode, or when an approved exact-revision cache already exists, use `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` after preload, with all HTTP attempts rejected. In harness-only mode without a cache, record this step `NOT_RUN` rather than downloading implicitly.
 
@@ -3566,11 +3566,11 @@ FOWOCO_LANGUAGE_RERANKER_MODEL_PATH=/Users/parktaejung/Desktop/workspace/ai-lang
 
 Register `qdrant_integration` and `language_models` markers under `[tool.pytest.ini_options]`. Qdrant integration and offline model smoke remain separate tests; ordinary unit regression excludes `tests/integration/language` and Tasks 16.4/16.6 invoke the two heavy boundaries explicitly.
 
-- [ ] **Step 10: Write the baseline report truthfully**
+- [x] **Step 10: Write the baseline report truthfully**
 
 For each measured track, `docs/evaluations/language-assistant-baseline.md` contains measured values, environment, failures, chosen thresholds, reviewer coverage where applicable, and an explicit independent release decision. For each disabled track, it contains the `NOT_RUN` block and gate owners. Do not commit an empty template, a partial track, or harness output as if both evaluations were complete.
 
-- [ ] **Step 11: Commit harness and measured evidence separately**
+- [x] **Step 11: Commit harness and measured evidence separately**
 
 Always commit the harness with its truthful report state:
 
@@ -3605,7 +3605,7 @@ When both tracks are measured, update and commit the report section immediately 
 
 **Acceptance:** all automated tests and lint pass; real Qdrant integration passes; schema snapshots match; no removed or forbidden dependency is present; dirty HWPX work remains untouched; handoff distinguishes implemented, evaluated, and production-approved status.
 
-- [ ] **Step 1: Run placeholder and forbidden-term audit**
+- [x] **Step 1: Run placeholder and forbidden-term audit**
 
 Run scoped searches:
 
@@ -3622,7 +3622,7 @@ Expected:
 - Removed terms appear only in explicit rejection/negative-test code where justified.
 - No messaging client, queue, or send policy dependency.
 
-- [ ] **Step 2: Run all unit and API tests**
+- [x] **Step 2: Run all unit and API tests**
 
 ```bash
 UV_CACHE_DIR=.cache/uv uv sync --frozen --extra dev
@@ -3640,7 +3640,7 @@ UV_CACHE_DIR=.cache/uv uv sync --frozen --extra dev
 
 Expected: PASS with exact test counts recorded in the handoff. Real Qdrant and heavyweight local-model tests are run explicitly in Steps 4 and 6, not silently collected as ordinary unit tests.
 
-- [ ] **Step 3: Verify schema reproducibility**
+- [x] **Step 3: Verify schema reproducibility**
 
 ```bash
 .venv/bin/python scripts/export_language_schemas.py
@@ -3649,7 +3649,7 @@ git diff --exit-code -- docs/contracts
 
 Expected: no diff.
 
-- [ ] **Step 4: Run real Qdrant integration**
+- [x] **Step 4: Run real Qdrant integration**
 
 ```bash
 docker compose config --quiet
@@ -3671,7 +3671,7 @@ trap - EXIT
 
 Expected: PASS against Qdrant Server 1.18.3, not an in-memory substitute.
 
-- [ ] **Step 5: Verify a full index and alias in isolated volumes**
+- [x] **Step 5: Verify a full index and alias in isolated volumes**
 
 Run only after G7 and the bandwidth/disk-heavy model preload are approved. This automated verification must not touch the default persistent Qdrant or model volumes.
 
@@ -3714,7 +3714,7 @@ default persistent alias/volume remains untouched
 
 Production promotion is a separate operator action documented in the runbook, not part of automated verification. Before switching `eps_language_phrases_active`, require G6/G7, inspect and record the current alias target, create/verify a Qdrant snapshot of the current collection, show the candidate collection count/schema/languages, and obtain explicit deployment approval. Then perform one atomic alias switch and retain the prior collection for rollback.
 
-- [ ] **Step 6: Run offline model smoke if model cache is available**
+- [x] **Step 6: Run offline model smoke if model cache is available**
 
 ```bash
 UV_CACHE_DIR=.cache/uv uv sync --frozen --extra dev --extra language-models
@@ -3728,7 +3728,7 @@ FOWOCO_LANGUAGE_RERANKER_MODEL_PATH=/Users/parktaejung/Desktop/workspace/ai-lang
 
 Preload that ignored `.cache/language-models` directory first with `scripts/download_language_models.py` and the exact revisions from Task 13. Model download is an explicit, bandwidth-heavy operator action. If the cache is unavailable or download is not approved, report this exact verification as not run. Do not claim model/runtime completion from fake tests.
 
-- [ ] **Step 7: Re-check worktree and original dirty work**
+- [x] **Step 7: Re-check worktree and original dirty work**
 
 ```bash
 git status --short --branch
@@ -3738,7 +3738,7 @@ git log --oneline origin/develop..HEAD
 
 Separately inspect the original worktree status and confirm no HWPX file was touched by the Language branch.
 
-- [ ] **Step 8: Prepare the bounded S5 review focus**
+- [x] **Step 8: Prepare the bounded S5 review focus**
 
 Record this exact read-only reviewer focus in the T16 Evidence Pack. The Control Tower uses it after T16 Luna verification and `--no-ff` merge to create `docs/engineering/execution/language-assistant/reviews/S5-final-verification.md`:
 
@@ -3754,7 +3754,7 @@ evaluation evidence versus claims
 branch graph, merge SHA, and rollback reachability
 ```
 
-- [ ] **Step 9: Prepare PR/handoff summary**
+- [x] **Step 9: Prepare PR/handoff summary**
 
 Include:
 
@@ -3774,7 +3774,7 @@ confirmation that Squash merge and Rebase and merge are disabled for the final P
 
 Preparing the summary does not authorize PR creation or merge. After the T16 branch is independently verified and merged, S5 Sol review and the user's `진행` decision are required before opening `feat/language-assistant → develop` as a ready PR.
 
-- [ ] **Step 10: Commit final docs**
+- [x] **Step 10: Commit final docs**
 
 ```bash
 git add README.md app/api/README.md docs/language-assistant-operations.md docs/engineering docs/evaluations
@@ -3820,39 +3820,39 @@ git commit -m "docs: document language assistant operations"
 
 ## 5. Final Acceptance Checklist
 
-- [ ] 설계 문서가 과거 충돌 결정을 명시적으로 supersede한다.
-- [ ] direct Graph input JSON Schema에 미정의 필드가 허용되지 않는다.
-- [ ] `request_context`와 language-control metadata를 고정한 채 Parent/DB extra를 바꿔도 message facts, 세 text 결과, Query가 바뀌지 않는다.
-- [ ] language-control metadata만 바꾸면 target/translation/retrieval selection만 바뀌고 Standard/Easy/ProtectedFacts/Query는 그대로다.
-- [ ] Query 3개 모두 요청의 보호값을 유지한다.
-- [ ] 15개 canonical/EPS mapping이 전수 테스트된다.
-- [ ] invalid explicit preference는 fallback 없이 standalone domain error/HTTP 422로 종료된다.
-- [ ] EPS 17,902개 usable unique Point가 재현 가능하게 색인된다.
-- [ ] runtime이 alias target의 revision/schema를 검증하고 dataset mismatch를 no-match와 구분한다.
-- [ ] encoder repo/full revision/index-contract version이 전수 Point에서 검증되고, 검색은 검증된 physical collection handle에 고정된다.
-- [ ] Easy와 Translation Branch 사이 Edge가 없다.
-- [ ] T9와 T10은 `state.py`, `nodes.py`, Parent Graph 파일을 수정하지 않으며 T11만 공유 Parent 조립 파일을 소유한다.
-- [ ] 예상 가능한 한쪽 Branch 장애가 다른 Branch 결과를 지우지 않는다.
-- [ ] 재시도는 Branch별 최대 2회이며 retrieval을 반복하지 않는다.
-- [ ] provider를 호출하지 않은 fallback/time-budget 경로는 `attempt_count=0`이며 모든 경로가 `0..3`을 지킨다.
-- [ ] 재시도 초과 후 마지막 후보와 warning을 반환한다.
-- [ ] 공개 응답과 trace에 금지 데이터가 없다.
-- [ ] Graph가 자체 checkpointer 없이 standalone `invoke`된다.
-- [ ] Parent adapter가 `language_assistant` namespace만 반환한다.
-- [ ] API import/OpenAPI 생성 시 network/model load가 없다.
-- [ ] enabled warmup은 lifespan에서 한 번만 실행되고 실패해도 기존 endpoint 부팅을 막지 않는다.
-- [ ] Qdrant는 내부 network와 persistent volume을 사용한다.
-- [ ] model name과 revision이 exact local manifest로 검증된다.
-- [ ] `.cache/`는 Docker build context에서 제외되고 wheel smoke는 source tree가 아닌 isolated `site-packages` import를 증명한다.
-- [ ] unit/API/full regression/Ruff/Qdrant integration 결과가 기록된다.
-- [ ] retrieval 평가와 translation 평가가 분리되어 있다.
-- [ ] 측정 평가는 T14 강화 이후 실행되며 각 track의 fixture/commit은 독립적이다.
-- [ ] 평가하지 않은 provider/model/language 품질을 완료로 주장하지 않는다.
-- [ ] 각 Task의 Packet, implementation, Evidence SHA와 Luna verdict가 ledger에 기록된다.
-- [ ] 승인된 Task branch 전체가 `--no-ff` merge되며 Squash merge와 Rebase and merge가 사용되지 않는다.
-- [ ] S1–S5마다 Sol read-only verdict와 사용자의 진행·반려·보류 결정이 기록된다.
-- [ ] 개인 포트폴리오 원고는 팀 저장소에 포함되지 않고 비식별 engineering evidence만 남는다.
-- [ ] 원래 HWPX dirty worktree가 보존된다.
+- [x] 설계 문서가 과거 충돌 결정을 명시적으로 supersede한다.
+- [x] direct Graph input JSON Schema에 미정의 필드가 허용되지 않는다.
+- [x] `request_context`와 language-control metadata를 고정한 채 Parent/DB extra를 바꿔도 message facts, 세 text 결과, Query가 바뀌지 않는다.
+- [x] language-control metadata만 바꾸면 target/translation/retrieval selection만 바뀌고 Standard/Easy/ProtectedFacts/Query는 그대로다.
+- [x] Query 3개 모두 요청의 보호값을 유지한다.
+- [x] 15개 canonical/EPS mapping이 전수 테스트된다.
+- [x] invalid explicit preference는 fallback 없이 standalone domain error/HTTP 422로 종료된다.
+- [x] EPS 17,902개 usable unique Point가 재현 가능하게 색인된다.
+- [x] runtime이 alias target의 revision/schema를 검증하고 dataset mismatch를 no-match와 구분한다.
+- [x] encoder repo/full revision/index-contract version이 전수 Point에서 검증되고, 검색은 검증된 physical collection handle에 고정된다.
+- [x] Easy와 Translation Branch 사이 Edge가 없다.
+- [x] T9와 T10은 `state.py`, `nodes.py`, Parent Graph 파일을 수정하지 않으며 T11만 공유 Parent 조립 파일을 소유한다.
+- [x] 예상 가능한 한쪽 Branch 장애가 다른 Branch 결과를 지우지 않는다.
+- [x] 재시도는 Branch별 최대 2회이며 retrieval을 반복하지 않는다.
+- [x] provider를 호출하지 않은 fallback/time-budget 경로는 `attempt_count=0`이며 모든 경로가 `0..3`을 지킨다.
+- [x] 재시도 초과 후 마지막 후보와 warning을 반환한다.
+- [x] 공개 응답과 trace에 금지 데이터가 없다.
+- [x] Graph가 자체 checkpointer 없이 standalone `invoke`된다.
+- [x] Parent adapter가 `language_assistant` namespace만 반환한다.
+- [x] API import/OpenAPI 생성 시 network/model load가 없다.
+- [x] enabled warmup은 lifespan에서 한 번만 실행되고 실패해도 기존 endpoint 부팅을 막지 않는다.
+- [x] Qdrant는 내부 network와 persistent volume을 사용한다.
+- [x] model name과 revision이 exact local manifest로 검증된다.
+- [x] `.cache/`는 Docker build context에서 제외되고 wheel smoke는 source tree가 아닌 isolated `site-packages` import를 증명한다.
+- [x] unit/API/full regression/Ruff/Qdrant integration 결과가 기록된다.
+- [x] retrieval 평가와 translation 평가가 분리되어 있다.
+- [x] 측정 평가는 T14 강화 이후 실행되며 각 track의 fixture/commit은 독립적이다.
+- [x] 평가하지 않은 provider/model/language 품질을 완료로 주장하지 않는다.
+- [x] 각 Task의 Packet, implementation, Evidence SHA와 Luna verdict가 ledger에 기록된다.
+- [x] 승인된 Task branch 전체가 `--no-ff` merge되며 Squash merge와 Rebase and merge가 사용되지 않는다.
+- [x] S1–S5마다 Sol read-only verdict와 사용자의 진행·반려·보류 결정이 기록된다.
+- [x] 개인 포트폴리오 원고는 팀 저장소에 포함되지 않고 비식별 engineering evidence만 남는다.
+- [x] 원래 HWPX dirty worktree가 보존된다.
 
 ## 6. Approved Execution Mode
 

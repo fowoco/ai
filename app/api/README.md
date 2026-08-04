@@ -9,6 +9,7 @@
 |---|---|
 | Analyses | `POST /internal/v1/analyses` |
 | Workflows | `POST /internal/v1/workflows/renewal/run` |
+| Language Assistant | `POST /internal/v1/language-assistant` |
 | Document Capabilities | `GET /api/v1/documents/capabilities` |
 | Document Templates | `GET /api/v1/documents/templates`, `GET /api/v1/documents/templates/{template_id}` |
 | Document Inspection | `POST /api/v1/documents/inspect` |
@@ -30,6 +31,7 @@
 |---|---|
 | Swagger UI | `GET /docs` |
 | OpenAPI JSON | `GET /openapi.json` |
+| Language Assistant | `POST /internal/v1/language-assistant` |
 | 문서 기능 조회 | `GET /api/v1/documents/capabilities` |
 | 템플릿 목록 | `GET /api/v1/documents/templates` |
 | 템플릿 상세 | `GET /api/v1/documents/templates/{template_id}` |
