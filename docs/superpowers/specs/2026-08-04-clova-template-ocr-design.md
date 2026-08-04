@@ -109,7 +109,7 @@ Repeated calls are safe updates to the same row. A failed retry does not erase p
 
 ## Database Migration
 
-The Server owns the PostgreSQL schema. A new Flyway migration named `V8__add_worker_document_ocr_fields.sql` is added; the existing V3 migration is not edited.
+The Server owns the PostgreSQL schema. On the current Server `main` branch, a new Flyway migration named `V11__add_worker_document_ocr_fields.sql` is added; the existing migrations are not edited. Version 11 avoids collisions with the existing general migrations V8-V9 and the PostgreSQL-specific V10 migration.
 
 ### OCR metadata columns
 
@@ -169,6 +169,8 @@ The AI updates rows only with this tenant-scoped predicate:
 ```text
 worker_document_id = ? AND worker_id = ? AND company_id = ?
 ```
+
+Before that predicate is evaluated, the AI sets transaction-local PostgreSQL `app.company_id` to the supplied company ID. This keeps direct AI writes compatible with the Server's tenant RLS policy. The production AI database role receives SELECT access only to the scope/type columns and UPDATE access only to the OCR-owned columns.
 
 It does not modify `submission_status`, `expiry_date`, `updated_at`, or `version`. In particular, `passport_expiry_date` remains separate from the existing Server-owned `expiry_date`.
 
@@ -236,8 +238,10 @@ The Server adds only the integration needed to initiate OCR:
 
 - a read operation on the existing file storage abstraction;
 - an internal OCR client that sends the original bytes and metadata;
-- orchestration after an eligible `PASSPORT_COPY` or `ARC` file is linked to a `worker_document`;
+- an explicit retryable `POST /api/v1/workers/{workerId}/documents/{documentId}/ocr` trigger after an eligible `PASSPORT_COPY` or `ARC` file is linked;
 - mapping from `worker.nationality_code` to the three-letter passport template country code when necessary.
+
+The explicit trigger keeps the AI network call outside the file-link database transaction and provides a simple retry path without introducing an OCR queue.
 
 The existing masked AI analysis request is not reused because its privacy contract intentionally excludes raw identity-document content.
 
