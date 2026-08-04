@@ -145,10 +145,38 @@ class NoopTraceSink:
         return None
 
 
+class EpsIndexStore(Protocol):
+    def create_collection(
+        self, collection_name: str, spec: object
+    ) -> None: ...
+
+    def ensure_payload_indexes(
+        self, collection_name: str, fields: tuple[str, ...]
+    ) -> None: ...
+
+    def upsert_batch(
+        self, collection_name: str, points: tuple[dict[str, object], ...]
+    ) -> None: ...
+
+    def verify_collection(
+        self,
+        collection_name: str,
+        expected_count: int,
+        spec: object,
+        expected_languages: tuple[str, ...],
+        expected_contract: ExpectedIndexContract,
+    ) -> None: ...
+
+    def swap_alias(
+        self, alias_name: str, collection_name: str
+    ) -> None: ...
+
+
 __all__ = [
     "CandidateReranker",
     "DenseSparseEncoder",
     "DraftT",
+    "EpsIndexStore",
     "EpsRetriever",
     "GenerationOperation",
     "HybridSearchStore",
