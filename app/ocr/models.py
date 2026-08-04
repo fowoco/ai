@@ -98,3 +98,19 @@ class DatabaseSchemaMismatch(RuntimeError):
 
 class OcrPersistenceError(RuntimeError):
     """A safe wrapper for database failures."""
+
+
+class InvalidOcrRequest(ValueError):
+    """The OCR command is invalid before any provider call."""
+
+
+class WorkerDocumentNotFound(LookupError):
+    """No worker document exists in the supplied tenant scope."""
+
+
+class OcrUpstreamTimeout(RuntimeError):
+    """The OCR provider timed out after the failure status was recorded."""
+
+
+class OcrUpstreamFailure(RuntimeError):
+    """The OCR provider failed after the failure status was recorded."""
