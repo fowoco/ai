@@ -1,7 +1,7 @@
 # Language Assistant 운영 런북
 
-> **대상**: W4 Runtime (T13) 이후 배포 환경  
-> **최종 업데이트**: T13 구현 완료 시점
+> **대상**: W5 T16 (Control Tower Ledger Sealing) 배포 및 운영 환경
+> **최종 업데이트**: W5 T16 완료 시점
 
 ---
 
@@ -171,3 +171,25 @@ status = check_runtime_dependencies()
 if not status.ready:
     print(f"미준비 항목: {status.missing}")
 ```
+
+---
+
+## 평가 Harness 및 Baseline 검증
+
+### Offline Validate-Only 실행 (네트워크/모델 호출 없음)
+
+```bash
+# 검색 평가 검증
+.venv/bin/python scripts/evaluate_language_retrieval.py \
+  --cases tests/fixtures/language/retrieval_cases.jsonl \
+  --validate-only
+
+# 생성 평가 검증
+.venv/bin/python scripts/evaluate_language_generation.py \
+  --cases tests/fixtures/language/generation_cases.jsonl \
+  --validate-only
+```
+
+### Baseline 리포트 위치
+- `docs/evaluations/language-assistant-baseline.md`
+- 외부 게이트(G2, G3, G4, G5, G7) 승인 전까지 `status: NOT_RUN`으로 명시 관리
