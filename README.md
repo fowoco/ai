@@ -147,6 +147,16 @@ FOWOCO_DOCUMENT_CONVERSION_TIMEOUT_SECONDS=120
 FOWOCO_DOCUMENT_SNAPSHOT_DIR=/data/document-snapshots
 ```
 
+## CLOVA Template OCR
+
+AI는 인증된 multipart 요청으로 원본 여권/외국인등록증 파일을 받아 CLOVA Template
+OCR를 실행하고, 외부에서 준비한 `worker_document` OCR 컬럼에 정규화 결과를 직접
+저장할 수 있다. 기능은 기본적으로 비활성화되며 Server 저장소 변경은 이 AI 브랜치의
+범위에 포함되지 않는다.
+
+요청 계약, 템플릿 ID, DB 컬럼·권한, 환경변수와 안전한 스모크 실행 방법은
+[`docs/clova-ocr-integration.md`](docs/clova-ocr-integration.md)를 참고한다.
+
 호스트 포트를 변경하려면 Compose 실행 전에 설정한다.
 
 ```powershell
