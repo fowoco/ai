@@ -78,3 +78,11 @@ class OcrProcessResult:
 
 class TemplateResolutionError(ValueError):
     """The request cannot be mapped to an approved OCR template."""
+
+
+class ClovaTimeoutError(RuntimeError):
+    """CLOVA did not respond within the configured timeout."""
+
+
+class ClovaProviderError(RuntimeError):
+    """CLOVA returned an unusable transport response."""
