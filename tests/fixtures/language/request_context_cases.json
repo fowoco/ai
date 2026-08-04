@@ -1,0 +1,857 @@
+[
+  {
+    "case_id": "ctx_en_01",
+    "target_language": "en",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[EN] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_en_02",
+    "target_language": "en",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[EN] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_en_03",
+    "target_language": "en",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[EN] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_en_04",
+    "target_language": "en",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[EN] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_zh-Hans_01",
+    "target_language": "zh-Hans",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[ZH-HANS] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_zh-Hans_02",
+    "target_language": "zh-Hans",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[ZH-HANS] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_zh-Hans_03",
+    "target_language": "zh-Hans",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[ZH-HANS] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_zh-Hans_04",
+    "target_language": "zh-Hans",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[ZH-HANS] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_vi_01",
+    "target_language": "vi",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[VI] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_vi_02",
+    "target_language": "vi",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[VI] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_vi_03",
+    "target_language": "vi",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[VI] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_vi_04",
+    "target_language": "vi",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[VI] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_th_01",
+    "target_language": "th",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[TH] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_th_02",
+    "target_language": "th",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[TH] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_th_03",
+    "target_language": "th",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[TH] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_th_04",
+    "target_language": "th",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[TH] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_fil_01",
+    "target_language": "fil",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[FIL] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_fil_02",
+    "target_language": "fil",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[FIL] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_fil_03",
+    "target_language": "fil",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[FIL] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_fil_04",
+    "target_language": "fil",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[FIL] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_id_01",
+    "target_language": "id",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[ID] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_id_02",
+    "target_language": "id",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[ID] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_id_03",
+    "target_language": "id",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[ID] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_id_04",
+    "target_language": "id",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[ID] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_mn_01",
+    "target_language": "mn",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[MN] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_mn_02",
+    "target_language": "mn",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[MN] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_mn_03",
+    "target_language": "mn",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[MN] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_mn_04",
+    "target_language": "mn",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[MN] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_si_01",
+    "target_language": "si",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[SI] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_si_02",
+    "target_language": "si",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[SI] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_si_03",
+    "target_language": "si",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[SI] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_si_04",
+    "target_language": "si",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[SI] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_ru_01",
+    "target_language": "ru",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[RU] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_ru_02",
+    "target_language": "ru",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[RU] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_ru_03",
+    "target_language": "ru",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[RU] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_ru_04",
+    "target_language": "ru",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[RU] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_uz_01",
+    "target_language": "uz",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[UZ] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_uz_02",
+    "target_language": "uz",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[UZ] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_uz_03",
+    "target_language": "uz",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[UZ] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_uz_04",
+    "target_language": "uz",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[UZ] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_ky_01",
+    "target_language": "ky",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[KY] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_ky_02",
+    "target_language": "ky",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[KY] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_ky_03",
+    "target_language": "ky",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[KY] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_ky_04",
+    "target_language": "ky",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[KY] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_bn_01",
+    "target_language": "bn",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[BN] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_bn_02",
+    "target_language": "bn",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[BN] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_bn_03",
+    "target_language": "bn",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[BN] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_bn_04",
+    "target_language": "bn",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[BN] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_ur_01",
+    "target_language": "ur",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[UR] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_ur_02",
+    "target_language": "ur",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[UR] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_ur_03",
+    "target_language": "ur",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[UR] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_ur_04",
+    "target_language": "ur",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[UR] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_km_01",
+    "target_language": "km",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[KM] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_km_02",
+    "target_language": "km",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[KM] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_km_03",
+    "target_language": "km",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[KM] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_km_04",
+    "target_language": "km",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[KM] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  },
+  {
+    "case_id": "ctx_tet_01",
+    "target_language": "tet",
+    "scenario_type": "document_request",
+    "request_context": {
+      "request_reason": "[TET] Application for Employment Permit extension and document verification",
+      "requested_items": [
+        "Passport copy",
+        "Alien Registration Card",
+        "Standard Employment Contract"
+      ],
+      "deadline": "2026-09-15",
+      "submission_method": "Submit in person to the local Job Center or via EPS web portal"
+    }
+  },
+  {
+    "case_id": "ctx_tet_02",
+    "target_language": "tet",
+    "scenario_type": "deadline_time_number_preservation",
+    "request_context": {
+      "request_reason": "[TET] Mandatory safety training attendance requirement for 3 days",
+      "requested_items": [
+        "Training completion certificate",
+        "Worker ID card"
+      ],
+      "deadline": "2026-10-01",
+      "submission_method": "Complete 24 hours of training at regional safety education center by 2026-10-01"
+    }
+  },
+  {
+    "case_id": "ctx_tet_03",
+    "target_language": "tet",
+    "scenario_type": "money_unit_bearing_request",
+    "request_context": {
+      "request_reason": "[TET] Dormitory facility fee and deposit payment notice",
+      "requested_items": [
+        "Payment receipt of 150000 KRW",
+        "Bank transfer confirmation"
+      ],
+      "deadline": "2026-08-31",
+      "submission_method": "Pay 150000 KRW to company bank account and submit receipt"
+    }
+  },
+  {
+    "case_id": "ctx_tet_04",
+    "target_language": "tet",
+    "scenario_type": "prohibition_obligation_warning",
+    "request_context": {
+      "request_reason": "[TET] Workplace safety violation notice and strict prohibition warning",
+      "requested_items": [
+        "Safety pledge form",
+        "Corrective action plan"
+      ],
+      "deadline": "2026-09-05",
+      "submission_method": "Operation of machinery without safety goggles is strictly prohibited. Submit corrective plan."
+    }
+  }
+]
