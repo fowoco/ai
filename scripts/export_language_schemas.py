@@ -4,6 +4,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from app.agents.language.contracts import LanguageAssistantInput, LanguageAssistantOutput
+from app.api.schemas.language import LanguageAssistantHttpRequest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_DIR = ROOT / "docs" / "contracts"
@@ -31,6 +32,10 @@ def main() -> None:
     write_schema(
         LanguageAssistantOutput,
         SCHEMA_DIR / "language-assistant-output.schema.json",
+    )
+    write_schema(
+        LanguageAssistantHttpRequest,
+        SCHEMA_DIR / "language-assistant-http-request.schema.json",
     )
 
 

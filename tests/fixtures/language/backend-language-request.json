@@ -1,0 +1,16 @@
+{
+  "worker_id": "worker-123",
+  "preferred_language": "en",
+  "nationality_code": "VN",
+  "request_context": {
+    "request_reason": "체류기간 연장 신청 (2026-08-15까지)",
+    "requested_items": [
+      "여권 사본 1부",
+      "근로계약서 사본 1부"
+    ],
+    "deadline": "2026-08-15",
+    "submission_method": "출입국 관서 2층 방문 제출 (전화: 02-123-4567, email: test@example.com)"
+  },
+  "source_text": "체류기간 연장 신청서 제출 안내\n- 여권 사본 1부\n- 근로계약서 사본 1부\n기한: 2026-08-15\n제출방법: 출입국 관서 2층 방문 제출",
+  "extra_parent_field": "opaque_data_to_be_ignored"
+}

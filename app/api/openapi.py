@@ -1,4 +1,4 @@
-﻿"""OpenAPI 태그 이름과 Swagger 표시 정보 관리"""
+"""OpenAPI 태그 이름과 Swagger 표시 정보 관리"""
 
 ANALYSES_TAG = "Analyses"
 WORKFLOWS_TAG = "Workflows"
@@ -8,6 +8,7 @@ DOCUMENT_INSPECTION_TAG = "Document Inspection"
 DOCUMENT_EDITING_TAG = "Document Editing"
 DOCUMENT_GENERATION_TAG = "Document Generation"
 DOCUMENT_CONVERSION_TAG = "Document Conversion"
+LANGUAGE_ASSISTANT_TAG = "Language Assistant"
 
 OPENAPI_TAGS_METADATA = [
     {

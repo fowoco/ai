@@ -1,0 +1,49 @@
+{
+  "worker_id": "worker-123",
+  "target_language": "en",
+  "generation_status": "success",
+  "requires_human_review": false,
+  "standard_korean_text": "다음 요청 내용을 확인해 주세요.\n\n요청 목적: 체류기간 연장 신청 (2026-08-15까지)\n준비할 자료:\n1. 여권 사본 1부\n2. 근로계약서 사본 1부\n제출 기한: 2026-08-15\n제출 방법: 출입국 관서 2층 방문 제출 (전화: 02-123-4567, email: test@example.com)",
+  "easy_korean_text": "신청 사유: 체류기간 늘림 신청\n필요한 서류:\n- 여권 복사본 1부\n- 일터 약속 서류 복사본 1부\n제출 기한: 2026-08-15\n제출 방법: 출입국 관서 2층 가져오기 내기 (전화: 02-123-4567, email: test@example.com)",
+  "translated_text": "Reason: Extension of stay period\nRequested Items:\n- Passport copy 1 copy\n- Employment contract copy 1 copy\nDeadline: 2026-08-15\nSubmission Method: 2nd floor immigration office visit (phone: 02-123-4567, email: test@example.com)",
+  "component_status": {
+    "standard_korean": "success",
+    "easy_korean": "success",
+    "translation": "success"
+  },
+  "validation": {
+    "standard_korean": {
+      "status": "passed",
+      "failed_checks": [],
+      "inconclusive_checks": [],
+      "retry_count": 0
+    },
+    "easy_korean": {
+      "status": "passed",
+      "failed_checks": [],
+      "inconclusive_checks": [],
+      "retry_count": 0
+    },
+    "translation": {
+      "status": "passed",
+      "failed_checks": [],
+      "inconclusive_checks": [],
+      "retry_count": 0
+    }
+  },
+  "warnings": [],
+  "retrieval_metadata": {
+    "dataset_version": "v1.0",
+    "query_strategies": [
+      "canonical",
+      "reason_items",
+      "action_deadline"
+    ],
+    "reference_ids": [
+      "p1"
+    ],
+    "reference_count": 1,
+    "fallback_used": false,
+    "degraded_components": []
+  }
+}
