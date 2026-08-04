@@ -64,6 +64,24 @@ APPROVED_FIELD_NAMES = frozenset(
 )
 
 _DATE_FORMATS = ("%Y-%m-%d", "%Y.%m.%d", "%Y/%m/%d")
+_PASSPORT_DATE_PATTERN = re.compile(
+    r"^(?P<day>\d{1,2})\s+(?P<numeric_month>\d{1,2})월\s*/\s*"
+    r"(?P<english_month>[A-Za-z]{3})\s+(?P<year>\d{4})$"
+)
+_ENGLISH_MONTHS = {
+    "JAN": 1,
+    "FEB": 2,
+    "MAR": 3,
+    "APR": 4,
+    "MAY": 5,
+    "JUN": 6,
+    "JUL": 7,
+    "AUG": 8,
+    "SEP": 9,
+    "OCT": 10,
+    "NOV": 11,
+    "DEC": 12,
+}
 _ERROR_CODES = {
     "multiple_images": "MULTIPLE_IMAGES",
     "template_not_matched": "TEMPLATE_NOT_MATCHED",
@@ -207,7 +225,22 @@ def _parse_date(value: str):
             return datetime.strptime(value, date_format).date()
         except ValueError:
             continue
-    return None
+
+    match = _PASSPORT_DATE_PATTERN.fullmatch(value)
+    if match is None:
+        return None
+    numeric_month = int(match.group("numeric_month"))
+    english_month = _ENGLISH_MONTHS.get(match.group("english_month").upper())
+    if english_month != numeric_month:
+        return None
+    try:
+        return datetime(
+            int(match.group("year")),
+            numeric_month,
+            int(match.group("day")),
+        ).date()
+    except ValueError:
+        return None
 
 
 def _confidence(value: object) -> float:

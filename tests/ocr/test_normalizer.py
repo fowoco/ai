@@ -67,6 +67,45 @@ def test_normalizes_passport_text_identifiers_and_dates() -> None:
     assert result.review_reasons == ()
 
 
+def test_normalizes_korean_passport_bilingual_dates() -> None:
+    resolver = TemplateResolver()
+    fields = passport_required_fields()
+    fields[4] = field("date_of_birth", "17 2월/FEB 2000")
+    fields[5] = field("passport_expiry_date", "24 3월/MAR 2028")
+    fields.append(field("passport_issue_date", "24 3월/MAR 2023"))
+
+    result = normalize_clova_response(
+        response(43019, fields),
+        resolver.resolve(DocumentType.PASSPORT_COPY, "KOR"),
+        0.80,
+        resolver,
+    )
+
+    assert result.status is OcrStatus.SUCCEEDED
+    assert result.fields["date_of_birth"] == date(2000, 2, 17)
+    assert result.fields["passport_issue_date"] == date(2023, 3, 24)
+    assert result.fields["passport_expiry_date"] == date(2028, 3, 24)
+    assert result.review_reasons == ()
+
+
+def test_rejects_korean_passport_date_with_conflicting_months() -> None:
+    resolver = TemplateResolver()
+    fields = passport_required_fields()
+    fields[4] = field("date_of_birth", "17 2월/MAR 2000")
+
+    result = normalize_clova_response(
+        response(43019, fields),
+        resolver.resolve(DocumentType.PASSPORT_COPY, "KOR"),
+        0.80,
+        resolver,
+    )
+
+    assert result.status is OcrStatus.REVIEW_REQUIRED
+    assert result.error_code == "INVALID_DATE"
+    assert result.review_reasons == ("invalid_date:date_of_birth",)
+    assert "date_of_birth" not in result.fields
+
+
 def test_normalizes_arc_front_and_registration_number() -> None:
     resolver = TemplateResolver()
     raw = response(
