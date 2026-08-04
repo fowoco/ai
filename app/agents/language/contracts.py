@@ -1,5 +1,9 @@
+import math
 import re
+import time
 import unicodedata
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -14,6 +18,22 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+
+@dataclass(frozen=True)
+class LanguageExecutionPolicy:
+    max_correction_retries: int = 2
+    branch_time_budget_seconds: float = 120.0
+    monotonic: Callable[[], float] = time.monotonic
+
+    def __post_init__(self) -> None:
+        if not (0 <= self.max_correction_retries <= 2):
+            raise ValueError("max_correction_retries must be 0..2")
+        if not (
+            math.isfinite(self.branch_time_budget_seconds)
+            and self.branch_time_budget_seconds > 0
+        ):
+            raise ValueError("branch_time_budget_seconds must be positive and finite")
 
 
 def _normalize_bounded(
