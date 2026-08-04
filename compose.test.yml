@@ -1,0 +1,24 @@
+name: fowoco-test
+
+# 통합 테스트 전용 Compose — 프로덕션 볼륨과 완전히 격리됨
+# 테스트 완료 후: docker compose -f compose.test.yml down -v
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.18.3
+    container_name: fowoco-qdrant-test
+    # 테스트에서만 접근 가능한 임시 포트
+    ports:
+      - "16333:6333"
+    volumes:
+      - fowoco-qdrant-test-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:6333/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  fowoco-qdrant-test-data:
+    name: fowoco-qdrant-test-data
