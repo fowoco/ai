@@ -2,7 +2,7 @@
 
 - Status: Approved
 - Date: 2026-08-04
-- Scope: `fowoco/ai` OCR runtime and `fowoco/server` database/file-transfer integration
+- Scope: `fowoco/ai` OCR runtime only; `fowoco/server` is read-only reference material
 
 ## Objective
 
@@ -18,7 +18,7 @@ The AI repository already contains an `OcrNode` protocol, `ExternalOcrEngine`, `
 
 ## Chosen Approach
 
-The approved approach adds OCR columns directly to `worker_document`.
+The approved data contract stores OCR columns directly on `worker_document`. Creating those columns and sending the request are external prerequisites owned outside this AI-repository implementation; this scope does not modify the Server repository.
 
 Alternatives considered:
 
@@ -107,9 +107,9 @@ The CLOVA invoke URL, secret, timeout, confidence threshold, and database URL ar
 
 Repeated calls are safe updates to the same row. A failed retry does not erase previously stored structured fields, but consumers must trust them only when `ocr_status` is `SUCCEEDED` or after an explicit human review of `REVIEW_REQUIRED`.
 
-## Database Migration
+## External Database Contract
 
-The Server owns the PostgreSQL schema. On the current Server `main` branch, a new Flyway migration named `V11__add_worker_document_ocr_fields.sql` is added; the existing migrations are not edited. Version 11 avoids collisions with the existing general migrations V8-V9 and the PostgreSQL-specific V10 migration.
+The Server owns the PostgreSQL schema and must provision the following columns before AI integration testing. The AI repository contains no Server migration and does not modify any Server source file.
 
 ### OCR metadata columns
 
@@ -232,18 +232,9 @@ FOWOCO_DATABASE_URL
 
 OCR is disabled by default. Its timeout defaults to 30 seconds and its confidence threshold defaults to 0.80. The existing `FOWOCO_INTERNAL_API_TOKEN` protects the endpoint. Production startup fails fast if OCR is enabled but the CLOVA URL, secret, or database URL is absent.
 
-## Server Changes Outside the Table
+## External Caller Contract
 
-The Server adds only the integration needed to initiate OCR:
-
-- a read operation on the existing file storage abstraction;
-- an internal OCR client that sends the original bytes and metadata;
-- an explicit retryable `POST /api/v1/workers/{workerId}/documents/{documentId}/ocr` trigger after an eligible `PASSPORT_COPY` or `ARC` file is linked;
-- mapping from `worker.nationality_code` to the three-letter passport template country code when necessary.
-
-The explicit trigger keeps the AI network call outside the file-link database transaction and provides a simple retry path without introducing an OCR queue.
-
-The existing masked AI analysis request is not reused because its privacy contract intentionally excludes raw identity-document content.
+The AI implementation assumes an authenticated caller sends the approved multipart request with original bytes, document/worker/company IDs, document type, and passport country code. How the Server reads its file, maps nationality, or exposes a trigger is outside this scope. The existing masked AI analysis request is not reused because its privacy contract intentionally excludes raw identity-document content.
 
 ## Testing
 
@@ -256,9 +247,7 @@ Automated tests cover:
 - field-name mapping, whitespace normalization, and supported date formats;
 - required-field, low-confidence, and optional residence-row behavior;
 - tenant-scoped row verification and update predicates;
-- successful, review-required, and failed DB status transitions;
-- Server Flyway migration column and constraint checks;
-- Server file-read and multipart client contract.
+- successful, review-required, and failed DB status transitions.
 
 Normal automated tests mock CLOVA. One manual smoke test uses a non-production sample document and the real deployed templates. Logs and test fixtures must not contain real passport or alien registration data.
 
@@ -266,7 +255,7 @@ Normal automated tests mock CLOVA. One manual smoke test uses a non-production s
 
 The feature is complete when:
 
-1. The Server can send one original passport or ARC file with the approved metadata contract.
+1. Given one original passport or ARC file in the approved multipart contract, the AI accepts and validates it without requiring Server source changes.
 2. The AI chooses only the approved template candidates and calls the provided CLOVA `/infer` endpoint.
 3. ARC side is derived from `matchedTemplate.id` without Server input.
 4. Configured fields are normalized into the approved `worker_document` columns.

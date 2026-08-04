@@ -2,157 +2,54 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Accept original passport and Korean ARC files from the Server, recognize them with the approved CLOVA Template OCR templates, and persist normalized fields directly into the existing PostgreSQL `worker_document` row.
+**Goal:** Implement the AI-side endpoint that accepts original passport or Korean ARC files, recognizes them through the approved CLOVA Template OCR templates, and writes normalized fields directly to the externally provisioned PostgreSQL `worker_document` columns.
 
-**Architecture:** The AI service adds a dedicated authenticated multipart endpoint, a template resolver, CLOVA HTTP adapter, normalizer, and tenant-aware Psycopg repository. The Server adds the Flyway columns, read access to its file storage, a dedicated OCR runtime client, and an explicit retryable OCR trigger after a file is linked. The two repositories keep separate commits and communicate only through the approved multipart contract.
+**Architecture:** Only `fowoco/ai` changes. A dedicated authenticated FastAPI endpoint calls a provider adapter, normalizes the configured template fields, and persists them with a tenant-scoped Psycopg repository. The Server repository, Server migration, file-reading logic, and Server HTTP client are external prerequisites and remain untouched.
 
-**Tech Stack:** Python 3.11+, FastAPI, Pydantic 2, httpx, Psycopg 3 async pool, pytest; Java 17, Spring Boot 4.1, Java `HttpClient`, Flyway, PostgreSQL/H2, JUnit 5, WireMock, Gradle.
+**Tech Stack:** Python 3.11+, FastAPI, Pydantic 2, httpx, Psycopg 3 async pool, pytest, pytest-asyncio, Ruff.
 
 ## Global Constraints
 
-- Work in an isolated worktree for each repository at execution time.
-- Server paths below are relative to a fresh checkout of `https://github.com/fowoco/server` at or after commit `c2af9d4`; AI paths are relative to `fowoco/ai`.
-- Use Template OCR, not Document OCR, and call the supplied `/infer` invoke URL only through environment configuration.
-- Never commit or log `X-OCR-SECRET`, document bytes, passport numbers, alien registration numbers, names, addresses, or raw CLOVA responses.
+- Modify files only inside the `fowoco/ai` repository. Never edit, commit, or create files in `fowoco/server`.
+- Treat the Server repository as read-only contract reference.
+- Assume an external caller sends the approved multipart request and that the approved `worker_document` OCR columns have already been provisioned.
+- Use CLOVA Template OCR `/infer`, not Document OCR.
+- Read the invoke URL and `X-OCR-SECRET` only from environment-backed settings.
+- Never commit or log the CLOVA secret, document bytes, recognized identity values, raw CLOVA responses, database credentials, passport numbers, alien registration numbers, names, or addresses.
 - `FOWOCO_CLOVA_OCR_CONFIDENCE_THRESHOLD` defaults to `0.80`; `FOWOCO_CLOVA_OCR_TIMEOUT_SECONDS` defaults to `30`.
-- The AI must set transaction-local PostgreSQL `app.company_id` before every scoped `worker_document` query or update.
-- The AI updates only the new OCR-owned columns. It never updates `submission_status`, `expiry_date`, `updated_at`, or `version`.
-- The Server JPA `WorkerDocument` entity and create/patch DTOs remain unchanged; extra OCR columns are intentionally unmapped.
-- One OCR request represents one image or one-page PDF. Multi-page PDFs produce `REVIEW_REQUIRED`.
-- Normal test suites mock CLOVA. A live smoke test is run only with a non-production sample and a locally supplied secret.
+- Set transaction-local PostgreSQL `app.company_id` before every `worker_document` SELECT or UPDATE.
+- Update only the externally approved OCR columns. Never update `submission_status`, `expiry_date`, `updated_at`, or `version`.
+- One request represents one image or one-page PDF. Multi-page responses become `REVIEW_REQUIRED`.
+- Automated tests mock CLOVA and PostgreSQL. A live smoke test runs only with a non-production sample and locally supplied credentials.
 
-## File Structure
+## External Preconditions
 
-### AI repository
+The implementation assumes:
 
-- `app/ocr/models.py`: provider-neutral commands, enums, normalized results, and errors.
-- `app/ocr/template_resolver.py`: document/country-to-template routing and ARC side mapping.
-- `app/ocr/normalizer.py`: CLOVA response validation, field mapping, confidence checks, and date parsing.
+1. `worker_document` contains every OCR metadata, passport, ARC front, and ARC back column listed in the approved design.
+2. The AI database role can SELECT `worker_document_id`, `worker_id`, `company_id`, and `document_type`, and UPDATE only the OCR-owned columns.
+3. An authenticated caller sends `file`, `request_id`, `worker_id`, `company_id`, `document_type`, and passport `country_code` to the AI endpoint.
+4. The caller uses `PASSPORT_COPY` or `ARC`; country codes are `KOR`, `PHL`, `JPN`, `CHN`, or `VNM`.
+
+If the schema is absent or incomplete, AI startup must fail with a safe column-name-only diagnostic. This plan does not create or migrate Server tables.
+
+## AI File Structure
+
+- `app/ocr/models.py`: provider-neutral commands, enums, results, and exceptions.
+- `app/ocr/template_resolver.py`: country/template routing and ARC side mapping.
+- `app/ocr/normalizer.py`: CLOVA response validation, field mapping, confidence rules, and date parsing.
 - `app/ocr/clova_client.py`: authenticated CLOVA V2 multipart transport.
-- `app/ocr/repository.py`: tenant-aware PostgreSQL scope verification and OCR-only updates.
-- `app/ocr/service.py`: end-to-end OCR status orchestration.
-- `app/ocr/runtime.py`: startup/shutdown ownership for the httpx client and Psycopg pool.
-- `app/api/routes/ocr.py`: internal multipart endpoint and HTTP error translation.
-- `app/api/schemas/ocr.py`: status-only response schema.
-- `tests/ocr/*`, `tests/api/test_ocr_endpoint.py`: unit and endpoint contract tests.
-
-### Server repository
-
-- `src/main/resources/db/migration/V11__add_worker_document_ocr_fields.sql`: OCR columns and check constraints.
-- `file/application/port/FileStorage.java`: storage read contract.
-- `file/infrastructure/LocalFileStorage.java`: safe local byte reads.
-- `file/application/StoredFileContent*.java`: tenant-scoped stored-file metadata and byte loading.
-- `ocrintegration/*`: OCR request/response models, port, configuration, HTTP client, and coordinator.
-- `worker/api/WorkerDocumentOcrController.java`: explicit OCR trigger that is safe to retry.
-- Server tests cover migration, file reads, country mapping, multipart wire contract, and trigger authorization.
+- `app/ocr/repository.py`: tenant-aware schema verification and OCR-only PostgreSQL updates.
+- `app/ocr/service.py`: status orchestration across resolver, CLOVA, normalizer, and repository.
+- `app/ocr/runtime.py`: startup/shutdown ownership for `httpx.AsyncClient` and Psycopg pool.
+- `app/api/routes/ocr.py`: internal multipart endpoint and safe HTTP error translation.
+- `app/api/schemas/ocr.py`: status-only response model.
+- `tests/ocr/*`, `tests/api/test_ocr_endpoint.py`: unit and endpoint tests.
+- `docs/clova-ocr-integration.md`, `scripts/smoke_clova_ocr.ps1`: external contract and redacted smoke workflow.
 
 ---
 
-### Task 1: Add OCR columns to Server `worker_document`
-
-**Repository:** `fowoco/server`
-
-**Files:**
-- Create: `src/main/resources/db/migration/V11__add_worker_document_ocr_fields.sql`
-- Modify: `src/test/java/com/fowoco/server/PostgreSqlMigrationTests.java`
-
-**Interfaces:**
-- Consumes: existing `worker_document(worker_document_id, worker_id, company_id, document_type)`.
-- Produces: the exact OCR columns used by AI Task 5 and the status/side check constraints.
-
-- [ ] **Step 1: Add failing migration assertions**
-
-Extend the existing `columnSpecs(connection, "worker_document")` assertion with representative columns from every group:
-
-```java
-.containsEntry("ocr_status", new ColumnSpec("varchar", false))
-.containsEntry("ocr_request_id", new ColumnSpec("uuid", true))
-.containsEntry("ocr_template_id", new ColumnSpec("int8", true))
-.containsEntry("ocr_field_confidences", new ColumnSpec("jsonb", false))
-.containsEntry("passport_number", new ColumnSpec("varchar", true))
-.containsEntry("alien_registration_number", new ColumnSpec("varchar", true))
-.containsEntry("stay_expiration_date", new ColumnSpec("date", true))
-.containsEntry("residence_address_2", new ColumnSpec("varchar", true));
-```
-
-Add a check-constraint assertion that rejects `ocr_status='UNKNOWN'` and `ocr_document_side='MIDDLE'`.
-
-- [ ] **Step 2: Run the migration test and confirm failure**
-
-Run:
-
-```powershell
-.\gradlew.bat test --tests com.fowoco.server.PostgreSqlMigrationTests
-```
-
-Expected: FAIL because `ocr_status` and the other V11 columns do not exist.
-
-- [ ] **Step 3: Add the V11 migration**
-
-Create the migration with these exact definitions:
-
-```sql
-ALTER TABLE worker_document
-    ADD COLUMN ocr_status VARCHAR(20) NOT NULL DEFAULT 'NOT_REQUESTED',
-    ADD COLUMN ocr_request_id UUID,
-    ADD COLUMN ocr_template_id BIGINT,
-    ADD COLUMN ocr_document_side VARCHAR(10),
-    ADD COLUMN ocr_field_confidences JSONB NOT NULL DEFAULT CAST('{}' AS JSONB),
-    ADD COLUMN ocr_error_code VARCHAR(60),
-    ADD COLUMN ocr_processed_at TIMESTAMP(6) WITH TIME ZONE,
-    ADD COLUMN passport_number VARCHAR(32),
-    ADD COLUMN surname VARCHAR(120),
-    ADD COLUMN given_names VARCHAR(160),
-    ADD COLUMN nationality VARCHAR(80),
-    ADD COLUMN date_of_birth DATE,
-    ADD COLUMN sex VARCHAR(20),
-    ADD COLUMN passport_issue_date DATE,
-    ADD COLUMN passport_expiry_date DATE,
-    ADD COLUMN alien_registration_number VARCHAR(32),
-    ADD COLUMN full_name VARCHAR(200),
-    ADD COLUMN visa_type VARCHAR(40),
-    ADD COLUMN alien_registration_issue_date DATE,
-    ADD COLUMN stay_permit_date DATE,
-    ADD COLUMN stay_expiration_date DATE,
-    ADD COLUMN residence_report_date_1 DATE,
-    ADD COLUMN residence_confirmation_1 VARCHAR(160),
-    ADD COLUMN residence_address_1 VARCHAR(300),
-    ADD COLUMN residence_report_date_2 DATE,
-    ADD COLUMN residence_confirmation_2 VARCHAR(160),
-    ADD COLUMN residence_address_2 VARCHAR(300),
-    ADD CONSTRAINT ck_worker_document_ocr_status CHECK (
-        ocr_status IN ('NOT_REQUESTED', 'PROCESSING', 'SUCCEEDED', 'REVIEW_REQUIRED', 'FAILED')
-    ),
-    ADD CONSTRAINT ck_worker_document_ocr_side CHECK (
-        ocr_document_side IS NULL OR ocr_document_side IN ('FRONT', 'BACK')
-    );
-```
-
-Do not add identity-field indexes or modify V3/V8/V9/V10.
-
-- [ ] **Step 4: Run migration and Server regression tests**
-
-Run:
-
-```powershell
-.\gradlew.bat test --tests com.fowoco.server.PostgreSqlMigrationTests
-.\gradlew.bat test
-```
-
-Expected: both commands PASS; Hibernate validation still accepts the intentionally unmapped columns.
-
-- [ ] **Step 5: Commit the Server migration**
-
-```powershell
-git add src/main/resources/db/migration/V11__add_worker_document_ocr_fields.sql src/test/java/com/fowoco/server/PostgreSqlMigrationTests.java
-git commit -m "feat: add worker document OCR fields"
-```
-
----
-
-### Task 2: Define AI OCR models and template routing
-
-**Repository:** `fowoco/ai`
+### Task 1: Define OCR models and template routing
 
 **Files:**
 - Create: `app/ocr/__init__.py`
@@ -162,17 +59,17 @@ git commit -m "feat: add worker document OCR fields"
 - Create: `tests/ocr/test_template_resolver.py`
 
 **Interfaces:**
-- Produces: `DocumentType`, `OcrStatus`, `DocumentSide`, `OcrScope`, `OcrFile`, `TemplateSelection`, `NormalizedOcrResult`, `OcrProcessResult`, `TemplateResolutionError`, and `TemplateResolver`.
-- Later tasks import these types; do not redefine them elsewhere.
+- Produces: `DocumentType`, `OcrStatus`, `DocumentSide`, `OcrScope`, `OcrFile`, `OcrCommand`, `TemplateSelection`, `NormalizedOcrResult`, `OcrProcessResult`, and `TemplateResolutionError`.
+- Produces: `TemplateResolver.resolve(document_type, country_code)` and `TemplateResolver.side_for_template(template_id)`.
 
 - [ ] **Step 1: Write failing routing tests**
 
-Create parameterized tests for all passport mappings and ARC candidates:
+Create parameterized tests for every approved passport template and both ARC templates:
 
 ```python
 import pytest
 
-from app.ocr.models import DocumentSide, DocumentType
+from app.ocr.models import DocumentSide, DocumentType, TemplateResolutionError
 from app.ocr.template_resolver import TemplateResolver
 
 
@@ -185,19 +82,21 @@ def test_resolves_passport_template(country: str, template_id: int) -> None:
     assert selection.template_ids == (template_id,)
 
 
-def test_resolves_arc_candidates_and_side() -> None:
+def test_resolves_arc_candidates_and_matched_side() -> None:
     resolver = TemplateResolver()
-    selection = resolver.resolve(DocumentType.ARC, None)
-    assert selection.template_ids == (43024, 43025)
+    assert resolver.resolve(DocumentType.ARC, None).template_ids == (43024, 43025)
     assert resolver.side_for_template(43024) is DocumentSide.FRONT
     assert resolver.side_for_template(43025) is DocumentSide.BACK
+
+
+def test_rejects_missing_passport_country() -> None:
+    with pytest.raises(TemplateResolutionError, match="passport country"):
+        TemplateResolver().resolve(DocumentType.PASSPORT_COPY, None)
 ```
 
-Add tests that missing/unsupported passport countries and unexpected matched template IDs raise `TemplateResolutionError`.
+Also test lower/outer whitespace normalization, unsupported country, and unexpected matched template ID.
 
-- [ ] **Step 2: Run the resolver tests and confirm failure**
-
-Run:
+- [ ] **Step 2: Run the resolver test and verify red**
 
 ```powershell
 python -m pytest tests/ocr/test_template_resolver.py -v
@@ -205,12 +104,18 @@ python -m pytest tests/ocr/test_template_resolver.py -v
 
 Expected: FAIL with `ModuleNotFoundError: No module named 'app.ocr'`.
 
-- [ ] **Step 3: Add provider-neutral models and resolver**
+- [ ] **Step 3: Implement immutable models and exact mappings**
 
-Use string enums and immutable dataclasses. The central signatures are:
+Use these central definitions:
 
 ```python
-FieldValue = str | date
+from dataclasses import dataclass
+from datetime import date
+from enum import StrEnum
+from typing import Mapping, TypeAlias
+from uuid import UUID
+
+FieldValue: TypeAlias = str | date
 
 
 class DocumentType(StrEnum):
@@ -279,31 +184,11 @@ class OcrProcessResult:
     matched_template_id: int | None
     document_side: DocumentSide | None
     review_reasons: tuple[str, ...]
-
-
-class TemplateResolver:
-    def resolve(self, document_type: DocumentType, country_code: str | None) -> TemplateSelection:
-        normalized = country_code.strip().upper() if country_code else None
-        if document_type is DocumentType.ARC:
-            return TemplateSelection((43024, 43025), document_type)
-        if normalized not in PASSPORT_TEMPLATE_IDS:
-            raise TemplateResolutionError("unsupported passport country")
-        return TemplateSelection((PASSPORT_TEMPLATE_IDS[normalized],), document_type)
-
-    def side_for_template(self, template_id: int) -> DocumentSide | None:
-        if template_id in PASSPORT_TEMPLATE_IDS.values():
-            return None
-        try:
-            return {43024: DocumentSide.FRONT, 43025: DocumentSide.BACK}[template_id]
-        except KeyError as exc:
-            raise TemplateResolutionError("unexpected matched template") from exc
 ```
 
-Normalize country codes with `strip().upper()` but accept only the approved three-letter codes at the AI boundary.
+`TemplateResolver` uses exactly `{KOR: 43019, PHL: 43021, JPN: 43022, CHN: 43023, VNM: 43038}` and ARC candidates `(43024, 43025)`.
 
-- [ ] **Step 4: Run resolver tests and lint**
-
-Run:
+- [ ] **Step 4: Run resolver tests and targeted lint**
 
 ```powershell
 python -m pytest tests/ocr/test_template_resolver.py -v
@@ -321,9 +206,7 @@ git commit -m "feat: add OCR template routing"
 
 ---
 
-### Task 3: Normalize CLOVA fields and classify recognition quality
-
-**Repository:** `fowoco/ai`
+### Task 2: Normalize CLOVA fields and recognition quality
 
 **Files:**
 - Create: `app/ocr/normalizer.py`
@@ -331,20 +214,27 @@ git commit -m "feat: add OCR template routing"
 - Modify: `app/ocr/models.py`
 
 **Interfaces:**
-- Consumes: `TemplateSelection` from Task 2 and CLOVA response mappings.
-- Produces: `normalize_clova_response(raw, selection, threshold) -> NormalizedOcrResult`.
-- `NormalizedOcrResult` contains `status`, `matched_template_id`, `document_side`, `fields`, `field_confidences`, `error_code`, and `review_reasons`.
+- Consumes: CLOVA response mappings and `TemplateSelection`.
+- Produces: `normalize_clova_response(raw, selection, threshold, resolver) -> NormalizedOcrResult`.
 
-- [ ] **Step 1: Write failing passport, ARC, and date tests**
+- [ ] **Step 1: Write failing normalization tests**
 
-Use small synthetic CLOVA responses with no real identity data:
+Use synthetic values only:
 
 ```python
+from datetime import date
+
+from app.ocr.models import DocumentType, OcrStatus
+from app.ocr.normalizer import normalize_clova_response
+from app.ocr.template_resolver import TemplateResolver
+
+
 def field(name: str, text: str, confidence: float = 0.99) -> dict[str, object]:
     return {"name": name, "inferText": text, "inferConfidence": confidence}
 
 
-def test_normalizes_passport_fields_and_dates() -> None:
+def test_normalizes_passport_dates() -> None:
+    resolver = TemplateResolver()
     raw = {
         "images": [{
             "inferResult": "SUCCESS",
@@ -359,16 +249,19 @@ def test_normalizes_passport_fields_and_dates() -> None:
             ],
         }]
     }
-    result = normalize_clova_response(raw, TemplateResolver().resolve(DocumentType.PASSPORT_COPY, "KOR"), 0.8)
+    result = normalize_clova_response(
+        raw,
+        resolver.resolve(DocumentType.PASSPORT_COPY, "KOR"),
+        0.80,
+        resolver,
+    )
     assert result.status is OcrStatus.SUCCEEDED
     assert result.fields["date_of_birth"] == date(2000, 1, 2)
 ```
 
-Add tests for ARC front, ARC back with only `stay_expiration_date`, optional empty residence row 2, low confidence, missing required field, invalid date, no match, unexpected template, and multiple images.
+Add tests for ARC front, ARC back with only `stay_expiration_date`, blank second residence row, low-confidence required field, missing required field, invalid date, no match, unexpected template, unknown field, and multiple images.
 
-- [ ] **Step 2: Run normalizer tests and confirm failure**
-
-Run:
+- [ ] **Step 2: Run the normalizer test and verify red**
 
 ```powershell
 python -m pytest tests/ocr/test_normalizer.py -v
@@ -376,9 +269,9 @@ python -m pytest tests/ocr/test_normalizer.py -v
 
 Expected: FAIL because `app.ocr.normalizer` does not exist.
 
-- [ ] **Step 3: Implement strict normalization**
+- [ ] **Step 3: Implement strict allow-list normalization**
 
-Use these exact field groups:
+Use these exact groups:
 
 ```python
 DATE_FIELDS = frozenset({
@@ -394,9 +287,9 @@ ARC_FRONT_REQUIRED = frozenset({"alien_registration_number", "full_name"})
 ARC_BACK_PREFIXES = ("stay_", "residence_")
 ```
 
-Parse only `%Y-%m-%d`, `%Y.%m.%d`, and `%Y/%m/%d`. Set `REVIEW_REQUIRED` for low-confidence required fields, missing required fields, invalid recognized dates, no match, unexpected template, or multiple images. Never retain unknown field names or the raw response.
+The allow-list also includes `sex`, `visa_type`, all three residence fields for rows 1 and 2, and every approved passport/ARC column. Parse only `%Y-%m-%d`, `%Y.%m.%d`, and `%Y/%m/%d`. Ignore empty optional boxes and unknown fields. Set `REVIEW_REQUIRED` for missing/low-confidence required fields, recognized invalid dates, no match, unexpected match, or multiple images. Never return or store the raw response.
 
-- [ ] **Step 4: Run normalizer and resolver tests**
+- [ ] **Step 4: Run normalization tests and lint**
 
 ```powershell
 python -m pytest tests/ocr/test_normalizer.py tests/ocr/test_template_resolver.py -v
@@ -414,64 +307,63 @@ git commit -m "feat: normalize CLOVA OCR fields"
 
 ---
 
-### Task 4: Implement the CLOVA Template OCR HTTP client
-
-**Repository:** `fowoco/ai`
+### Task 3: Implement the CLOVA Template OCR client
 
 **Files:**
 - Create: `app/ocr/clova_client.py`
 - Create: `tests/ocr/test_clova_client.py`
 
 **Interfaces:**
-- Consumes: `OcrFile` and a tuple of template IDs.
+- Consumes: `OcrFile`, template ID tuple, and request UUID.
 - Produces: `await ClovaTemplateOcrClient.infer(file, template_ids, request_id) -> dict[str, Any]`.
-- Raises: `ClovaTimeoutError` for timeouts and `ClovaProviderError` for network, non-2xx, oversized, or invalid-JSON responses.
+- Raises: `ClovaTimeoutError` and `ClovaProviderError` from `app.ocr.models`.
 
-- [ ] **Step 1: Write failing MockTransport tests**
+- [ ] **Step 1: Write failing `httpx.MockTransport` tests**
 
-Build an `httpx.MockTransport` handler that asserts:
+Assert the outbound wire contract:
 
 ```python
-assert request.method == "POST"
-assert request.headers["X-OCR-SECRET"] == "local-test-secret"
-assert request.headers["Content-Type"].startswith("multipart/form-data; boundary=")
-body = request.read()
-assert b'"version":"V2"' in body
-assert b'"templateIds":[43024,43025]' in body
-assert b"sample.png" in body
+async def handler(request: httpx.Request) -> httpx.Response:
+    assert request.method == "POST"
+    assert request.headers["X-OCR-SECRET"] == "local-test-secret"
+    assert request.headers["Content-Type"].startswith("multipart/form-data; boundary=")
+    body = await request.aread()
+    assert b'"version":"V2"' in body
+    assert b'"templateIds":[43024,43025]' in body
+    assert b"sample.png" in body
+    return httpx.Response(200, json={"images": []})
 ```
 
-Return a synthetic `SUCCESS` response, then add timeout, HTTP 500, and invalid JSON tests.
+Add tests for timeout, network error, redirect, HTTP 500, oversized body, and invalid JSON.
 
-- [ ] **Step 2: Run client tests and confirm failure**
+- [ ] **Step 2: Run the client test and verify red**
 
 ```powershell
 python -m pytest tests/ocr/test_clova_client.py -v
 ```
 
-Expected: FAIL because `ClovaTemplateOcrClient` is not defined.
+Expected: FAIL because `ClovaTemplateOcrClient` is undefined.
 
-- [ ] **Step 3: Implement the client**
+- [ ] **Step 3: Implement the V2 multipart client**
 
-The constructor and call contract are:
+Use this call boundary:
 
 ```python
-ClovaTemplateOcrClient(
-    invoke_url: str,
-    secret: str,
-    timeout_seconds: float,
-    client: httpx.AsyncClient | None,
-    max_response_bytes: int = 1_048_576,
+client = ClovaTemplateOcrClient(
+    invoke_url="https://example.invalid/infer",
+    secret="local-test-secret",
+    timeout_seconds=30.0,
+    client=httpx_client,
+    max_response_bytes=1_048_576,
 )
-
-await client.infer(
-    file: OcrFile,
-    template_ids: tuple[int, ...],
-    request_id: UUID,
-) -> dict[str, Any]
+raw: dict[str, Any] = await client.infer(
+    file=ocr_file,
+    template_ids=(43024, 43025),
+    request_id=request_id,
+)
 ```
 
-Create one `message` JSON part with `version="V2"`, millisecond timestamp, image `format`, safe image `name`, and `templateIds`; create one binary `file` part. Disable redirects, never log the body, enforce the response-size limit before JSON decoding, and close only internally owned clients.
+Send one JSON `message` part containing `version="V2"`, UUID request ID, millisecond timestamp, one image entry with file format/name/template IDs, plus one binary `file` part. Disable redirects. Enforce the byte cap before JSON decoding. Do not include the secret or response body in exceptions.
 
 - [ ] **Step 4: Run client tests and lint**
 
@@ -482,7 +374,7 @@ python -m ruff check app/ocr/clova_client.py tests/ocr/test_clova_client.py
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the CLOVA adapter**
+- [ ] **Step 5: Commit the provider adapter**
 
 ```powershell
 git add app/ocr/clova_client.py tests/ocr/test_clova_client.py
@@ -491,9 +383,7 @@ git commit -m "feat: add CLOVA Template OCR client"
 
 ---
 
-### Task 5: Add the tenant-aware AI PostgreSQL repository
-
-**Repository:** `fowoco/ai`
+### Task 4: Add tenant-aware PostgreSQL persistence
 
 **Files:**
 - Modify: `pyproject.toml`
@@ -501,18 +391,19 @@ git commit -m "feat: add CLOVA Template OCR client"
 - Create: `tests/ocr/test_repository.py`
 
 **Interfaces:**
-- Consumes: `OcrScope`, `DocumentType`, `NormalizedOcrResult`, request IDs, safe error codes, and timestamps.
-- Produces: `PsycopgWorkerDocumentOcrRepository` with `verify_scope`, `mark_processing`, `save_result`, and `mark_failed` async methods.
+- Produces: `PsycopgWorkerDocumentOcrRepository.verify_schema()`.
+- Produces: async `verify_scope`, `mark_processing`, `save_result`, and `mark_failed` methods.
+- Raises: `DatabaseSchemaMismatch` and `OcrPersistenceError` from `app.ocr.models`.
 
-- [ ] **Step 1: Add failing repository contract tests**
+- [ ] **Step 1: Write failing repository tests with fake async DB objects**
 
-Use fake async pool/connection/cursor objects that record SQL and parameters. Assert every method executes this statement first in the same transaction:
+Assert every scoped operation executes this first in the same transaction:
 
 ```sql
 SELECT pg_catalog.set_config('app.company_id', %s, true)
 ```
 
-Assert every select/update includes:
+Assert every document SELECT/UPDATE contains:
 
 ```sql
 WHERE worker_document_id = %s
@@ -520,9 +411,9 @@ WHERE worker_document_id = %s
   AND company_id = %s
 ```
 
-Assert `save_result` does not mention `submission_status`, bare `expiry_date`, `updated_at`, or `version` in its `SET` clause.
+Assert `verify_schema()` compares `information_schema.columns` against all approved column names and raises `DatabaseSchemaMismatch` listing only missing column names. Assert update SQL does not set `submission_status`, bare `expiry_date`, `updated_at`, or `version`.
 
-- [ ] **Step 2: Run repository tests and confirm failure**
+- [ ] **Step 2: Run repository tests and verify red**
 
 ```powershell
 python -m pytest tests/ocr/test_repository.py -v
@@ -530,35 +421,27 @@ python -m pytest tests/ocr/test_repository.py -v
 
 Expected: FAIL because the repository module does not exist.
 
-- [ ] **Step 3: Add Psycopg and implement scoped updates**
+- [ ] **Step 3: Add Psycopg and fixed SQL allow-lists**
 
-Add this dependency:
+Add:
 
 ```toml
 "psycopg[binary,pool]>=3.2,<4",
 ```
 
-Implement these signatures:
+Implement these exact method contracts:
 
-```python
+```text
+await repository.verify_schema() -> None
 await repository.verify_scope(scope: OcrScope, document_type: DocumentType) -> bool
 await repository.mark_processing(scope: OcrScope, request_id: UUID) -> None
-await repository.save_result(
-    scope: OcrScope,
-    result: NormalizedOcrResult,
-    processed_at: datetime,
-) -> None
-await repository.mark_failed(
-    scope: OcrScope,
-    request_id: UUID,
-    error_code: str,
-    processed_at: datetime,
-) -> None
+await repository.save_result(scope: OcrScope, result: NormalizedOcrResult, processed_at: datetime) -> None
+await repository.mark_failed(scope: OcrScope, request_id: UUID, error_code: str, processed_at: datetime) -> None
 ```
 
-Each method opens one connection transaction, sets `app.company_id`, then performs its scoped operation. Build `save_result` from a fixed allow-list of all approved OCR columns; never interpolate a CLOVA-provided name into SQL.
+Every method uses one connection transaction. Set `app.company_id` before querying `worker_document`. Construct `save_result` from a Python constant containing every approved OCR column; never interpolate CLOVA field names directly into SQL. Serialize confidence values to JSON and dates as native `date` objects.
 
-- [ ] **Step 4: Install dependencies and run repository tests**
+- [ ] **Step 4: Install dependencies and run persistence checks**
 
 ```powershell
 python -m pip install -e ".[dev]"
@@ -577,9 +460,7 @@ git commit -m "feat: persist OCR fields to worker documents"
 
 ---
 
-### Task 6: Orchestrate OCR processing and statuses
-
-**Repository:** `fowoco/ai`
+### Task 5: Orchestrate recognition and DB statuses
 
 **Files:**
 - Create: `app/ocr/service.py`
@@ -587,27 +468,24 @@ git commit -m "feat: persist OCR fields to worker documents"
 - Modify: `app/ocr/models.py`
 
 **Interfaces:**
-- Consumes: resolver, CLOVA client, normalizer, repository, `OcrCommand`, and `OcrFile`.
+- Consumes: resolver, CLOVA client, normalizer, repository, `OcrCommand`.
 - Produces: `await OcrService.process(command) -> OcrProcessResult`.
-- Raises provider-neutral `InvalidOcrRequest`, `WorkerDocumentNotFound`, `OcrUpstreamTimeout`, `OcrUpstreamFailure`, and `OcrPersistenceFailure`.
+- Raises safe application errors: `InvalidOcrRequest`, `WorkerDocumentNotFound`, `OcrUpstreamTimeout`, `OcrUpstreamFailure`, and `OcrPersistenceError`.
 
-- [ ] **Step 1: Write failing orchestration tests with fakes**
+- [ ] **Step 1: Write failing orchestration tests**
 
-Cover this exact call order on success:
+Using fakes, assert success ordering:
 
 ```python
-assert fake_repository.calls == [
-    "verify_scope",
-    "mark_processing",
-    "save_result",
-]
-assert fake_clova.calls == [((43019,), "sample.png")]
+result = await service.process(command)
+assert repository.calls == ["verify_scope", "mark_processing", "save_result"]
+assert clova.calls == [((43019,), "sample.png")]
 assert result.status is OcrStatus.SUCCEEDED
 ```
 
-Add tests for bad MIME type, file over 20 MiB, missing row, unsupported passport country, CLOVA timeout leading to `mark_failed(command.scope, command.request_id, "CLOVA_TIMEOUT", processed_at)`, provider error leading to `CLOVA_ERROR`, and `REVIEW_REQUIRED` being saved rather than raised.
+Add tests for empty file, unsupported MIME type, file over 20 MiB, missing scoped row, unsupported passport country, CLOVA timeout calling `mark_failed(command.scope, command.request_id, "CLOVA_TIMEOUT", processed_at)`, provider error calling `mark_failed(command.scope, command.request_id, "CLOVA_ERROR", processed_at)`, persistence failure, and `REVIEW_REQUIRED` being saved and returned.
 
-- [ ] **Step 2: Run service tests and confirm failure**
+- [ ] **Step 2: Run service tests and verify red**
 
 ```powershell
 python -m pytest tests/ocr/test_service.py -v
@@ -615,9 +493,9 @@ python -m pytest tests/ocr/test_service.py -v
 
 Expected: FAIL because `OcrService` does not exist.
 
-- [ ] **Step 3: Implement the application service**
+- [ ] **Step 3: Implement deterministic orchestration**
 
-Use this constructor and method boundary:
+Construct and call the service through this boundary:
 
 ```python
 service = OcrService(
@@ -630,9 +508,9 @@ service = OcrService(
 result: OcrProcessResult = await service.process(command)
 ```
 
-Accept only `image/jpeg`, `image/png`, and `application/pdf`. Validate non-empty bytes and the 20 MiB limit before changing DB state. Store recognized valid fields for `REVIEW_REQUIRED`; on provider failure leave prior structured values intact and update only OCR metadata/status.
+Validate `image/jpeg`, `image/png`, or `application/pdf`, non-empty bytes, safe filename, and 20 MiB limit before changing DB state. Resolve the template, verify scope/type, mark processing, call CLOVA, normalize, then save final result. On provider timeout/error, keep prior structured values and update only OCR status metadata through `mark_failed`.
 
-- [ ] **Step 4: Run service and OCR unit tests**
+- [ ] **Step 4: Run service and all OCR unit tests**
 
 ```powershell
 python -m pytest tests/ocr -v
@@ -644,15 +522,13 @@ Expected: PASS.
 - [ ] **Step 5: Commit orchestration**
 
 ```powershell
-git add app/ocr/service.py app/ocr/models.py tests/ocr/test_service.py
+git add app/ocr/models.py app/ocr/service.py tests/ocr/test_service.py
 git commit -m "feat: orchestrate OCR processing"
 ```
 
 ---
 
-### Task 7: Expose and configure the AI internal OCR endpoint
-
-**Repository:** `fowoco/ai`
+### Task 6: Expose and configure the internal AI OCR endpoint
 
 **Files:**
 - Create: `app/api/schemas/ocr.py`
@@ -663,13 +539,13 @@ git commit -m "feat: orchestrate OCR processing"
 - Modify: `app/core/config.py`
 - Modify: `app/main.py`
 - Modify: `tests/conftest.py`
-- Modify: `README.md`
 
 **Interfaces:**
-- Consumes: `OcrService.process` from Task 6.
-- Produces: authenticated `POST /internal/v1/ocr/worker-documents/{worker_document_id}` and `OcrResponse` without recognized PII.
+- Consumes: `OcrService.process`.
+- Produces: `POST /internal/v1/ocr/worker-documents/{worker_document_id}`.
+- Produces a status-only response with no extracted PII.
 
-- [ ] **Step 1: Write failing endpoint contract tests**
+- [ ] **Step 1: Write failing endpoint and configuration tests**
 
 Override `get_ocr_service` with a fake and send:
 
@@ -684,7 +560,7 @@ response = client.post(
         "document_type": "PASSPORT_COPY",
         "country_code": "KOR",
     },
-    files={"file": ("sample.png", b"not-real-identity-data", "image/png")},
+    files={"file": ("sample.png", b"synthetic-image-bytes", "image/png")},
 )
 assert response.status_code == 200
 assert set(response.json()) == {
@@ -693,9 +569,9 @@ assert set(response.json()) == {
 }
 ```
 
-Add 401, invalid enum/UUID, missing passport country, 404, 502, 504, and response-without-extracted-fields tests.
+Add tests for Bearer 401, disabled OCR 503, invalid UUID/enum, missing passport country, 404 scope miss, 502 provider error, 504 timeout, 500 persistence error, `REVIEW_REQUIRED` 200, and absence of recognized fields in the response. Add startup tests for enabled OCR with missing invoke URL/secret/database URL.
 
-- [ ] **Step 2: Run endpoint tests and confirm failure**
+- [ ] **Step 2: Run endpoint tests and verify red**
 
 ```powershell
 python -m pytest tests/api/test_ocr_endpoint.py -v
@@ -703,9 +579,9 @@ python -m pytest tests/api/test_ocr_endpoint.py -v
 
 Expected: FAIL with route 404.
 
-- [ ] **Step 3: Add settings, dependencies, route, and startup validation**
+- [ ] **Step 3: Add settings, resource lifecycle, dependency, and route**
 
-Add settings with the existing `FOWOCO_` prefix:
+Add to `Settings` under the existing `FOWOCO_` prefix:
 
 ```python
 clova_ocr_enabled: bool = False
@@ -716,11 +592,11 @@ clova_ocr_confidence_threshold: float = Field(default=0.80, ge=0, le=1)
 database_url: str | None = None
 ```
 
-When enabled, `create_app()` must reject missing invoke URL, secret, or database URL. An async lifespan opens one Psycopg `AsyncConnectionPool` and one `httpx.AsyncClient`, builds the resolver/client/repository/service, stores the service on `app.state`, and closes both resources during shutdown. `get_ocr_service(request: Request)` returns `request.app.state.ocr_service` or raises 503 when OCR is disabled. Register the route directly like the existing analyses/workflows internal routers, and use `verify_internal_bearer`.
+When enabled, validate all required settings before serving requests. The FastAPI lifespan opens one Psycopg `AsyncConnectionPool` and one `httpx.AsyncClient`, builds repository/client/service, runs `repository.verify_schema()`, stores the service on `app.state`, and closes both resources at shutdown. `get_ocr_service(request: Request)` returns the state service or raises 503.
 
-Translate errors as follows: invalid input 400/422, scoped row missing 404, provider failure 502, timeout 504, persistence failure 500. Return `REVIEW_REQUIRED` with HTTP 200.
+Use `verify_internal_bearer`. Translate invalid input to 400/422, scope miss to 404, provider failure to 502, timeout to 504, and persistence failure to 500. Return `SUCCEEDED` or `REVIEW_REQUIRED` with HTTP 200.
 
-- [ ] **Step 4: Run endpoint, unit, and full AI checks**
+- [ ] **Step 4: Run endpoint, unit, and AI regression checks**
 
 ```powershell
 python -m pytest tests/api/test_ocr_endpoint.py tests/ocr -v
@@ -728,283 +604,56 @@ python -m pytest
 python -m ruff check app tests
 ```
 
-Expected: all tests PASS. If unrelated pre-existing lint failures remain, record their exact paths and confirm all changed OCR files pass a targeted Ruff run.
+Expected: tests PASS. If the repository still has unrelated pre-existing Ruff findings, record their exact paths and require every changed OCR/API file to pass a targeted Ruff run.
 
-- [ ] **Step 5: Commit the AI endpoint**
+- [ ] **Step 5: Commit the internal endpoint**
 
 ```powershell
-git add app/api/schemas/ocr.py app/api/routes/ocr.py app/api/dependencies.py app/core/config.py app/main.py app/ocr/runtime.py tests/conftest.py tests/api/test_ocr_endpoint.py README.md
+git add app/api/schemas/ocr.py app/api/routes/ocr.py app/api/dependencies.py app/core/config.py app/main.py app/ocr/runtime.py tests/conftest.py tests/api/test_ocr_endpoint.py
 git commit -m "feat: expose internal CLOVA OCR endpoint"
 ```
 
 ---
 
-### Task 8: Add safe Server file reads for OCR forwarding
-
-**Repository:** `fowoco/server`
+### Task 7: Document the external contract and verify the AI-only integration
 
 **Files:**
-- Modify: `src/main/java/com/fowoco/server/file/application/port/FileStorage.java`
-- Modify: `src/main/java/com/fowoco/server/file/infrastructure/LocalFileStorage.java`
-- Modify: `src/test/java/com/fowoco/server/file/support/FakeFileStorage.java`
-- Create: `src/main/java/com/fowoco/server/file/application/StoredFileContent.java`
-- Create: `src/main/java/com/fowoco/server/file/application/StoredFileContentReader.java`
-- Create: `src/test/java/com/fowoco/server/file/application/StoredFileContentReaderTest.java`
-
-**Interfaces:**
-- Produces: `byte[] FileStorage.read(String storageKey)` and `StoredFileContentReader.read(UUID fileId, UUID companyId) -> StoredFileContent`.
-- `StoredFileContent` contains `fileId`, `name`, `mimeType`, `size`, and defensive-copy `bytes`.
-
-- [ ] **Step 1: Write failing storage and tenant-scope tests**
-
-Assert that `LocalFileStorage.read("safe-key")` returns stored bytes and rejects `../escape`. Assert `StoredFileContentReader` looks up `StoredFileRepository.findByIdAndCompanyId(fileId, companyId)`, sets tenant context in an active read-only transaction, and throws `FILE_NOT_FOUND` for another tenant.
-
-- [ ] **Step 2: Run focused Server tests and confirm failure**
-
-```powershell
-.\gradlew.bat test --tests "*StoredFileContentReaderTest" --tests "*FileSecurityIntegrationTest"
-```
-
-Expected: FAIL because the read contract does not exist.
-
-- [ ] **Step 3: Implement bounded, normalized reads**
-
-Extend the port:
-
-```java
-public interface FileStorage {
-    void store(String storageKey, InputStream content, long size, String mimeType);
-    byte[] read(String storageKey);
-}
-```
-
-In `LocalFileStorage`, resolve and normalize the key exactly as `store` does, require the target to remain under the storage root, and call `Files.readAllBytes`. The 20 MiB upload limit bounds memory use. In `StoredFileContentReader`, load metadata by file ID and company ID, then read by the server-generated storage key; never accept a client-supplied path.
-
-- [ ] **Step 4: Run file tests**
-
-```powershell
-.\gradlew.bat test --tests "*StoredFileContentReaderTest" --tests "*FileSecurityIntegrationTest" --tests "*DocumentSecurityIntegrationTest"
-```
-
-Expected: PASS.
-
-- [ ] **Step 5: Commit file read support**
-
-```powershell
-git add src/main/java/com/fowoco/server/file src/test/java/com/fowoco/server/file
-git commit -m "feat: read stored files for OCR"
-```
-
----
-
-### Task 9: Implement the Server-to-AI multipart OCR client
-
-**Repository:** `fowoco/server`
-
-**Files:**
-- Create: `src/main/java/com/fowoco/server/ocrintegration/application/model/OcrRuntimeRequest.java`
-- Create: `src/main/java/com/fowoco/server/ocrintegration/application/model/OcrRuntimeResponse.java`
-- Create: `src/main/java/com/fowoco/server/ocrintegration/application/port/OcrRuntimeClient.java`
-- Create: `src/main/java/com/fowoco/server/ocrintegration/application/error/OcrRuntimeCallException.java`
-- Create: `src/main/java/com/fowoco/server/ocrintegration/infrastructure/http/OcrRuntimeProperties.java`
-- Create: `src/main/java/com/fowoco/server/ocrintegration/infrastructure/http/OcrRuntimeHttpConfiguration.java`
-- Create: `src/main/java/com/fowoco/server/ocrintegration/infrastructure/http/RemoteOcrRuntimeClient.java`
-- Create: `src/main/java/com/fowoco/server/ocrintegration/infrastructure/http/DisabledOcrRuntimeClient.java`
-- Create: `src/test/java/com/fowoco/server/ocrintegration/infrastructure/http/RemoteOcrRuntimeClientWireMockTest.java`
-- Modify: `src/main/resources/application.yaml`
-- Modify: `.env.example`
-
-**Interfaces:**
-- Consumes: `StoredFileContent` from Task 8 and document/tenant identifiers.
-- Produces: `OcrRuntimeClient.recognize(OcrRuntimeRequest) -> OcrRuntimeResponse`.
-
-- [ ] **Step 1: Write failing WireMock multipart tests**
-
-Verify POST path, Bearer header, multipart part names, UUID/string values, MIME type, filename, and exact bytes. Return this safe JSON:
-
-```json
-{
-  "request_id": "00000000-0000-0000-0000-000000000001",
-  "worker_document_id": "00000000-0000-0000-0000-000000000002",
-  "ocr_status": "SUCCEEDED",
-  "matched_template_id": 43019,
-  "document_side": null,
-  "review_reasons": []
-}
-```
-
-Add tests for disabled client, invalid endpoint/credential, timeout, non-2xx, oversized response, malformed JSON, and unknown response fields.
-
-- [ ] **Step 2: Run the wire test and confirm failure**
-
-```powershell
-.\gradlew.bat test --tests "*RemoteOcrRuntimeClientWireMockTest"
-```
-
-Expected: FAIL because the OCR runtime package does not exist.
-
-- [ ] **Step 3: Implement isolated OCR HTTP configuration**
-
-Use a dedicated property namespace, not `app.ai-runtime`:
-
-```yaml
-app:
-  ocr-runtime:
-    enabled: ${OCR_RUNTIME_ENABLED:false}
-    endpoint: ${OCR_RUNTIME_ENDPOINT:http://127.0.0.1:8000/internal/v1/ocr/worker-documents}
-    service-credential: ${OCR_RUNTIME_SERVICE_CREDENTIAL:}
-    connect-timeout: ${OCR_RUNTIME_CONNECT_TIMEOUT:2s}
-    overall-timeout: ${OCR_RUNTIME_OVERALL_TIMEOUT:45s}
-    max-response-bytes: ${OCR_RUNTIME_MAX_RESPONSE_BYTES:65536}
-```
-
-Define the outbound model with these exact fields:
-
-```java
-public record OcrRuntimeRequest(
-        UUID requestId,
-        UUID workerDocumentId,
-        UUID workerId,
-        UUID companyId,
-        String documentType,
-        String countryCode,
-        String fileName,
-        String mimeType,
-        byte[] content
-) {
-    public OcrRuntimeRequest {
-        content = content.clone();
-    }
-
-    @Override
-    public byte[] content() {
-        return content.clone();
-    }
-}
-```
-
-Build the target URI by appending `/{worker_document_id}` to the configured base path. Use a random boundary and Java `HttpClient.BodyPublishers.concat` to send `file`, `request_id`, `worker_id`, `company_id`, `document_type`, and optional `country_code` parts. Follow no redirects, send the existing internal bearer credential, cap response bytes, and deserialize with unknown-field rejection.
-
-- [ ] **Step 4: Run client tests and Server regression tests**
-
-```powershell
-.\gradlew.bat test --tests "*RemoteOcrRuntimeClientWireMockTest"
-.\gradlew.bat test
-```
-
-Expected: PASS.
-
-- [ ] **Step 5: Commit the Server OCR client**
-
-```powershell
-git add src/main/java/com/fowoco/server/ocrintegration src/test/java/com/fowoco/server/ocrintegration src/main/resources/application.yaml .env.example
-git commit -m "feat: add AI OCR runtime client"
-```
-
----
-
-### Task 10: Add an explicit, retryable Server OCR trigger and run end-to-end verification
-
-**Repositories:** `fowoco/server`, then `fowoco/ai`
-
-**Files (Server):**
-- Create: `src/main/java/com/fowoco/server/ocrintegration/application/PassportCountryCodeMapper.java`
-- Create: `src/main/java/com/fowoco/server/ocrintegration/application/WorkerDocumentOcrContext.java`
-- Create: `src/main/java/com/fowoco/server/ocrintegration/application/WorkerDocumentOcrContextReader.java`
-- Create: `src/main/java/com/fowoco/server/ocrintegration/application/WorkerDocumentOcrService.java`
-- Create: `src/main/java/com/fowoco/server/worker/api/WorkerDocumentOcrController.java`
-- Create: `src/main/java/com/fowoco/server/worker/api/WorkerDocumentOcrResponse.java`
-- Create: `src/test/java/com/fowoco/server/ocrintegration/application/PassportCountryCodeMapperTest.java`
-- Create: `src/test/java/com/fowoco/server/worker/WorkerDocumentOcrSecurityIntegrationTest.java`
-- Modify: `docs/ai-runtime-contract.md`
-- Create: `docs/ocr-database-role.md`
-
-**Files (AI):**
-- Modify: `README.md`
+- Create: `docs/clova-ocr-integration.md`
 - Create: `scripts/smoke_clova_ocr.ps1`
+- Modify: `README.md`
 
 **Interfaces:**
-- Produces Server endpoint: `POST /api/v1/workers/{workerId}/documents/{documentId}/ocr`.
-- The endpoint is called after `file_id` is linked and may be called repeatedly with the same document.
+- Documents the exact multipart contract, expected external DB columns, restricted DB role permissions, configuration, template map, statuses, and retry behavior.
+- Provides a redacted direct-to-AI smoke command; it does not call or modify Server code.
 
-- [ ] **Step 1: Write failing country-mapping and trigger tests**
+- [ ] **Step 1: Add a failing documentation contract test**
 
-Test the exact mapping:
+Create `tests/ocr/test_documented_contract.py` that reads the integration document and asserts it contains:
 
-```java
-@ParameterizedTest
-@CsvSource({"KR,KOR", "KOR,KOR", "PH,PHL", "PHL,PHL", "JP,JPN", "CN,CHN", "VN,VNM"})
-void mapsSupportedNationalityCodes(String input, String expected) {
-    assertThat(mapper.toTemplateCountry(input)).isEqualTo(expected);
+```python
+REQUIRED_TERMS = {
+    "/internal/v1/ocr/worker-documents/{worker_document_id}",
+    "PASSPORT_COPY", "ARC", "43019", "43024", "43025",
+    "passport_number", "alien_registration_number",
+    "stay_permit_date", "stay_expiration_date", "residence_address_2",
+    "FOWOCO_CLOVA_OCR_INVOKE_URL", "FOWOCO_CLOVA_OCR_SECRET",
+    "FOWOCO_DATABASE_URL", "app.company_id",
 }
 ```
 
-The controller integration test must prove:
+Assert the document says `fowoco/server` is outside implementation scope.
 
-- ADMIN/HR can trigger; VIEWER and cross-tenant callers cannot.
-- missing document/file returns 404 or 409 without calling AI;
-- `CONTRACT`/`PERMIT` returns 422 without calling AI;
-- passport sends mapped country and ARC sends null country;
-- stored bytes and MIME type reach the fake `OcrRuntimeClient` unchanged;
-- response contains status/template/side/reasons but no recognized field values;
-- a second POST calls the fake again, proving retryability.
-
-- [ ] **Step 2: Run trigger tests and confirm failure**
+- [ ] **Step 2: Run the documentation test and verify red**
 
 ```powershell
-.\gradlew.bat test --tests "*PassportCountryCodeMapperTest" --tests "*WorkerDocumentOcrSecurityIntegrationTest"
+python -m pytest tests/ocr/test_documented_contract.py -v
 ```
 
-Expected: FAIL because the mapper, service, and endpoint do not exist.
+Expected: FAIL because `docs/clova-ocr-integration.md` does not exist.
 
-- [ ] **Step 3: Implement the coordinator and endpoint**
+- [ ] **Step 3: Write AI integration and database precondition documentation**
 
-`WorkerDocumentOcrContextReader.read(documentId, workerId, companyId)` is a read-only transaction that binds `app.company_id`, loads the document, worker nationality, and `StoredFileContent`, and returns an immutable `WorkerDocumentOcrContext`. `WorkerDocumentOcrService.recognize(documentId, workerId, actor)` itself is not transactional and must:
-
-1. call the context reader with the actor company;
-2. require `file_id` and an eligible document type from the returned context;
-3. map worker nationality only for passports and send null country for ARC;
-4. generate a fresh UUID request ID;
-5. call `OcrRuntimeClient` after the context reader transaction has completed;
-6. return the AI status-only result.
-
-Keep the network call outside a Server DB transaction. The explicit endpoint avoids holding the file-link transaction open and gives operators a safe retry path.
-
-- [ ] **Step 4: Run both repositories' automated verification**
-
-Server:
-
-```powershell
-.\gradlew.bat test --tests "*PassportCountryCodeMapperTest" --tests "*WorkerDocumentOcrSecurityIntegrationTest"
-.\gradlew.bat test
-```
-
-AI:
-
-```powershell
-python -m pytest
-python -m ruff check app tests
-```
-
-Expected: all tests PASS, or only previously recorded unrelated lint findings remain while every changed file passes targeted Ruff.
-
-- [ ] **Step 5: Add a redacted local smoke script and documentation**
-
-The PowerShell script must read these environment variables and refuse to run if any are absent:
-
-```text
-FOWOCO_INTERNAL_API_TOKEN
-OCR_SAMPLE_FILE
-OCR_WORKER_DOCUMENT_ID
-OCR_WORKER_ID
-OCR_COMPANY_ID
-OCR_DOCUMENT_TYPE
-OCR_COUNTRY_CODE
-```
-
-It posts the sample to the local AI endpoint and prints only HTTP status, `ocr_status`, template ID, side, and review reasons. It must never print file bytes or recognized fields. Document the Server trigger, AI endpoint, template map, configuration, and retry behavior.
-
-Document this least-privilege production role contract without a password:
+Document the multipart request, response, template table, all expected DB columns/types, confidence/date rules, error mapping, RLS transaction context, and this example least-privilege role without any password:
 
 ```sql
 CREATE ROLE fowoco_ai_ocr LOGIN;
@@ -1023,39 +672,61 @@ GRANT UPDATE (
 ) ON public.worker_document TO fowoco_ai_ocr;
 ```
 
-State that deployment supplies the password through secret management and that every AI transaction sets `app.company_id` before SELECT/UPDATE so the existing/future RLS policy applies.
+State clearly that DB migration and caller implementation are owned externally and are not changed by this branch.
 
-- [ ] **Step 6: Commit integration changes separately**
+- [ ] **Step 4: Add a redacted direct AI smoke script**
 
-Server:
+The script reads these environment variables and exits before sending if any required value is absent:
 
-```powershell
-git add src/main/java/com/fowoco/server/ocrintegration src/main/java/com/fowoco/server/worker/api/WorkerDocumentOcrController.java src/main/java/com/fowoco/server/worker/api/WorkerDocumentOcrResponse.java src/test/java/com/fowoco/server/ocrintegration src/test/java/com/fowoco/server/worker/WorkerDocumentOcrSecurityIntegrationTest.java docs/ai-runtime-contract.md docs/ocr-database-role.md
-git commit -m "feat: trigger OCR for worker documents"
+```text
+FOWOCO_INTERNAL_API_TOKEN
+OCR_SAMPLE_FILE
+OCR_WORKER_DOCUMENT_ID
+OCR_WORKER_ID
+OCR_COMPANY_ID
+OCR_DOCUMENT_TYPE
+OCR_COUNTRY_CODE
 ```
 
-AI:
+It posts to the local AI endpoint and prints only HTTP status, `ocr_status`, matched template ID, side, and review reasons. It never prints bytes or recognized fields. `OCR_COUNTRY_CODE` is optional only when `OCR_DOCUMENT_TYPE=ARC`.
+
+- [ ] **Step 5: Run complete AI verification**
 
 ```powershell
-git add README.md scripts/smoke_clova_ocr.ps1
-git commit -m "docs: add CLOVA OCR smoke workflow"
+python -m pytest
+python -m ruff check app tests
+git diff --check
+rg -n "fowoco/server|gradlew|src/main/java/com/fowoco/server|V11__add_worker_document_ocr_fields" app tests scripts README.md docs/clova-ocr-integration.md
 ```
 
-- [ ] **Step 7: Run the optional live smoke test**
+Expected: tests pass; the final `rg` output may mention `fowoco/server` only in the explicit statement that it is outside scope, and must contain no Server file path, Gradle command, or migration filename.
 
-With the CLOVA invoke URL, secret, database URL, restricted AI DB account, and non-production sample configured locally:
+- [ ] **Step 6: Commit documentation and smoke workflow**
+
+```powershell
+git add README.md docs/clova-ocr-integration.md scripts/smoke_clova_ocr.ps1 tests/ocr/test_documented_contract.py
+git commit -m "docs: add AI-only CLOVA OCR integration guide"
+```
+
+- [ ] **Step 7: Run optional live smoke test**
+
+Only when the external DB schema, restricted DB account, CLOVA secret, invoke URL, and non-production sample are available:
 
 ```powershell
 .\scripts\smoke_clova_ocr.ps1
 ```
 
-Expected: HTTP 200 with `SUCCEEDED` or `REVIEW_REQUIRED`; the scoped `worker_document` row contains normalized OCR fields and confidences, and logs contain identifiers/status only.
+Expected: HTTP 200 with `SUCCEEDED` or `REVIEW_REQUIRED`; the externally provisioned scoped row contains normalized values/confidences and AI logs contain identifiers/status only.
 
 ## Final Review Checklist
 
-- [ ] Confirm `git diff --check` passes in both repositories.
-- [ ] Confirm no secret or real identity data appears in tracked files: `rg -n "X-OCR-SECRET|passport_number.*[A-Z0-9]{6}|alien_registration_number.*[0-9]{6}" .` returns no credential/real-data match.
-- [ ] Confirm the AI SQL allow-list contains every approved front/back field and no Server-owned field.
-- [ ] Confirm all AI DB operations set `app.company_id` transaction-locally before touching `worker_document`.
-- [ ] Confirm Server and AI contract names match exactly, including snake_case multipart and response fields.
-- [ ] Confirm both full test suites pass and the manual smoke output is redacted.
+- [ ] Confirm `git status --short` contains changes only under the AI repository.
+- [ ] Confirm no Server checkout was modified.
+- [ ] Confirm `git diff --check` passes.
+- [ ] Confirm all changed Python files pass targeted Ruff.
+- [ ] Confirm the full AI test suite passes.
+- [ ] Confirm template mappings and front/back field allow-lists match the approved design.
+- [ ] Confirm every DB operation sets `app.company_id` before touching `worker_document`.
+- [ ] Confirm SQL never updates `submission_status`, `expiry_date`, `updated_at`, or `version`.
+- [ ] Confirm the HTTP response and logs contain no recognized identity fields.
+- [ ] Confirm the smoke script sends directly to AI and does not depend on Server source changes.
