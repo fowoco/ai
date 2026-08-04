@@ -91,14 +91,14 @@ AI는 테이블을 생성하거나 변경하지 않는다. 외부에서 아래 �
 | 그룹 | 컬럼과 PostgreSQL 형식 |
 | --- | --- |
 | 범위 | `worker_document_id UUID`, `worker_id UUID`, `company_id UUID`, `document_type VARCHAR` |
-| OCR 메타데이터 | `ocr_status VARCHAR(20)`, `ocr_request_id UUID`, `ocr_template_id BIGINT`, `ocr_document_side VARCHAR(10)`, `ocr_field_confidences JSONB`, `ocr_error_code VARCHAR(60)`, `ocr_processed_at TIMESTAMPTZ` |
-| 여권 | `passport_number VARCHAR(32)`, `surname VARCHAR(120)`, `given_names VARCHAR(160)`, `nationality VARCHAR(80)`, `date_of_birth DATE`, `sex VARCHAR(20)`, `passport_issue_date DATE`, `passport_expiry_date DATE` |
-| ARC 앞면 | `alien_registration_number VARCHAR(32)`, `full_name VARCHAR(200)`, `visa_type VARCHAR(40)`, `alien_registration_issue_date DATE` |
-| ARC 뒷면 | `stay_permit_date DATE`, `stay_expiration_date DATE`, `residence_report_date_1 DATE`, `residence_confirmation_1 VARCHAR(160)`, `residence_address_1 VARCHAR(300)`, `residence_report_date_2 DATE`, `residence_confirmation_2 VARCHAR(160)`, `residence_address_2 VARCHAR(300)` |
+| OCR 메타데이터 | `ocr_status VARCHAR(20)`, `ocr_request_id UUID`, `ocr_document_side VARCHAR(10)`, `ocr_error_code VARCHAR(60)`, `ocr_processed_at TIMESTAMPTZ` |
+| 여권 | `passport_number VARCHAR(32)`, `surname VARCHAR(120)`, `given_names VARCHAR(160)`, `date_of_birth DATE`, `sex VARCHAR(20)`, `passport_issue_date DATE`, `passport_expiry_date DATE` |
+| ARC 앞면 | `alien_registration_number VARCHAR(32)`, `visa_type VARCHAR(40)` |
+| ARC 뒷면 | `stay_expiration_date DATE`, `residence_address_1 VARCHAR(300)` |
 
-ARC 앞면은 여권 그룹의 `nationality`, `sex`도 공유한다. 모든 구조화 필드는 nullable,
-`ocr_status`는 기본값 `NOT_REQUESTED`, `ocr_field_confidences`는 기본 빈 JSON 객체여야
-한다. AI 시작 시 컬럼 집합을 검사하고 누락 시 컬럼명만 포함한 오류로 기동을 중단한다.
+모든 구조화 필드는 nullable이며 `ocr_status`는 기본값 `NOT_REQUESTED`여야 한다.
+AI 시작 시 컬럼 집합을 검사하고 누락 시 컬럼명만 포함한 오류로 기동을 중단한다.
+일반 이름과 국적은 기존 `worker.display_name`, `worker.nationality_code`를 사용한다.
 
 예시 최소 권한 역할은 다음과 같다. 실제 역할 생성과 권한 부여는 DB 소유자가 수행한다.
 
@@ -108,14 +108,12 @@ GRANT USAGE ON SCHEMA public TO fowoco_ai_ocr;
 GRANT SELECT (worker_document_id, worker_id, company_id, document_type)
     ON public.worker_document TO fowoco_ai_ocr;
 GRANT UPDATE (
-    ocr_status, ocr_request_id, ocr_template_id, ocr_document_side,
-    ocr_field_confidences, ocr_error_code, ocr_processed_at,
-    passport_number, surname, given_names, nationality, date_of_birth, sex,
+    ocr_status, ocr_request_id, ocr_document_side,
+    ocr_error_code, ocr_processed_at,
+    passport_number, surname, given_names, date_of_birth, sex,
     passport_issue_date, passport_expiry_date,
-    alien_registration_number, full_name, visa_type, alien_registration_issue_date,
-    stay_permit_date, stay_expiration_date,
-    residence_report_date_1, residence_confirmation_1, residence_address_1,
-    residence_report_date_2, residence_confirmation_2, residence_address_2
+    alien_registration_number, visa_type,
+    stay_expiration_date, residence_address_1
 ) ON public.worker_document TO fowoco_ai_ocr;
 ```
 
@@ -132,12 +130,14 @@ SELECT pg_catalog.set_config('app.company_id', '<company UUID>', true);
 
 - 템플릿 `fields[].name`이 승인된 DB 컬럼명과 정확히 같은 경우만 저장한다.
 - 문자열 양끝과 반복 공백을 정리하고, 식별번호에서는 공백만 제거한다.
-- 날짜는 `YYYY-MM-DD`, `YYYY.MM.DD`, `YYYY/MM/DD`만 `DATE`로 변환한다.
-- 여권 필수 필드는 `passport_number`, `surname`, `given_names`, `nationality`,
-  `date_of_birth`, `passport_expiry_date`이다.
-- ARC 앞면 필수 필드는 `alien_registration_number`, `full_name`이다.
-- ARC 뒷면은 `stay_*` 또는 `residence_*` 중 하나 이상이 인식돼야 한다. 두 번째
-  거소 행의 빈 템플릿 상자는 무시한다.
+- 날짜는 `YYYY-MM-DD`, `YYYY.MM.DD`, `YYYY/MM/DD`와 한국 여권의
+  `DD N월/MON YYYY` 형식을 `DATE`로 변환한다. 병기된 두 월은 일치해야 한다.
+- 여권 필수 필드는 `passport_number`, `surname`, `given_names`, `date_of_birth`,
+  `passport_expiry_date`이다.
+- ARC 앞면 필수 필드는 `alien_registration_number`이다.
+- ARC 뒷면은 `stay_expiration_date` 또는 `residence_address_1` 중 하나 이상이
+  인식돼야 한다.
+- 신뢰도는 검토 상태를 결정할 때만 사용하고 DB에는 저장하지 않는다.
 - 필수값 누락, 기준 미만 신뢰도, 잘못된 날짜, 불일치 템플릿은
   `REVIEW_REQUIRED`로 저장한다.
 

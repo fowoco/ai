@@ -117,13 +117,11 @@ The Server owns the PostgreSQL schema and must provision the following columns b
 | --- | --- | --- |
 | `ocr_status` | `VARCHAR(20)` | Not null, default `NOT_REQUESTED` |
 | `ocr_request_id` | `UUID` | Nullable |
-| `ocr_template_id` | `BIGINT` | Nullable |
 | `ocr_document_side` | `VARCHAR(10)` | Nullable; `FRONT` or `BACK` |
-| `ocr_field_confidences` | `JSONB` | Not null, default empty object |
 | `ocr_error_code` | `VARCHAR(60)` | Nullable, safe machine-readable code |
 | `ocr_processed_at` | `TIMESTAMP(6) WITH TIME ZONE` | Nullable |
 
-`ocr_status` is constrained to `NOT_REQUESTED`, `PROCESSING`, `SUCCEEDED`, `REVIEW_REQUIRED`, or `FAILED`. Template IDs are not constrained in SQL because CLOVA deployments can be replaced.
+`ocr_status` is constrained to `NOT_REQUESTED`, `PROCESSING`, `SUCCEEDED`, `REVIEW_REQUIRED`, or `FAILED`.
 
 ### Passport columns
 
@@ -132,7 +130,6 @@ The Server owns the PostgreSQL schema and must provision the following columns b
 | `passport_number` | `VARCHAR(32)` |
 | `surname` | `VARCHAR(120)` |
 | `given_names` | `VARCHAR(160)` |
-| `nationality` | `VARCHAR(80)` |
 | `date_of_birth` | `DATE` |
 | `sex` | `VARCHAR(20)` |
 | `passport_issue_date` | `DATE` |
@@ -143,24 +140,14 @@ The Server owns the PostgreSQL schema and must provision the following columns b
 | Column | PostgreSQL type |
 | --- | --- |
 | `alien_registration_number` | `VARCHAR(32)` |
-| `full_name` | `VARCHAR(200)` |
 | `visa_type` | `VARCHAR(40)` |
-| `alien_registration_issue_date` | `DATE` |
-
-ARC front shares `nationality` and `sex` with passport rows.
 
 ### ARC back columns
 
 | Column | PostgreSQL type |
 | --- | --- |
-| `stay_permit_date` | `DATE` |
 | `stay_expiration_date` | `DATE` |
-| `residence_report_date_1` | `DATE` |
-| `residence_confirmation_1` | `VARCHAR(160)` |
 | `residence_address_1` | `VARCHAR(300)` |
-| `residence_report_date_2` | `DATE` |
-| `residence_confirmation_2` | `VARCHAR(160)` |
-| `residence_address_2` | `VARCHAR(300)` |
 
 All structured OCR fields are nullable. No uniqueness constraint or lookup index is added to sensitive identity fields in the MVP.
 
@@ -188,7 +175,7 @@ Configured CLOVA template field names match the database column names exactly. T
 - parses Korean passport bilingual dates in strict `DD N월/MON YYYY` form, requiring
   the numeric Korean month and English three-letter month to agree;
 - leaves empty optional fields as null;
-- stores confidence values in `ocr_field_confidences` keyed by field name;
+- uses confidence values in memory to decide whether human review is required;
 - never derives a birth date from an alien registration number;
 - never stores the full raw CLOVA response.
 
@@ -198,9 +185,9 @@ The default confidence threshold is `0.80` and is configurable through `FOWOCO_C
 
 Required fields by matched document are:
 
-- Passport: `passport_number`, `surname`, `given_names`, `nationality`, `date_of_birth`, `passport_expiry_date`.
-- ARC front: `alien_registration_number`, `full_name`.
-- ARC back: at least one configured `stay_*` or `residence_*` field.
+- Passport: `passport_number`, `surname`, `given_names`, `date_of_birth`, `passport_expiry_date`.
+- ARC front: `alien_registration_number`.
+- ARC back: `stay_expiration_date` or `residence_address_1`.
 
 The second residence row is optional. Empty optional template regions do not lower the result status.
 

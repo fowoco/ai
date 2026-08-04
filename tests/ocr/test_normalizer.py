@@ -29,7 +29,6 @@ def passport_required_fields() -> list[dict[str, object]]:
         field("passport_number", " M 00000000 "),
         field("surname", " TEST "),
         field("given_names", " TEST   USER "),
-        field("nationality", " KOR "),
         field("date_of_birth", "2000.01.02"),
         field("passport_expiry_date", "2030/01/02"),
     ]
@@ -57,7 +56,6 @@ def test_normalizes_passport_text_identifiers_and_dates() -> None:
         "passport_number": "M00000000",
         "surname": "TEST",
         "given_names": "TEST USER",
-        "nationality": "KOR",
         "date_of_birth": date(2000, 1, 2),
         "passport_expiry_date": date(2030, 1, 2),
         "passport_issue_date": date(2020, 1, 2),
@@ -70,8 +68,8 @@ def test_normalizes_passport_text_identifiers_and_dates() -> None:
 def test_normalizes_korean_passport_bilingual_dates() -> None:
     resolver = TemplateResolver()
     fields = passport_required_fields()
-    fields[4] = field("date_of_birth", "17 2월/FEB 2000")
-    fields[5] = field("passport_expiry_date", "24 3월/MAR 2028")
+    fields[3] = field("date_of_birth", "17 2월/FEB 2000")
+    fields[4] = field("passport_expiry_date", "24 3월/MAR 2028")
     fields.append(field("passport_issue_date", "24 3월/MAR 2023"))
 
     result = normalize_clova_response(
@@ -91,7 +89,7 @@ def test_normalizes_korean_passport_bilingual_dates() -> None:
 def test_rejects_korean_passport_date_with_conflicting_months() -> None:
     resolver = TemplateResolver()
     fields = passport_required_fields()
-    fields[4] = field("date_of_birth", "17 2월/MAR 2000")
+    fields[3] = field("date_of_birth", "17 2월/MAR 2000")
 
     result = normalize_clova_response(
         response(43019, fields),
@@ -112,9 +110,7 @@ def test_normalizes_arc_front_and_registration_number() -> None:
         43024,
         [
             field("alien_registration_number", " 000000 - 0000000 "),
-            field("full_name", " TEST   USER "),
             field("visa_type", " E-7 "),
-            field("alien_registration_issue_date", "2025.08.01"),
         ],
     )
 
@@ -128,8 +124,7 @@ def test_normalizes_arc_front_and_registration_number() -> None:
     assert result.status is OcrStatus.SUCCEEDED
     assert result.document_side is DocumentSide.FRONT
     assert result.fields["alien_registration_number"] == "000000-0000000"
-    assert result.fields["full_name"] == "TEST USER"
-    assert result.fields["alien_registration_issue_date"] == date(2025, 8, 1)
+    assert result.fields["visa_type"] == "E-7"
 
 
 def test_arc_back_succeeds_with_only_one_non_empty_stay_field() -> None:
@@ -148,15 +143,35 @@ def test_arc_back_succeeds_with_only_one_non_empty_stay_field() -> None:
     assert result.fields == {"stay_expiration_date": date(2028, 1, 31)}
 
 
-def test_blank_optional_second_residence_row_is_ignored() -> None:
+def test_arc_back_low_confidence_only_field_requires_review() -> None:
+    resolver = TemplateResolver()
+    raw = response(
+        43025,
+        [field("residence_address_1", "TEST ADDRESS", 0.79)],
+    )
+
+    result = normalize_clova_response(
+        raw,
+        resolver.resolve(DocumentType.ARC, None),
+        0.80,
+        resolver,
+    )
+
+    assert result.status is OcrStatus.REVIEW_REQUIRED
+    assert result.error_code == "LOW_CONFIDENCE"
+    assert result.review_reasons == ("low_confidence:residence_address_1",)
+
+
+def test_removed_arc_back_fields_are_ignored() -> None:
     resolver = TemplateResolver()
     raw = response(
         43025,
         [
             field("stay_permit_date", "2025/02/03"),
-            field("residence_report_date_2", "   ", 0.0),
-            field("residence_confirmation_2", "", 0.0),
-            field("residence_address_2", "  ", 0.0),
+            field("residence_report_date_1", "2025/02/04"),
+            field("residence_confirmation_1", "CONFIRM"),
+            field("residence_address_2", "SECOND ADDRESS"),
+            field("residence_address_1", " FIRST ADDRESS "),
         ],
     )
 
@@ -168,8 +183,8 @@ def test_blank_optional_second_residence_row_is_ignored() -> None:
     )
 
     assert result.status is OcrStatus.SUCCEEDED
-    assert set(result.fields) == {"stay_permit_date"}
-    assert set(result.field_confidences) == {"stay_permit_date"}
+    assert result.fields == {"residence_address_1": "FIRST ADDRESS"}
+    assert set(result.field_confidences) == {"residence_address_1"}
 
 
 def test_low_confidence_required_field_requires_review() -> None:

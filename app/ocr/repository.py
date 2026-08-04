@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -21,9 +20,7 @@ SCOPE_COLUMNS = (
 OCR_METADATA_COLUMNS = (
     "ocr_status",
     "ocr_request_id",
-    "ocr_template_id",
     "ocr_document_side",
-    "ocr_field_confidences",
     "ocr_error_code",
     "ocr_processed_at",
 )
@@ -31,23 +28,14 @@ STRUCTURED_OCR_COLUMNS = (
     "passport_number",
     "surname",
     "given_names",
-    "nationality",
     "date_of_birth",
     "sex",
     "passport_issue_date",
     "passport_expiry_date",
     "alien_registration_number",
-    "full_name",
     "visa_type",
-    "alien_registration_issue_date",
-    "stay_permit_date",
     "stay_expiration_date",
-    "residence_report_date_1",
-    "residence_confirmation_1",
     "residence_address_1",
-    "residence_report_date_2",
-    "residence_confirmation_2",
-    "residence_address_2",
 )
 REQUIRED_SCHEMA_COLUMNS = frozenset(
     (*SCOPE_COLUMNS, *OCR_METADATA_COLUMNS, *STRUCTURED_OCR_COLUMNS)
@@ -132,26 +120,14 @@ class PsycopgWorkerDocumentOcrRepository:
     ) -> None:
         assignments = (
             "ocr_status = %s",
-            "ocr_template_id = %s",
             "ocr_document_side = %s",
-            (
-                "ocr_field_confidences = "
-                "COALESCE(ocr_field_confidences, '{}'::jsonb) || %s::jsonb"
-            ),
             "ocr_error_code = %s",
             "ocr_processed_at = %s",
             *(f"{column} = COALESCE(%s, {column})" for column in STRUCTURED_OCR_COLUMNS),
         )
         values = (
             result.status.value,
-            result.matched_template_id,
             result.document_side.value if result.document_side else None,
-            json.dumps(
-                dict(result.field_confidences),
-                ensure_ascii=True,
-                sort_keys=True,
-                separators=(",", ":"),
-            ),
             result.error_code,
             processed_at,
             *(result.fields.get(column) for column in STRUCTURED_OCR_COLUMNS),

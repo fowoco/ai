@@ -1,4 +1,3 @@
-import json
 from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID
@@ -15,7 +14,9 @@ from app.ocr.models import (
     OcrStatus,
 )
 from app.ocr.repository import (
+    OCR_METADATA_COLUMNS,
     REQUIRED_SCHEMA_COLUMNS,
+    STRUCTURED_OCR_COLUMNS,
     PsycopgWorkerDocumentOcrRepository,
 )
 
@@ -121,6 +122,29 @@ def normalized_result() -> NormalizedOcrResult:
     )
 
 
+def test_schema_contract_contains_only_approved_ocr_columns() -> None:
+    assert OCR_METADATA_COLUMNS == (
+        "ocr_status",
+        "ocr_request_id",
+        "ocr_document_side",
+        "ocr_error_code",
+        "ocr_processed_at",
+    )
+    assert STRUCTURED_OCR_COLUMNS == (
+        "passport_number",
+        "surname",
+        "given_names",
+        "date_of_birth",
+        "sex",
+        "passport_issue_date",
+        "passport_expiry_date",
+        "alien_registration_number",
+        "visa_type",
+        "stay_expiration_date",
+        "residence_address_1",
+    )
+
+
 @pytest.mark.asyncio
 async def test_verify_schema_reports_only_missing_column_names() -> None:
     existing = set(REQUIRED_SCHEMA_COLUMNS) - {"ocr_status", "stay_expiration_date"}
@@ -209,41 +233,11 @@ async def test_save_result_uses_fixed_columns_and_native_values() -> None:
     assert "expiry_date" not in assigned_columns
     assert "updated_at" not in assigned_columns
     assert "version" not in assigned_columns
-    assert (
-        "ocr_field_confidences = "
-        "COALESCE(ocr_field_confidences, '{}'::jsonb) || %s::jsonb"
-    ) in assignments
-    for column in assigned_columns & {
-        "passport_number",
-        "surname",
-        "given_names",
-        "nationality",
-        "date_of_birth",
-        "sex",
-        "passport_issue_date",
-        "passport_expiry_date",
-        "alien_registration_number",
-        "full_name",
-        "visa_type",
-        "alien_registration_issue_date",
-        "stay_permit_date",
-        "stay_expiration_date",
-        "residence_report_date_1",
-        "residence_confirmation_1",
-        "residence_address_1",
-        "residence_report_date_2",
-        "residence_confirmation_2",
-        "residence_address_2",
-    }:
+    assert "ocr_template_id" not in assigned_columns
+    assert "ocr_field_confidences" not in assigned_columns
+    for column in STRUCTURED_OCR_COLUMNS:
         assert f"{column} = COALESCE(%s, {column})" in assignments
     assert date(2000, 1, 2) in params
-    confidence_json = next(
-        item for item in params if isinstance(item, str) and item.startswith("{")
-    )
-    assert json.loads(confidence_json) == {
-        "date_of_birth": 0.98,
-        "passport_number": 0.99,
-    }
 
 
 @pytest.mark.asyncio

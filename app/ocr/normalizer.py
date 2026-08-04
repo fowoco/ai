@@ -18,11 +18,7 @@ DATE_FIELDS = frozenset(
         "date_of_birth",
         "passport_issue_date",
         "passport_expiry_date",
-        "alien_registration_issue_date",
-        "stay_permit_date",
         "stay_expiration_date",
-        "residence_report_date_1",
-        "residence_report_date_2",
     }
 )
 PASSPORT_REQUIRED = frozenset(
@@ -30,12 +26,11 @@ PASSPORT_REQUIRED = frozenset(
         "passport_number",
         "surname",
         "given_names",
-        "nationality",
         "date_of_birth",
         "passport_expiry_date",
     }
 )
-ARC_FRONT_REQUIRED = frozenset({"alien_registration_number", "full_name"})
+ARC_FRONT_REQUIRED = frozenset({"alien_registration_number"})
 ARC_BACK_PREFIXES = ("stay_", "residence_")
 IDENTIFIER_FIELDS = frozenset({"passport_number", "alien_registration_number"})
 APPROVED_FIELD_NAMES = frozenset(
@@ -43,23 +38,14 @@ APPROVED_FIELD_NAMES = frozenset(
         "passport_number",
         "surname",
         "given_names",
-        "nationality",
         "date_of_birth",
         "sex",
         "passport_issue_date",
         "passport_expiry_date",
         "alien_registration_number",
-        "full_name",
         "visa_type",
-        "alien_registration_issue_date",
-        "stay_permit_date",
         "stay_expiration_date",
-        "residence_report_date_1",
-        "residence_confirmation_1",
         "residence_address_1",
-        "residence_report_date_2",
-        "residence_confirmation_2",
-        "residence_address_2",
     }
 )
 
@@ -164,9 +150,13 @@ def normalize_clova_response(
             review_reasons.append(f"missing_required:{name}")
 
     if selection.expected_document_type is DocumentType.ARC and side is DocumentSide.BACK:
-        has_back_value = any(name.startswith(ARC_BACK_PREFIXES) for name in recognized_names)
-        if not has_back_value:
+        back_fields = sorted(
+            name for name in recognized_names if name.startswith(ARC_BACK_PREFIXES)
+        )
+        if not back_fields:
             review_reasons.append("missing_required:arc_back_field")
+        elif not any(confidences[name] >= threshold for name in back_fields):
+            review_reasons.extend(f"low_confidence:{name}" for name in back_fields)
 
     for name in sorted(required):
         confidence = confidences.get(name)

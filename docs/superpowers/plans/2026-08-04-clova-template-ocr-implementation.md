@@ -1,5 +1,9 @@
 # CLOVA Template OCR Implementation Plan
 
+> Superseded for persistence schema details by
+> `docs/superpowers/plans/2026-08-04-minimal-ocr-schema-implementation.md`.
+> This file remains as the historical implementation plan for the original feature.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement the AI-side endpoint that accepts original passport or Korean ARC files, recognizes them through the approved CLOVA Template OCR templates, and writes normalized fields directly to the externally provisioned PostgreSQL `worker_document` columns.
