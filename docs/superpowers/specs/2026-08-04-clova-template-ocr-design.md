@@ -185,6 +185,8 @@ Configured CLOVA template field names match the database column names exactly. T
 - trims leading and trailing whitespace and collapses repeated whitespace in text;
 - removes incidental spaces from passport and alien registration numbers without inventing missing characters;
 - parses `YYYY-MM-DD`, `YYYY.MM.DD`, and `YYYY/MM/DD` into dates;
+- parses Korean passport bilingual dates in strict `DD N월/MON YYYY` form, requiring
+  the numeric Korean month and English three-letter month to agree;
 - leaves empty optional fields as null;
 - stores confidence values in `ocr_field_confidences` keyed by field name;
 - never derives a birth date from an alien registration number;
