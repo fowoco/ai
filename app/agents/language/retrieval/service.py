@@ -184,7 +184,7 @@ class HybridEpsRetriever(EpsRetriever):
                 query_strategies=query_kinds,
                 contexts=(),
                 warnings=tuple(warnings),
-                fallback_used=False,
+                fallback_used=True,
                 degraded_components=(),
             )
 
