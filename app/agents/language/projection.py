@@ -13,5 +13,10 @@ LANGUAGE_INPUT_KEYS = (
 def project_language_input(
     parent_state: Mapping[str, object],
 ) -> LanguageAssistantInput:
-    projected = {key: parent_state.get(key) for key in LANGUAGE_INPUT_KEYS}
+    """Project raw dictionary parent state into validated LanguageAssistantInput."""
+    projected = {
+        key: parent_state.get(key)
+        for key in LANGUAGE_INPUT_KEYS
+        if parent_state.get(key) is not None
+    }
     return LanguageAssistantInput.model_validate(projected)
