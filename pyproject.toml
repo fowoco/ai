@@ -46,6 +46,11 @@ include = ["app*"]
 addopts = "-q"
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "qdrant_integration: mark test as requiring Qdrant integration",
+    "language_models: mark test as requiring language model cache",
+]
+
 
 [tool.ruff]
 target-version = "py311"
