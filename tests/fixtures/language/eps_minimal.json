@@ -1,0 +1,50 @@
+[
+  {
+    "lang_code": "01",
+    "lang_name": "영어 (English)",
+    "page": 10,
+    "korean": " 고맙습니다. ",
+    "foreign_translation": " Thank you ",
+    "pronunciation": "땡큐"
+  },
+  {
+    "lang_code": "01",
+    "lang_name": "영어 (English)",
+    "page": 5,
+    "korean": "고맙습니다.",
+    "foreign_translation": "Thank you",
+    "pronunciation": "땡큐"
+  },
+  {
+    "lang_code": "01",
+    "lang_name": "영어 (English)",
+    "page": 1,
+    "korean": "   ",
+    "foreign_translation": "Thank you",
+    "pronunciation": "땡큐"
+  },
+  {
+    "lang_code": "01",
+    "lang_name": "영어 (English)",
+    "page": 1,
+    "korean": "안녕하세요.",
+    "foreign_translation": "   ",
+    "pronunciation": "헬로"
+  },
+  {
+    "lang_code": "99",
+    "lang_name": "알 수 없음 (Unknown)",
+    "page": 1,
+    "korean": "테스트",
+    "foreign_translation": "Test",
+    "pronunciation": "테스트"
+  },
+  {
+    "lang_code": "01",
+    "lang_name": "영어 (English)",
+    "page": 0,
+    "korean": "잘못된 페이지",
+    "foreign_translation": "Invalid page",
+    "pronunciation": "인벌리드"
+  }
+]

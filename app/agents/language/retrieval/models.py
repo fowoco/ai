@@ -142,6 +142,8 @@ class ExpectedIndexContract(FrozenContract):
     embedding_model_repo: Literal["BAAI/bge-m3"]
     embedding_model_revision: Revision
     index_contract_version: Literal["eps-language-index-v1"]
+    point_count: StrictInt | None = None
+
 
 
 class VerifiedCollectionHandle(FrozenContract):
