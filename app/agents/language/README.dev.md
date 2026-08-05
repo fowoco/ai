@@ -100,29 +100,23 @@ PDF 원본 규칙을 추출하여 버전 관리 리소스 패키지로 탑재했
 
 ---
 
-## 7. 단일 EC2 Docker 네트워크 & Qdrant 통신 토폴로지 (ADR-006)
+## 7. Docker Compose 컨테이너 네트워크 통신 구조 (ADR-006)
 
-### (1) `.env` 파일 위치 및 시크릿 보안
-- **위치**: 프로젝트 최상위 루트 디렉터리 (`./.env`)
-- **보안**: API Key 및 DB 접속 정보 유출 방지를 위해 `.gitignore`에 등록되어 있습니다. 런타임 시 Pydantic `Settings` (`app/core/config.py`)가 자동으로 로드합니다.
-
-### (2) 단일 EC2 컨테이너 배치 구조 (`compose.yml`)
-AI 에이전트와 Vector DB(Qdrant)가 동일한 단일 EC2 인스턴스 내에서 **Docker Compose 내부 가상 네트워크**로 묶여 구동됩니다:
+### (1) 컨테이너 서비스 네트워크 통신 (`compose.yml`)
+AI 에이전트 서비스와 Vector DB(Qdrant) 서비스가 **Docker Compose 내부 가상 네트워크**로 묶여 구동됩니다:
 
 ```mermaid
 graph TD
-    subgraph Single_EC2_Instance ["Single EC2 Instance (Production)"]
-        subgraph Docker_Network ["Docker Internal Virtual Network (fowoco)"]
-            AI["fowoco-ai Container<br/>(FastAPI App / Port 8000)"]
-            QDRANT["fowoco-qdrant Container<br/>(Vector DB / Internal Port 6333)"]
-        end
+    subgraph Docker_Network ["Docker Internal Virtual Network (fowoco)"]
+        AI["fowoco-ai Container<br/>(FastAPI App / Port 8000)"]
+        QDRANT["fowoco-qdrant Container<br/>(Vector DB / Internal Port 6333)"]
     end
 
     Client["External Client / API Gateway"] -->|":8000 (Public)"| AI
     AI -->|"http://qdrant:6333 (Docker Internal)"| QDRANT
 ```
 
-### (3) Qdrant 보안 포트 노출 정책
+### (2) Qdrant 보안 포트 노출 정책
 - **내부 전용 바인딩 (`expose`)**: Qdrant 컨테이너는 외부 호스트 포트 바인딩 없이 `expose: ["6333", "6334"]`로 설정됩니다.
-- **보안 이점**: 외부 AWS Security Group이나 인터넷 망에 Qdrant 6333 포트가 노출되지 않으며, 오직 동일 Docker 네트워크 내의 `fowoco-ai` 컨테이너에서만 `http://qdrant:6333`으로 접근 가능합니다.
+- **보안 이점**: 외부 네트워크 망에 Qdrant 6333 포트가 노출되지 않으며, 오직 동일 Docker 네트워크 내의 `fowoco-ai` 컨테이너에서만 `http://qdrant:6333` 호스트명으로 안전하게 접근 가능합니다.
 
