@@ -1,8 +1,9 @@
 import tempfile
 from functools import lru_cache
 from pathlib import Path
+from typing import Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -59,6 +60,28 @@ class Settings(BaseSettings):
     model_cache_dir: Path = Field(
         default_factory=lambda: Path(tempfile.gettempdir()) / "fowoco-model-cache"
     )
+
+    clova_ocr_enabled: bool = False
+    clova_ocr_invoke_url: str | None = None
+    clova_ocr_secret: str | None = None
+    clova_ocr_timeout_seconds: float = Field(default=30.0, gt=0)
+    clova_ocr_confidence_threshold: float = Field(default=0.80, ge=0, le=1)
+    database_url: str | None = None
+
+    @model_validator(mode="after")
+    def validate_enabled_ocr_settings(self) -> Self:
+        if not self.clova_ocr_enabled:
+            return self
+        required = {
+            "clova_ocr_invoke_url": self.clova_ocr_invoke_url,
+            "clova_ocr_secret": self.clova_ocr_secret,
+            "database_url": self.database_url,
+            "internal_api_token": self.internal_api_token,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            raise ValueError(f"enabled OCR requires settings: {', '.join(missing)}")
+        return self
 
 
 # Settings 싱글톤을 반환

@@ -271,6 +271,7 @@ def test_openapi_exposes_separate_document_actions() -> None:
     assert [tag["name"] for tag in schema["tags"]] == [
         "Analyses",
         "Workflows",
+        "OCR",
         "Document Capabilities",
         "Document Templates",
         "Document Inspection",
@@ -287,6 +288,7 @@ def test_openapi_exposes_separate_document_actions() -> None:
             "재갱신 등 LangGraph 오케스트레이션 API. "
             "담당자 입력(슬롯)·근로자 서류(OCR) 분기와 문서생성 stub 실행"
         ),
+        "CLOVA Template OCR를 실행하고 worker_document에 결과를 저장합니다.",
         "현재 서버에서 사용할 수 있는 문서 처리 기능과 변환 조합을 조회합니다.",
         "등록된 문서 템플릿 목록과 편집 가능한 필드를 조회합니다.",
         "업로드한 문서의 실제 포맷을 감지하고 일치하는 템플릿을 식별합니다.",

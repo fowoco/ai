@@ -2,6 +2,8 @@
 
 from functools import lru_cache
 
+from fastapi import HTTPException, Request, status
+
 from app.agents.ambiguity import AmbiguityAgent
 from app.agents.intent import IntentClassifier, build_intent_agent
 from app.agents.knowledge_support import (
@@ -38,6 +40,7 @@ from app.documents.conversion.converters import (
 )
 from app.documents.conversion.engines import LibreOfficeEngine
 from app.documents.snapshots import DocumentSnapshotRepository
+from app.ocr.service import OcrService
 
 
 @lru_cache
@@ -190,6 +193,21 @@ def get_language_assistant_service() -> "LanguageAssistantService":  # type: ign
     raise HTTPException(status_code=503, detail="LANGUAGE_ASSISTANT_NOT_CONFIGURED")
 
 
+def get_ocr_service(request: Request) -> OcrService:
+    if not get_settings().clova_ocr_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OCR is disabled",
+        )
+    service = getattr(request.app.state, "ocr_service", None)
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="OCR service is unavailable",
+        )
+    return service
+
+
 __all__ = [
     "get_analysis_pipeline",
     "get_document_conversion_service",
@@ -201,6 +219,7 @@ __all__ = [
     "get_in_memory_db",
     "get_intent_agent",
     "get_language_assistant_service",
+    "get_ocr_service",
     "get_renewal_orchestrator",
     "get_task_store",
 ]
