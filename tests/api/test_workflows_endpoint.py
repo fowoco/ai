@@ -53,3 +53,48 @@ async def test_renewal_run_with_ocr_upload(client: AsyncClient) -> None:
     data = res.json()
     assert data["ocrResult"]
     assert "passport_number" in data["ocrResult"]
+
+
+@pytest.mark.asyncio
+async def test_renewal_run_uses_document_fields_not_stub(client: AsyncClient) -> None:
+    """documents.fields에 CLOVA 값이 있으면 stub 대신 실제 필드를 쓴다."""
+    payload = {
+        "requestId": "req-renewal-fields",
+        "instruction": "체류기간 연장 갱신",
+        "workerId": "worker-001",
+        "documents": [
+            {
+                "documentType": "passport",
+                "filename": "pass.jpg",
+                "fields": {
+                    "passport_number": "P-REAL-99",
+                    "surname": "NGUYEN",
+                    "given_names": "VAN AN",
+                },
+            }
+        ],
+    }
+    res = await client.post(RENEWAL_PATH, json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["ocrResult"]["passport_number"] == "P-REAL-99"
+    assert data["slots"]["full_name"] == "NGUYEN VAN AN"
+
+
+@pytest.mark.asyncio
+async def test_renewal_run_accepts_prefilled_ocr_result(client: AsyncClient) -> None:
+    """Server가 DB에서 읽은 ocrResult 스냅샷을 요청에 실을 수 있다."""
+    payload = {
+        "requestId": "req-renewal-ocr-snap",
+        "instruction": "체류기간 연장 갱신",
+        "workerId": "worker-001",
+        "ocrResult": {
+            "alien_registration_number": "900315-5123456",
+            "stay_expiration_date": "2026-12-31",
+        },
+    }
+    res = await client.post(RENEWAL_PATH, json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["ocrResult"]["alien_registration_number"] == "900315-5123456"
+    assert data["slots"]["stay_expiry_date"] == "2026-12-31"
