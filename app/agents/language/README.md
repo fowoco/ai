@@ -5,18 +5,18 @@
 
 ---
 
-## 0) New Engineer Fast Path (30분 코스)
+## 0) ⚡ 핵심 문서 목차
 
-- ✅ **1) 시스템 한 장 요약**: [1) System at a glance](#1-system-at-a-glance)
-- ✅ **2) 메인 그래프 팀원 연동 가이드**: [2) Main Graph Integration Guide](#2-main-graph-integration-guide)
-- ✅ **3) 입출력 데이터 명세**: [3) Input & Output Contracts](#3-input--output-contracts)
-- ✅ **4) 지원 언어 목록**: [4) Supported Languages](#4-supported-languages)
-- ✅ **5) 로컬 실행 및 테스트**: [5) Local Dev & Testing](#5-local-dev--testing)
-- 💡 **기술 심화 및 의사결정 배경 (ADR)**: [README.dev.md](./README.dev.md) 참고
+- **1) 시스템 개요 및 아키텍처**: [1) 시스템 개요 및 아키텍처](#1-시스템-개요-및-아키텍처-system-overview)
+- **2) 메인 그래프 팀원 연동 가이드**: [2) Main Graph Integration Guide](#2-main-graph-integration-guide)
+- **3) 입출력 데이터 명세**: [3) Input & Output Contracts](#3-input--output-contracts)
+- **4) 지원 언어 목록**: [4) Supported Languages](#4-supported-languages)
+- **5) 로컬 실행 및 테스트**: [5) Local Dev & Testing](#5-local-dev--testing)
+- **기술 심화 및 의사결정 배경 (ADR)**: [README.dev.md](./README.dev.md) 참고
 
 ---
 
-## 1) System at a glance
+## 1) 시스템 개요 및 아키텍처 (System Overview)
 
 ### What / Why
 - **목표**: 대한민국 고용허가제(EPS) 외국인 근로자에게 체류기한, 필요서류, 수수료, 안전수칙 등을 **15개 원어 번역 및 알기 쉬운 한국어(Easy Korean)**로 정확히 변환하여 전달합니다.
