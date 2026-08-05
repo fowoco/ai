@@ -152,7 +152,11 @@ inp = LanguageAssistantInput(
 
 ## 5) Configuration & Environment Variables
 
-`.env` 파일에 아래 환경변수들을 설정합니다:
+프로젝트 루트의 `.env.example` 파일을 복사하여 `.env` 파일을 생성한 후 설정을 변경합니다:
+
+```bash
+cp .env.example .env
+```
 
 ```env
 # Vector DB (Qdrant) 연동
