@@ -14,15 +14,15 @@ router = APIRouter(prefix="/internal/v1", tags=[ANALYSES_TAG])
 @router.post(
     "/analyses",
     response_model=AnalysisResponse,
-    summary="자연어 지시 분석",
+    summary="자연어 지시 분석 (PLAN / ANALYZE)",
     description=(
-        "Server가 analysisInput(instruction·WorkerContext·requestedFields)을 보내면 "
-        "Intent 분류, Slot 추출, 모호성 검사 후 candidate 목록 반환. "
-        "requestId/attemptId·Bearer(#8). 응답은 Server strict JSON 계약 필드만."
+        "phase=PLAN 이면 Intent 분류 후 CONTEXT_REQUIRED(requiredFieldKeys) 반환. "
+        "phase=ANALYZE 이면 DB 보충값으로 NEEDS_INFO(questions) 또는 REVIEW_REQUIRED(candidates). "
+        "HTTP는 requestId·phase·analysisInput만. Bearer(#8)."
     ),
     dependencies=[Depends(verify_internal_bearer)],
 )
-# 지시문 분석 → Intent·Slot·누락 정보 서버 응답
+# PLAN/ANALYZE 분기 → Server 계약 outcome 응답
 async def analyze(
     request: AnalysisRequest,
     pipeline: AnalysisPipeline = Depends(get_analysis_pipeline),  # noqa: B008

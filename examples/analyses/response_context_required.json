@@ -1,13 +1,17 @@
 {
   "requestId": "10000000-0000-0000-0000-000000000001",
-  "outcome": "NEEDS_INFO",
-  "contextRequirement": null,
-  "questions": [
-    {
-      "slotKey": "monthly_wage",
-      "prompt": "월 급여를 입력해 주세요."
-    }
-  ],
+  "outcome": "CONTEXT_REQUIRED",
+  "contextRequirement": {
+    "detectedIntent": "EXPIRY_RENEWAL",
+    "confidence": 0.94,
+    "targetDisplayName": "응웬반안",
+    "extractedSlots": {},
+    "requiredFieldKeys": [
+      "worker_id",
+      "stay_expiry_date"
+    ]
+  },
+  "questions": [],
   "candidates": [],
   "validationErrors": [],
   "versions": {
@@ -21,5 +25,5 @@
     "contractVersion": "1.0.0"
   },
   "providerAttemptCount": 1,
-  "latencyMs": 180
+  "latencyMs": 120
 }
