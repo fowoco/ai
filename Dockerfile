@@ -9,6 +9,9 @@ RUN mkdir -p /opt/rhwp \
     && test -x /opt/rhwp/rhwp \
     && test -f /opt/rhwp/LICENSE
 
+# uv 바이너리 고정 버전 복사
+FROM ghcr.io/astral-sh/uv:0.7.20 AS uv
+
 FROM python:3.12-slim-trixie
 
 # 컨테이너 작업 디렉터리
@@ -17,13 +20,15 @@ WORKDIR /app
 # 시스템 기본 인코딩을 UTF-8로 고정
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    UV_SYSTEM_PYTHON=1 \
+    UV_NO_CACHE=1 \
     FOWOCO_HWP_TO_HWPX_ENABLED=true \
     FOWOCO_HWPX_TO_HWP_ENABLED=true \
     FOWOCO_HWPX_PDF_ENABLED=true \
-    FOWOCO_DOCUMENT_SNAPSHOT_DIR=/data/document-snapshots
+    FOWOCO_DOCUMENT_SNAPSHOT_DIR=/data/document-snapshots \
+    FOWOCO_MODEL_CACHE_DIR=/data/model-cache
 
+COPY --from=uv /uv /usr/local/bin/uv
 COPY --from=rhwp /opt/rhwp/rhwp /usr/local/bin/rhwp
 COPY --from=rhwp /opt/rhwp/LICENSE /usr/share/licenses/rhwp/LICENSE
 
@@ -37,17 +42,17 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # 의존성 정의 파일만 먼저 복사해 캐시를 활용
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
+
+# uv.lock 기반 재현 가능 설치 — 프로덕션 의존성만
+RUN uv sync --frozen --no-dev
 
 # 앱 패키지 복사
 COPY app ./app
-
-# 프로덕션 의존성만 설치
-RUN pip install --no-cache-dir .
 
 # uvicorn 기본 포트
 EXPOSE 8000
 VOLUME ["/data"]
 
 # FastAPI 앱 기동
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

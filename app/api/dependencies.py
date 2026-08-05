@@ -187,6 +187,12 @@ def get_document_conversion_service() -> DocumentConversionService:
     return DocumentConversionService(tuple(converters))
 
 
+def get_language_assistant_service() -> "LanguageAssistantService":  # type: ignore[name-defined] # noqa: F821
+    from fastapi import HTTPException
+
+    raise HTTPException(status_code=503, detail="LANGUAGE_ASSISTANT_NOT_CONFIGURED")
+
+
 def get_ocr_service(request: Request) -> OcrService:
     if not get_settings().clova_ocr_enabled:
         raise HTTPException(
@@ -212,6 +218,7 @@ __all__ = [
     "get_hwpx_document_service",
     "get_in_memory_db",
     "get_intent_agent",
+    "get_language_assistant_service",
     "get_ocr_service",
     "get_renewal_orchestrator",
     "get_task_store",

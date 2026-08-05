@@ -5,6 +5,7 @@ from app import __version__
 from app.api.openapi import OPENAPI_TAGS_METADATA
 from app.api.router import api_router
 from app.api.routes.analyses import router as analyses_router
+from app.api.routes.language import router as language_router
 from app.api.routes.ocr import router as ocr_router
 from app.api.routes.workflows import router as workflows_router
 from app.core.config import get_settings
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
     app.include_router(analyses_router)
     app.include_router(ocr_router)
     app.include_router(workflows_router)
+    app.include_router(language_router)
     app.include_router(api_router, prefix="/api/v1")
     return app
 

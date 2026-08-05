@@ -1,0 +1,43 @@
+from .fusion import (
+    DEFAULT_CANDIDATE_LIMIT,
+    DEFAULT_RRF_K,
+    DEFAULT_RRF_WEIGHTS,
+    cross_query_rrf,
+    fuse_query_rankings,
+    fuse_rankings,
+)
+from .models import (
+    EpsReference,
+    ExpectedIndexContract,
+    FusedCandidate,
+    FusionSelectedContext,
+    HybridVector,
+    PerQueryRanking,
+    RankedCandidate,
+    RerankedCandidate,
+    RerankerSelectedContext,
+    RetrievalResult,
+    SelectedContext,
+    VerifiedCollectionHandle,
+)
+
+__all__ = [
+    "DEFAULT_CANDIDATE_LIMIT",
+    "DEFAULT_RRF_K",
+    "DEFAULT_RRF_WEIGHTS",
+    "EpsReference",
+    "ExpectedIndexContract",
+    "FusedCandidate",
+    "FusionSelectedContext",
+    "HybridVector",
+    "PerQueryRanking",
+    "RankedCandidate",
+    "RerankedCandidate",
+    "RerankerSelectedContext",
+    "RetrievalResult",
+    "SelectedContext",
+    "VerifiedCollectionHandle",
+    "cross_query_rrf",
+    "fuse_query_rankings",
+    "fuse_rankings",
+]

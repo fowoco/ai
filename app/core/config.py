@@ -49,6 +49,18 @@ class Settings(BaseSettings):
     # Server ↔ AI Internal 호출용 Bearer (#8). 비우면 로컬에서 인증 생략
     internal_api_token: str | None = None
 
+    # Qdrant — 미설정 시 language assistant degraded 동작
+    qdrant_url: str | None = None
+    qdrant_api_key: str | None = None
+
+    # LLM 요청 타임아웃 (초). 양수 필수.
+    llm_timeout_seconds: int = Field(default=60, gt=0)
+
+    # 모델 가중치 캐시 디렉터리 (사전 다운로드 스크립트와 공유)
+    model_cache_dir: Path = Field(
+        default_factory=lambda: Path(tempfile.gettempdir()) / "fowoco-model-cache"
+    )
+
     clova_ocr_enabled: bool = False
     clova_ocr_invoke_url: str | None = None
     clova_ocr_secret: str | None = None
