@@ -123,11 +123,18 @@ ANALYZE → NEEDS_INFO (questions) | REVIEW_REQUIRED (candidates)
   "candidateRef": "candidate-1",
   "workerRef": "30000000-0000-0000-0000-000000000001",
   "workflowId": "EXPIRY_RENEWAL",
-  "extractedSlots": { "stay_expiry_date": "2026-12-31" },
-  "missingSlots": ["contract_end_date", "monthly_wage"],
+  "extractedSlots": {
+    "worker_id": "30000000-0000-0000-0000-000000000001",
+    "stay_expiry_date": "2026-12-31",
+    "full_name": "NGUYEN VAN AN"
+  },
+  "missingSlots": [],
   "confidence": 0.92
 }
 ```
+
+`missingSlots`는 REVIEW 직전 필수 슬롯이 모두 채워졌을 때 **빈 배열**이다.  
+남은 HR 입력은 `NEEDS_INFO.questions`로 보낸다.
 
 공통 응답 필드: `validationErrors`, `versions`, `providerAttemptCount`, `latencyMs`.
 
@@ -159,9 +166,11 @@ HTTP 요청에 version이 없어도 AI는 기본값 **`1.0.0` / `0.2.0`** 을 �
 | `FOWOCO_INTENT_MODEL_ENABLED=false` (기본) | `EXPIRY_RENEWAL` 고정 stub |
 | `FOWOCO_INTENT_MODEL_ENABLED=true` | HF BERT(+선택 A.X) 하이브리드 |
 
-필요 시: `pip install -e ".[intent]"`, `.env`에 `FOWOCO_HF_TOKEN` 또는 `HF_TOKEN`,  
+필요 시 BERT만: `pip install -e ".[intent]"` (Windows CPU 권장).  
+A.X까지: `pip install -e ".[intent-ax]"` (Linux/CUDA; Windows에선 `bitsandbytes` 실패 흔함).  
+`.env`에 `FOWOCO_HF_TOKEN` 또는 `HF_TOKEN`,  
 `FOWOCO_INTENT_BERT_MODEL_DIR=fowoco/klue-roberta-base-intent-classifier`.  
-로컬 CPU는 `FOWOCO_INTENT_ENABLE_AX=false` 권장.
+로컬 CPU는 `FOWOCO_INTENT_ENABLE_AX=false` 권장. `.env.example`은 두지 않음(로컬 `.env`만).
 
 ## Fixtures
 
@@ -170,9 +179,8 @@ HTTP 요청에 version이 없어도 AI는 기본값 **`1.0.0` / `0.2.0`** 을 �
 | `examples/analyses/request_plan.json` | PLAN 요청 |
 | `examples/analyses/response_context_required.json` | CONTEXT_REQUIRED |
 | `examples/analyses/request_analyze.json` | ANALYZE 요청 |
-| `examples/analyses/response_needs_info.json` | NEEDS_INFO (신계약) |
+| `examples/analyses/response_needs_info.json` | NEEDS_INFO |
 | `examples/analyses/response_review_required.json` | REVIEW_REQUIRED |
-| `examples/analyses/request_expiry_renewal.json` | **구계약** 참고용 (폐기 예정) |
 
 ## 핸드셰이크 (#8)
 
