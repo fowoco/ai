@@ -157,8 +157,33 @@ def mark_guide_placeholder(state: RenewalState) -> dict[str, Any]:
     }
 
 
-# 근로자 서류 — 여권·등록증 요청 문구
+# 근로자 서류 — 여권·등록증 요청 문구 (Language Assistant 결과 우선)
 def mark_ask_worker(state: RenewalState) -> dict[str, Any]:
+    existing = state.get("worker_request_message")
+    if existing:
+        events = append_progress(
+            state,
+            progress_event(
+                phase=WorkflowPhase.VALIDATION_COMMUNICATION,
+                step=WorkflowStep.STEP_5_CASE_SIGNAL,
+                message="근로자 서류 요청: Language Assistant 안내문 사용",
+                subgraph="main",
+            ),
+        )
+        return {
+            "scenario": "ask_worker",
+            "status": TaskStatus.WAITING_WORKER.value,
+            "outcome": "WAITING_WORKER",
+            "worker_request_message": existing,
+            "phase": WorkflowPhase.VALIDATION_COMMUNICATION.value,
+            "step": WorkflowStep.STEP_5_CASE_SIGNAL.value,
+            "case_signals": list(
+                state.get("case_signals") or ["REQUEST_IDENTITY_DOCUMENT"]
+            ),
+            "progress_events": events,
+            "active_subgraph": "main",
+        }
+
     missing = [m for m in state.get("missing_slots", []) if m in IDENTITY_SLOTS]
     validation = state.get("document_validation") or {}
     combo = validation.get("combo") if isinstance(validation, dict) else None
