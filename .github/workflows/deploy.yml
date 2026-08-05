@@ -34,6 +34,12 @@ jobs:
 
       - name: Rollout
         run: |
+          if ! kubectl -n fowoco get deployment/ai >/dev/null 2>&1; then
+            echo "::error::deployment/ai가 아직 없습니다. fowoco/infra의 k8s manifest로 최초 배포를 먼저 진행해 주세요 (kubectl apply -f k8s/)."
+            exit 1
+          fi
+
           kubectl -n fowoco set image deployment/ai \
             ai=ghcr.io/fowoco/ai:${{ github.sha }} \
-            --record=false || echo "Deployment가 아직 없으면 최초 배포 후 자동으로 적용됩니다."
+            --record=false
+          kubectl -n fowoco rollout status deployment/ai --timeout=180s
