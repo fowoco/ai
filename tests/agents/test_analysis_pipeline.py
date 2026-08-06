@@ -113,4 +113,4 @@ def test_analyze_filled_slots_review_required() -> None:
     assert res.outcome == "REVIEW_REQUIRED"
     assert len(res.candidates) == 1
     assert res.candidates[0].missing_slots == []
-    assert res.candidates[0].workflow_id == "EXPIRY_RENEWAL"
+    assert res.candidates[0].workflow_id == "WF-STY-001"
