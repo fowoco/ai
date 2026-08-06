@@ -32,13 +32,19 @@ jobs:
           mkdir -p ~/.kube
           echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
 
+      - name: Checkout infra manifests
+        uses: actions/checkout@v4
+        with:
+          repository: fowoco/infra
+          path: infra
+
+      - name: Bootstrap k8s resources
+        run: |
+          kubectl apply -f infra/k8s/00-namespace.yaml
+          kubectl apply -f infra/k8s/03-ai.yaml
+
       - name: Rollout
         run: |
-          if ! kubectl -n fowoco get deployment/ai >/dev/null 2>&1; then
-            echo "::error::deployment/ai가 아직 없습니다. fowoco/infra의 k8s manifest로 최초 배포를 먼저 진행해 주세요 (kubectl apply -f k8s/)."
-            exit 1
-          fi
-
           kubectl -n fowoco set image deployment/ai \
             ai=ghcr.io/fowoco/ai:${{ github.sha }} \
             --record=false
