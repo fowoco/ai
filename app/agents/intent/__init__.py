@@ -2,12 +2,16 @@
 
 from .service import (
     FixedExpiryRenewalIntentAgent,
+    HybridHfIntentAgent,
     IntentClassifier,
+    IntentResult,
     build_intent_agent,
 )
 
 __all__ = [
     "FixedExpiryRenewalIntentAgent",
+    "HybridHfIntentAgent",
     "IntentClassifier",
+    "IntentResult",
     "build_intent_agent",
 ]

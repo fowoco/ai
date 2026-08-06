@@ -15,24 +15,11 @@ def test_requested_fields_for_api_maps_source_hints() -> None:
     assert by_key["passport_number"] == "DOCUMENT_OCR"
 
 
-def _analysis_body(*, request_id: str = "req-open", attempt_id: str = "att-1") -> dict:
+def _analysis_body(*, request_id: str = "req-open") -> dict:
     return {
         "requestId": request_id,
-        "attemptId": attempt_id,
-        "analysisInput": {
-            "instruction": "체류연장",
-            "workers": [
-                {
-                    "workerRef": "worker-001",
-                    "displayName": "테스트",
-                    "stayExpiryDate": "2026-12-31",
-                    "requestedFields": {},
-                }
-            ],
-            "workflowConstraints": [
-                {"workflowId": "EXPIRY_RENEWAL", "allowedSlotKeys": []}
-            ],
-        },
+        "phase": "PLAN",
+        "analysisInput": {"instruction": "체류연장"},
     }
 
 
@@ -57,19 +44,15 @@ def test_internal_api_requires_bearer_when_token_set(monkeypatch) -> None:
         "/internal/v1/analyses",
         json={
             "requestId": "req-auth",
-            "attemptId": "att-2",
-            "analysisInput": {
-                "instruction": "체류연장",
-                "workers": [],
-                "workflowConstraints": [],
-            },
+            "phase": "PLAN",
+            "analysisInput": {"instruction": "체류연장"},
         },
     )
     assert denied.status_code == 401
     ok = client.post(
         "/internal/v1/analyses",
         headers={"Authorization": "Bearer secret-token"},
-        json=_analysis_body(request_id="req-auth", attempt_id="att-2"),
+        json=_analysis_body(request_id="req-auth"),
     )
     assert ok.status_code == 200
     get_settings.cache_clear()

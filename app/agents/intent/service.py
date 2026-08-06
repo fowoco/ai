@@ -1,10 +1,13 @@
-# Intent·Slot — EXPIRY_RENEWAL 고정. WF 매핑은 Knowledge workflow_catalog 근거
+# Intent·Slot — HF 하이브리드 또는 EXPIRY_RENEWAL 고정. WF는 Knowledge catalog 근거
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
 
 # Knowledge workflow_catalog.yaml: intent → workflow id (동일 intent면 catalog 등장 순)
 INTENT_TO_WORKFLOWS: dict[str, list[str]] = {
@@ -117,6 +120,95 @@ class FixedExpiryRenewalIntentAgent:
         )
 
 
-# 재갱신 고정 Intent 분류기 생성
+# 멀티라벨 예측에서 대표 Intent·confidence 선택
+def _primary_intent(
+    intents: list[str], scores: dict[str, float]
+) -> tuple[str, float]:
+    if not intents:
+        return "OUT_OF_SCOPE", 0.0
+    if "OUT_OF_SCOPE" in intents and len(intents) == 1:
+        return "OUT_OF_SCOPE", float(scores.get("OUT_OF_SCOPE") or 0.5)
+    ranked = [i for i in intents if i != "OUT_OF_SCOPE"]
+    if not ranked:
+        return "OUT_OF_SCOPE", float(scores.get("OUT_OF_SCOPE") or 0.5)
+    if scores:
+        best = max(ranked, key=lambda name: float(scores.get(name) or 0.0))
+        return best, float(scores.get(best) or 0.0)
+    return ranked[0], 0.85
+
+
+# HF BERT(+선택 A.X) 하이브리드 → IntentClassifier
+class HybridHfIntentAgent:
+
+    # 파이프라인은 첫 classify 때 lazy 로드
+    def __init__(self, pipeline: object | None = None) -> None:
+        self._pipeline = pipeline
+        self._load_error: str | None = None
+
+    # 설정 기반 HybridIntentPipeline 확보
+    def _ensure_pipeline(self) -> object | None:
+        if self._pipeline is not None:
+            return self._pipeline
+        if self._load_error is not None:
+            return None
+        try:
+            import os
+
+            from app.core.config import get_settings
+
+            from .hybrid import HybridIntentPipeline
+
+            settings = get_settings()
+            token = settings.hf_token or os.environ.get("HF_TOKEN")
+            self._pipeline = HybridIntentPipeline(
+                bert_model_dir=settings.intent_bert_model_dir,
+                device=settings.intent_device,
+                label_prob_threshold=settings.intent_label_prob_threshold,
+                margin_threshold=settings.intent_margin_threshold,
+                max_trained_labels=settings.intent_max_trained_labels,
+                hf_token=token,
+                enable_ax=settings.intent_enable_ax,
+                ax_base_model_name=settings.intent_ax_base_model,
+                ax_adapter_path=settings.intent_ax_adapter_path,
+                ax_max_new_tokens=settings.intent_ax_max_new_tokens,
+            )
+        except Exception as exc:
+            self._load_error = str(exc)
+            logger.exception("HF Intent pipeline load failed — fixed EXPIRY fallback")
+            return None
+        return self._pipeline
+
+    # HF 분류 결과를 IntentResult로 변환
+    def classify(
+        self,
+        instruction: str,
+        *,
+        workflow_constraints: list[str] | None = None,
+    ) -> IntentResult:
+        pipeline = self._ensure_pipeline()
+        if pipeline is None:
+            return FixedExpiryRenewalIntentAgent().classify(
+                instruction, workflow_constraints=workflow_constraints
+            )
+        prediction = pipeline.predict(instruction)  # type: ignore[attr-defined]
+        intent, confidence = _primary_intent(prediction.intents, prediction.scores)
+        slots: dict[str, str] = {}
+        for name, evidence in (prediction.evidence or {}).items():
+            if evidence:
+                slots[f"evidence:{name}"] = str(evidence)
+        return IntentResult(
+            intent=intent,
+            confidence=max(0.0, min(1.0, confidence)),
+            workflow_id=resolve_workflow_id(intent, workflow_constraints),
+            extracted_slots=slots,
+        )
+
+
+# 설정에 따라 HF 하이브리드 또는 재갱신 고정 분류기 생성
 def build_intent_agent() -> IntentClassifier:
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.intent_model_enabled:
+        return HybridHfIntentAgent()
     return FixedExpiryRenewalIntentAgent()

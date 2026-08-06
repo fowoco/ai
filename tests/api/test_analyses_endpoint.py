@@ -1,4 +1,4 @@
-"""POST /internal/v1/analyses 엔드포인트 테스트."""
+# POST /internal/v1/analyses — PLAN / ANALYZE 계약 테스트
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -8,128 +8,88 @@ from app.main import app
 ANALYSES_PATH = "/internal/v1/analyses"
 
 
-def _make_request(
-    instruction: str = "체류기간 연장 준비해줘",
-    *,
-    worker_ref: str = "30000000-0000-0000-0000-000000000001",
-    display_name: str = "테스트근로자",
-    workflow_constraints: list[dict] | None = None,
-    stay_expiry_date: str | None = "2026-12-31",
-    requested_fields: dict[str, str] | None = None,
-) -> dict:
-    workers = [
-        {
-            "workerRef": worker_ref,
-            "displayName": display_name,
-            "preferredLanguage": "vi",
-            "workStatus": "ACTIVE",
-            "requestedFields": requested_fields or {},
-        }
-    ]
-    if stay_expiry_date:
-        workers[0]["stayExpiryDate"] = stay_expiry_date
+def _plan_body(instruction: str = "응웬반안 체류연장 준비해줘") -> dict:
     return {
         "requestId": "10000000-0000-0000-0000-000000000001",
-        "attemptId": "20000000-0000-0000-0000-000000000001",
-        "contractVersion": "1.0.0",
-        "requiredKnowledgeVersion": "0.2.0",
-        "deadlineMs": 10000,
+        "phase": "PLAN",
+        "analysisInput": {"instruction": instruction},
+    }
+
+
+def _analyze_body(
+    *,
+    instruction: str = "응웬반안 체류연장 준비해줘",
+    worker_ref: str = "30000000-0000-0000-0000-000000000001",
+    requested_field_keys: list[str] | None = None,
+    requested_fields: dict[str, str] | None = None,
+) -> dict:
+    return {
+        "requestId": "10000000-0000-0000-0000-000000000001",
+        "phase": "ANALYZE",
         "analysisInput": {
             "instruction": instruction,
-            "workers": workers,
-            "workflowConstraints": workflow_constraints or [],
+            "requestedFieldKeys": requested_field_keys
+            or ["worker_id", "stay_expiry_date"],
+            "workers": [
+                {
+                    "workerRef": worker_ref,
+                    "requestedFields": requested_fields
+                    or {
+                        "worker_id": worker_ref,
+                        "stay_expiry_date": "2026-12-31",
+                    },
+                }
+            ],
         },
     }
 
 
 @pytest.mark.asyncio
-async def test_analyses_returns_review_required_for_complete_request() -> None:
-    body = _make_request(
-        "WRK-012 체류기간 연장 준비 2026-12-31",
-        worker_ref="WRK-012",
-        display_name="WRK-012",
-        workflow_constraints=[
-            {"workflowId": "WF-STY-001", "allowedSlotKeys": ["stay_expiry_date", "worker_id"]},
-        ],
-    )
+async def test_plan_returns_context_required() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post(ANALYSES_PATH, json=body)
+        resp = await client.post(ANALYSES_PATH, json=_plan_body())
 
     assert resp.status_code == 200
     data = resp.json()
     assert data["requestId"] == "10000000-0000-0000-0000-000000000001"
-    assert data["outcome"] in ("REVIEW_REQUIRED", "NEEDS_INFO")
+    assert data["outcome"] == "CONTEXT_REQUIRED"
+    assert data["candidates"] == []
+    assert data["questions"] == []
+    ctx = data["contextRequirement"]
+    assert ctx["detectedIntent"] == "EXPIRY_RENEWAL"
+    assert ctx["targetDisplayName"] == "응웬반안"
+    assert "stay_expiry_date" in ctx["requiredFieldKeys"]
+    assert "worker_id" in ctx["requiredFieldKeys"]
+    assert data["versions"]["contractVersion"] == "1.0.0"
+    assert data["versions"]["workflowCatalogVersion"] == "0.2.0"
     assert "attemptId" not in data
-    assert len(data["candidates"]) == 1
-    candidate = data["candidates"][0]
-    assert candidate["workerRef"] == "WRK-012"
-    assert candidate["workflowId"] == "WF-STY-001"
-    assert candidate["confidence"] > 0
-    assert "requestedFields" not in candidate
-    assert "evidence" not in candidate
-    assert "caseSignals" not in candidate
-    assert "agentVersion" in data["versions"]
 
 
 @pytest.mark.asyncio
-async def test_analyses_echoes_intent_style_workflow_constraint() -> None:
-    """Server 계약 fixture처럼 Intent형 workflowId를 요청하면 응답에도 동일 id를 쓴다."""
-    body = _make_request(
-        "체류기간 연장 준비해줘",
-        workflow_constraints=[
-            {
-                "workflowId": "EXPIRY_RENEWAL",
-                "allowedSlotKeys": [
-                    "stay_expiry_date",
-                    "contract_end_date",
-                    "monthly_wage",
-                ],
-            }
-        ],
-    )
+async def test_analyze_returns_review_required_when_slots_filled() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post(ANALYSES_PATH, json=body)
+        resp = await client.post(ANALYSES_PATH, json=_analyze_body())
 
     assert resp.status_code == 200
     data = resp.json()
-    assert data["candidates"][0]["workflowId"] == "EXPIRY_RENEWAL"
-    assert "stay_expiry_date" in data["candidates"][0]["extractedSlots"]
-
-
-@pytest.mark.asyncio
-async def test_analyses_accepts_server_requested_fields_map() -> None:
-    body = _make_request(
-        "응웬반안 체류연장 준비해줘",
-        display_name="응웬반안",
-        requested_fields={
-            "legal_name": "NGUYEN VAN AN",
-            "passport_number": "M12345678",
-        },
-        workflow_constraints=[
-            {
-                "workflowId": "EXPIRY_RENEWAL",
-                "allowedSlotKeys": [
-                    "stay_expiry_date",
-                    "contract_end_date",
-                    "monthly_wage",
-                ],
-            }
-        ],
+    assert data["outcome"] == "REVIEW_REQUIRED"
+    assert data["contextRequirement"] is None
+    assert data["questions"] == []
+    assert len(data["candidates"]) == 1
+    candidate = data["candidates"][0]
+    assert candidate["workerRef"] == "30000000-0000-0000-0000-000000000001"
+    assert candidate["workflowId"] == "EXPIRY_RENEWAL"
+    assert candidate["extractedSlots"]["stay_expiry_date"] == "2026-12-31"
+    assert candidate["extractedSlots"]["worker_id"] == (
+        "30000000-0000-0000-0000-000000000001"
     )
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        resp = await client.post(ANALYSES_PATH, json=body)
-
-    assert resp.status_code == 200
-    slots = resp.json()["candidates"][0]["extractedSlots"]
-    assert slots["worker_id"] == "30000000-0000-0000-0000-000000000001"
-    assert "stay_expiry_date" in slots
 
 
 @pytest.mark.asyncio
-async def test_analyses_returns_needs_info_when_slots_missing() -> None:
-    body = _make_request(
-        "서류 요청해줘",
-        stay_expiry_date=None,
+async def test_analyze_returns_needs_info_when_db_fields_missing() -> None:
+    body = _analyze_body(
+        requested_field_keys=["worker_id", "stay_expiry_date"],
+        requested_fields={"worker_id": "30000000-0000-0000-0000-000000000001"},
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(ANALYSES_PATH, json=body)
@@ -137,23 +97,46 @@ async def test_analyses_returns_needs_info_when_slots_missing() -> None:
     assert resp.status_code == 200
     data = resp.json()
     assert data["outcome"] == "NEEDS_INFO"
-    assert len(data["candidates"]) == 1
-    assert len(data["candidates"][0]["missingSlots"]) > 0
+    assert data["candidates"] == []
+    assert data["contextRequirement"] is None
+    keys = {q["slotKey"] for q in data["questions"]}
+    assert "stay_expiry_date" in keys
+    assert all("prompt" in q for q in data["questions"])
 
 
 @pytest.mark.asyncio
-async def test_analyses_fixed_intent_treats_unrelated_as_expiry_renewal() -> None:
-    """기본 Intent 고정 모드에서는 무관 문장도 EXPIRY_RENEWAL로 본다."""
-    body = _make_request("오늘 날씨 어때?")
+async def test_analyze_mvp_uses_first_worker_only() -> None:
+    body = _analyze_body()
+    body["analysisInput"]["workers"].append(
+        {
+            "workerRef": "30000000-0000-0000-0000-000000000002",
+            "requestedFields": {"stay_expiry_date": "2026-11-30"},
+        }
+    )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(ANALYSES_PATH, json=body)
 
     assert resp.status_code == 200
     data = resp.json()
-    candidate = data["candidates"][0]
-    assert candidate["confidence"] == 1.0
-    assert candidate["workflowId"] in {"EXPIRY_RENEWAL", "WF-STY-001", "WF-CON-001"}
-    assert data["outcome"] in {"NEEDS_INFO", "REVIEW_REQUIRED"}
+    assert data["outcome"] == "REVIEW_REQUIRED"
+    assert len(data["candidates"]) == 1
+    assert data["candidates"][0]["workerRef"] == (
+        "30000000-0000-0000-0000-000000000001"
+    )
+
+
+@pytest.mark.asyncio
+async def test_plan_fixed_intent_even_for_unrelated_instruction() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            ANALYSES_PATH, json=_plan_body("오늘 날씨 어때?")
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["outcome"] == "CONTEXT_REQUIRED"
+    assert data["contextRequirement"]["detectedIntent"] == "EXPIRY_RENEWAL"
+    assert data["contextRequirement"]["confidence"] == 1.0
 
 
 @pytest.mark.asyncio
@@ -167,56 +150,26 @@ async def test_analyses_endpoint_in_openapi() -> None:
 
 
 @pytest.mark.asyncio
-async def test_analyses_multiple_workers() -> None:
+async def test_analyses_rejects_legacy_masked_input() -> None:
     body = {
-        "requestId": "10000000-0000-0000-0000-000000000099",
-        "attemptId": "20000000-0000-0000-0000-000000000099",
-        "contractVersion": "1.0.0",
-        "requiredKnowledgeVersion": "0.2.0",
-        "deadlineMs": 10000,
-        "analysisInput": {
-            "instruction": "체류기간 연장 준비",
-            "workers": [
-                {
-                    "workerRef": "w-001",
-                    "displayName": "근로자1",
-                    "preferredLanguage": "vi",
-                    "workStatus": "ACTIVE",
-                    "stayExpiryDate": "2026-12-31",
-                    "requestedFields": {},
-                },
-                {
-                    "workerRef": "w-002",
-                    "displayName": "근로자2",
-                    "preferredLanguage": "th",
-                    "workStatus": "ACTIVE",
-                    "stayExpiryDate": "2026-11-30",
-                    "requestedFields": {},
-                },
-            ],
-            "workflowConstraints": [],
+        "requestId": "10000000-0000-0000-0000-000000000001",
+        "phase": "PLAN",
+        "maskedInput": {
+            "maskedInstruction": "체류연장",
+            "workers": [],
         },
     }
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(ANALYSES_PATH, json=body)
 
-    assert resp.status_code == 200
-    data = resp.json()
-    assert len(data["candidates"]) == 2
-    refs = {c["workerRef"] for c in data["candidates"]}
-    assert refs == {"w-001", "w-002"}
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_analyses_rejects_legacy_masked_input() -> None:
+async def test_analyses_requires_phase() -> None:
     body = {
         "requestId": "10000000-0000-0000-0000-000000000001",
-        "attemptId": "20000000-0000-0000-0000-000000000001",
-        "maskedInput": {
-            "maskedInstruction": "체류연장",
-            "workers": [],
-            "workflowConstraints": [],
-        },
+        "analysisInput": {"instruction": "체류연장"},
     }
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(ANALYSES_PATH, json=body)

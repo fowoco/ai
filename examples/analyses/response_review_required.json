@@ -1,6 +1,8 @@
 {
   "requestId": "10000000-0000-0000-0000-000000000001",
   "outcome": "REVIEW_REQUIRED",
+  "contextRequirement": null,
+  "questions": [],
   "candidates": [
     {
       "candidateRef": "candidate-1",
@@ -8,10 +10,11 @@
       "workflowId": "EXPIRY_RENEWAL",
       "extractedSlots": {
         "worker_id": "30000000-0000-0000-0000-000000000001",
-        "stay_expiry_date": "2026-12-31"
+        "stay_expiry_date": "2026-12-31",
+        "full_name": "NGUYEN VAN AN"
       },
       "missingSlots": [],
-      "confidence": 0.9
+      "confidence": 0.92
     }
   ],
   "validationErrors": [],
@@ -26,5 +29,5 @@
     "contractVersion": "1.0.0"
   },
   "providerAttemptCount": 1,
-  "latencyMs": 10
+  "latencyMs": 245
 }
