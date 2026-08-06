@@ -12,6 +12,8 @@ class RenewalDocumentInput(BaseModel):
 
     document_type: str = Field(..., alias="documentType")
     filename: str | None = None
+    # CLOVA/DB에서 채운 구조화 필드 (주현 worker_document 컬럼명과 동일)
+    fields: dict[str, Any] = Field(default_factory=dict)
     hints: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"populate_by_name": True}
@@ -87,6 +89,8 @@ class RenewalRunRequest(BaseModel):
     task_id: str | None = Field(None, alias="taskId")
     slots: dict[str, Any] = Field(default_factory=dict)
     documents: list[RenewalDocumentInput] = Field(default_factory=list)
+    # Server가 CLOVA OCR API 후 DB에서 읽어 실어 보낼 선행 OCR 스냅샷
+    ocr_result: dict[str, Any] | None = Field(None, alias="ocrResult")
     worker: WorkerSnapshot | None = None
     company: CompanySnapshot | None = None
     task: TaskSnapshot | None = None
@@ -127,6 +131,8 @@ class RenewalRunResponse(BaseModel):
     )
     guide_message: str | None = Field(None, alias="guideMessage")
     worker_request_message: str | None = Field(None, alias="workerRequestMessage")
+    # Language Assistant 전체 출력 (태정 contracts JSON)
+    language_assistant: dict[str, Any] | None = Field(None, alias="languageAssistant")
     ocr_result: dict[str, Any] | None = Field(None, alias="ocrResult")
     generated_documents: list[dict[str, Any]] = Field(
         default_factory=list, alias="generatedDocuments"

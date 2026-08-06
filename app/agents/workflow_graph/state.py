@@ -34,6 +34,11 @@ class RenewalState(TypedDict):
     outcome: str
     guide_message: NotRequired[str | None]
     worker_request_message: NotRequired[str | None]
+    # Language Assistant (태정) — projection/결과 보관
+    preferred_language: NotRequired[str | None]
+    nationality_code: NotRequired[str | None]
+    request_context: NotRequired[dict[str, Any] | None]
+    language_assistant: NotRequired[dict[str, Any] | None]
     documents: list[dict[str, Any]]
     ocr_result: NotRequired[dict[str, Any] | None]
     generated_documents: list[dict[str, Any]]
@@ -80,6 +85,10 @@ def empty_renewal_state(
         outcome="",
         guide_message=None,
         worker_request_message=None,
+        preferred_language=None,
+        nationality_code=None,
+        request_context=None,
+        language_assistant=None,
         documents=list(documents or []),
         ocr_result=None,
         generated_documents=[],

@@ -14,15 +14,32 @@ from .status import TaskStatus, to_public_status
 from .task_store import InMemoryTaskStore, TaskStore, merge_resume_state
 
 
+# 요청·재개 State에 선행 OCR 스냅샷 주입 (CLOVA 필드명 정규화 + slots 병합)
+def _seed_ocr_result(state: RenewalState, ocr_result: dict[str, Any] | None) -> None:
+    if not ocr_result:
+        return
+    from .ocr_bridge import normalize_ocr_fields
+
+    normalized = normalize_ocr_fields(dict(ocr_result))
+    if not normalized:
+        state["ocr_result"] = dict(ocr_result)
+        return
+    state["ocr_result"] = normalized
+    state["slots"] = {**state.get("slots", {}), **normalized}
+    missing = [m for m in state.get("missing_slots", []) if not state["slots"].get(m)]
+    state["missing_slots"] = missing
+
+
 # 재갱신 그래프를 한 번 실행 후 결과를 저장·반환
 class RenewalOrchestrator:
 
-    # Language/OCR/DB/서류생성/태스크 저장소 주입 미주입 시 기본값
+    # Language/OCR/안내문/DB/서류생성/태스크 저장소 주입
     def __init__(
         self,
         *,
         language_node: LanguageNode | None = None,
         ocr_node: OcrNode | None = None,
+        guide_node: Any | None = None,
         lookup: Any | None = None,
         store: Any | None = None,
         document_generator: DocumentGenerator | None = None,
@@ -33,6 +50,7 @@ class RenewalOrchestrator:
         self._graph = graph or build_renewal_graph(
             language_node=language_node,
             ocr_node=ocr_node,
+            guide_node=guide_node,
             lookup=lookup,
             store=store,
             document_generator=document_generator,
@@ -49,6 +67,7 @@ class RenewalOrchestrator:
         task_id: str | None = None,
         slots: dict[str, Any] | None = None,
         documents: list[dict[str, Any]] | None = None,
+        ocr_result: dict[str, Any] | None = None,
         worker: dict[str, Any] | None = None,
         company: dict[str, Any] | None = None,
         task: dict[str, Any] | None = None,
@@ -85,6 +104,7 @@ class RenewalOrchestrator:
                 initial["intent"] = str(merged["intent"])
             if merged.get("workflow_id"):
                 initial["workflow_id"] = str(merged["workflow_id"])
+            _seed_ocr_result(initial, ocr_result)
         elif worker or company or task:
             initial = init_renewal_state_from_bundle(
                 request_id=request_id,
@@ -98,6 +118,7 @@ class RenewalOrchestrator:
                 company=company,
                 task=task,
             )
+            _seed_ocr_result(initial, ocr_result)
         else:
             initial = empty_renewal_state(
                 task_id=str(resolved_task_id),
@@ -108,6 +129,7 @@ class RenewalOrchestrator:
                 slots=slots,
                 documents=documents,
             )
+            _seed_ocr_result(initial, ocr_result)
 
         # 실행 중 내부 표기 — 응답 직전 서버 공개 status로 정규화
         initial["status"] = TaskStatus.DRAFT.value

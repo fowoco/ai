@@ -50,6 +50,7 @@ test-results/
 .idea/
 .vscode/
 .fleet/
+.cursor/
 *.code-workspace
 *.swp
 *.swo

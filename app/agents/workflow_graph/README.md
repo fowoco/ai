@@ -18,16 +18,26 @@ app/agents/workflow_graph/
 ├─ subgraphs.py            language / ocr / document 서브그래프
 ├─ status.py               TaskStatus
 ├─ protocols.py            LanguageNode / OcrNode
-├─ adapters.py             Language/OCR 어댑터
+├─ adapters.py             Language/OCR 어댑터 (필드 정규화)
+├─ language_bridge.py      LanguageAssistant → guide 노드
+├─ ocr_bridge.py           documents.fields → 신분 슬롯
 ├─ task_store.py           Task 상태 저장
 ├─ nodes/
 │  ├─ actions.py           시나리오 신호·load_context
 │  ├─ document_generator.py 초안 4종 생성
-│  ├─ language_stub.py     안내문 stub (태정 교체점)
-│  └─ ocr_stub.py          OCR stub (주현 교체점)
+│  ├─ language_stub.py     Intent/Slot stub (안내문≠Language Assistant)
+│  └─ ocr_stub.py          OCR stub 폴백
 ├─ graph.py                메인 그래프 조립
 └─ service.py              RenewalOrchestrator
 ```
+
+`get_renewal_orchestrator()`는 `DocumentOcrNode` + (가능하면) `LanguageGuideBridge`를 연결한다.  
+Language 환경변수(.env)가 없으면 503(서버 다운 방지) 후 guide는 placeholder로 폴백한다.
+
+### renewal/run 와이어 (Server)
+- `documents[].fields` — CLOVA/DB 구조화 필드 (주현 컬럼명)
+- `ocrResult` (요청) — OCR API 후 Server가 DB에서 읽어 선행 주입 가능
+- `languageAssistant` (응답) — Language 전체 JSON (성공 시)
 
 ## 최종 흐름
 

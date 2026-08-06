@@ -19,7 +19,8 @@ from app.agents.workflow_graph.nodes.document_generator import (
     EditingServiceDocumentGenerator,
 )
 from app.agents.workflow_graph.nodes.language_stub import StubLanguageNode
-from app.agents.workflow_graph.nodes.ocr_stub import StubOcrNode
+from app.agents.workflow_graph.language_bridge import build_renewal_language_guide
+from app.agents.workflow_graph.ocr_bridge import DocumentOcrNode
 from app.agents.workflow_graph.task_store import InMemoryTaskStore
 from app.core.config import get_settings
 from app.db.memory import InMemoryDb
@@ -84,12 +85,21 @@ def get_task_store() -> InMemoryTaskStore:
 
 
 @lru_cache
-# 재갱신 LangGraph 오케스트레이터 싱글톤 (Language/OCR stub + 문서생성 훅)
+# 재갱신 LangGraph 오케스트레이터 (Intent stub + OCR 필드 브리지 + 선택 Language 안내)
 def get_renewal_orchestrator() -> RenewalOrchestrator:
     db = get_in_memory_db()
+    language_service = None
+    try:
+        language_service = get_language_assistant_service()
+    except HTTPException:
+        language_service = None
+    except Exception:
+        language_service = None
+
     return RenewalOrchestrator(
         language_node=StubLanguageNode(intent_agent=get_intent_agent()),
-        ocr_node=StubOcrNode(),
+        ocr_node=DocumentOcrNode(),
+        guide_node=build_renewal_language_guide(language_service),
         lookup=db,
         store=db,
         document_generator=EditingServiceDocumentGenerator(

@@ -34,6 +34,7 @@ def build_renewal_graph(
     *,
     language_node: LanguageNode | None = None,
     ocr_node: OcrNode | None = None,
+    guide_node: Any | None = None,
     lookup: WorkerCompanyLookup | None = None,
     store: IdentityStore | None = None,
     document_generator: DocumentGenerator | None = None,
@@ -54,8 +55,10 @@ def build_renewal_graph(
     def node_supervisor(state: RenewalState) -> dict[str, Any]:
         return apply_supervisor(state)
 
-    # 안내문 · 태정 자리
+    # 안내문 · 태정 Language Assistant (미주입 시 placeholder)
     def node_guide(state: RenewalState) -> dict[str, Any]:
+        if guide_node is not None:
+            return guide_node(state)
         return mark_guide_placeholder(state)
 
     def node_ocr(state: RenewalState) -> dict[str, Any]:

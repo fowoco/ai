@@ -78,6 +78,8 @@ def normalize_language_output(
 def normalize_ocr_output(
     raw: dict[str, Any], *, base_slots: dict[str, Any], base_missing: list[str]
 ) -> dict[str, Any]:
+    from .ocr_bridge import normalize_ocr_fields
+
     extracted = (
         raw.get("ocr_result")
         or raw.get("ocrResult")
@@ -86,14 +88,15 @@ def normalize_ocr_output(
         or {}
     )
     slots_in = raw.get("slots") or {}
-    merged = {**base_slots, **dict(extracted), **dict(slots_in)}
+    normalized = normalize_ocr_fields({**dict(extracted), **dict(slots_in)})
+    merged = {**base_slots, **normalized}
     missing_raw = raw.get("missing_slots") or raw.get("missingSlots")
     if missing_raw is None:
         missing = [m for m in base_missing if not merged.get(m)]
     else:
         missing = [str(x) for x in missing_raw]
     return {
-        "ocr_result": dict(extracted),
+        "ocr_result": normalized,
         "slots": merged,
         "missing_slots": missing,
     }

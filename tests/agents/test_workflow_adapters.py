@@ -79,6 +79,28 @@ def test_ocr_adapter_wraps_external_engine() -> None:
     assert "wage" in update["missing_slots"]
 
 
+# CLOVA alias·성명 합성도 adapter 경로에서 정규화
+def test_normalize_ocr_output_maps_clova_aliases() -> None:
+    out = normalize_ocr_output(
+        {
+            "fields": {
+                "stay_expiration_date": "2026-09-30",
+                "legal_name": "NGUYEN VAN AN",
+                "surname": "IGNORED",
+                "given_names": "WHEN_LEGAL_PRESENT",
+            }
+        },
+        base_slots={"worker_id": "w1"},
+        base_missing=["stay_expiry_date", "full_name", "passport_number"],
+    )
+    assert out["slots"]["stay_expiry_date"] == "2026-09-30"
+    assert out["slots"]["full_name"] == "NGUYEN VAN AN"
+    assert out["ocr_result"]["stay_expiry_date"] == "2026-09-30"
+    assert "stay_expiry_date" not in out["missing_slots"]
+    assert "full_name" not in out["missing_slots"]
+    assert "passport_number" in out["missing_slots"]
+
+
 def test_task_resume_merges_slots_across_runs() -> None:
     """task_id로 재호출하면 이전 slots에 새 slots를 합친다."""
     store = InMemoryTaskStore()
