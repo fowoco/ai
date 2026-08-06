@@ -117,12 +117,14 @@ ANALYZE → NEEDS_INFO (questions) | REVIEW_REQUIRED (candidates)
 - `contextRequirement`: null  
 - `questions`: []  
 - `candidates`: **1개 이상** (기존 AiCandidate 필드)
+- `detectedIntent`는 `EXPIRY_RENEWAL` 같은 업무 종류이며, 후보의 `workflowId`는 `WF-STY-001` 같은 구체적인 Workflow Catalog ID다.
+- `workflowId`에 Intent 코드를 다시 넣지 않는다.
 
 ```json
 {
   "candidateRef": "candidate-1",
   "workerRef": "30000000-0000-0000-0000-000000000001",
-  "workflowId": "EXPIRY_RENEWAL",
+  "workflowId": "WF-STY-001",
   "extractedSlots": {
     "worker_id": "30000000-0000-0000-0000-000000000001",
     "stay_expiry_date": "2026-12-31",

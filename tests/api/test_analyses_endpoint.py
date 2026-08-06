@@ -78,7 +78,7 @@ async def test_analyze_returns_review_required_when_slots_filled() -> None:
     assert len(data["candidates"]) == 1
     candidate = data["candidates"][0]
     assert candidate["workerRef"] == "30000000-0000-0000-0000-000000000001"
-    assert candidate["workflowId"] == "EXPIRY_RENEWAL"
+    assert candidate["workflowId"] == "WF-STY-001"
     assert candidate["extractedSlots"]["stay_expiry_date"] == "2026-12-31"
     assert candidate["extractedSlots"]["worker_id"] == (
         "30000000-0000-0000-0000-000000000001"

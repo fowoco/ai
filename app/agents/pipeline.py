@@ -173,7 +173,6 @@ class AnalysisPipeline:
         instruction = ai.instruction
         intent_result = self._intent.classify(instruction)
         workflow_id = intent_result.workflow_id or ""
-        public_wf = intent_result.intent or workflow_id or "UNKNOWN"
 
         if not ai.workers:
             return AnalysisResponse(
@@ -216,16 +215,11 @@ class AnalysisPipeline:
                 latency_ms=0,
             )
 
-        # 응답 workflowId는 Intent형(서버 fixture) 우선
-        if intent_result.intent:
-            public_wf = intent_result.intent
-        elif self._workflow.get_workflow(workflow_id):
-            public_wf = workflow_id
-
+        # Intent와 구분되는 Knowledge canonical Workflow ID를 반환
         candidate = AnalysisCandidate(
             candidate_ref=f"candidate-{uuid4().hex[:8]}",
             worker_ref=worker.worker_ref,
-            workflow_id=public_wf,
+            workflow_id=workflow_id,
             extracted_slots=slots,
             missing_slots=[],
             confidence=intent_result.confidence,
