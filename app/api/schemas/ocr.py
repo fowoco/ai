@@ -2,7 +2,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.ocr.models import DocumentSide, OcrStatus
+from app.ocr.models import DocumentSide, FieldValue, OcrStatus
 
 
 class OcrResponse(BaseModel):
@@ -11,4 +11,6 @@ class OcrResponse(BaseModel):
     ocr_status: OcrStatus
     matched_template_id: int | None
     document_side: DocumentSide | None
+    fields: dict[str, FieldValue]
+    field_confidences: dict[str, float]
     review_reasons: list[str]

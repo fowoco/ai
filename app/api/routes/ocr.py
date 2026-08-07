@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile, status
 
 from app.api.dependencies import get_ocr_service
 from app.api.openapi import OCR_TAG
@@ -12,12 +12,9 @@ from app.ocr.models import (
     InvalidOcrRequest,
     OcrCommand,
     OcrFile,
-    OcrPersistenceError,
-    OcrRequestSuperseded,
-    OcrScope,
+    OcrFileTooLarge,
     OcrUpstreamFailure,
     OcrUpstreamTimeout,
-    WorkerDocumentNotFound,
 )
 from app.ocr.service import MAX_FILE_BYTES, OcrService
 
@@ -33,22 +30,23 @@ router = APIRouter(prefix="/internal/v1/ocr", tags=[OCR_TAG])
 async def recognize_worker_document(
     worker_document_id: UUID,
     request_id: Annotated[UUID, Form()],
-    worker_id: Annotated[UUID, Form()],
-    company_id: Annotated[UUID, Form()],
+    x_request_id: Annotated[UUID, Header(alias="X-Request-Id")],
     document_type: Annotated[DocumentType, Form()],
     file: Annotated[UploadFile, File()],
     service: Annotated[OcrService, Depends(get_ocr_service)],
     country_code: Annotated[str | None, Form()] = None,
 ) -> OcrResponse:
+    if x_request_id != request_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid OCR request",
+        )
+
     content = await file.read(MAX_FILE_BYTES + 1)
     await file.close()
     command = OcrCommand(
         request_id=request_id,
-        scope=OcrScope(
-            worker_document_id=worker_document_id,
-            worker_id=worker_id,
-            company_id=company_id,
-        ),
+        worker_document_id=worker_document_id,
         document_type=document_type,
         country_code=country_code,
         file=OcrFile(
@@ -59,15 +57,15 @@ async def recognize_worker_document(
     )
     try:
         result = await service.process(command)
+    except OcrFileTooLarge as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="OCR file is too large",
+        ) from exc
     except InvalidOcrRequest as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid OCR request",
-        ) from exc
-    except WorkerDocumentNotFound as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Worker document was not found",
         ) from exc
     except OcrUpstreamTimeout as exc:
         raise HTTPException(
@@ -79,22 +77,13 @@ async def recognize_worker_document(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="OCR provider failed",
         ) from exc
-    except OcrPersistenceError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="OCR persistence failed",
-        ) from exc
-    except OcrRequestSuperseded as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="OCR request was superseded",
-        ) from exc
-
     return OcrResponse(
         request_id=result.request_id,
         worker_document_id=result.worker_document_id,
         ocr_status=result.status,
         matched_template_id=result.matched_template_id,
         document_side=result.document_side,
+        fields=dict(result.fields),
+        field_confidences=dict(result.field_confidences),
         review_reasons=list(result.review_reasons),
     )
