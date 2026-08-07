@@ -80,7 +80,6 @@ class Settings(BaseSettings):
     clova_ocr_secret: str | None = None
     clova_ocr_timeout_seconds: float = Field(default=30.0, gt=0)
     clova_ocr_confidence_threshold: float = Field(default=0.80, ge=0, le=1)
-    database_url: str | None = None
 
     @model_validator(mode="after")
     def validate_enabled_ocr_settings(self) -> Self:
@@ -89,7 +88,6 @@ class Settings(BaseSettings):
         required = {
             "clova_ocr_invoke_url": self.clova_ocr_invoke_url,
             "clova_ocr_secret": self.clova_ocr_secret,
-            "database_url": self.database_url,
             "internal_api_token": self.internal_api_token,
         }
         missing = [name for name, value in required.items() if not value]
