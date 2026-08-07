@@ -43,7 +43,7 @@ class OcrFile:
 @dataclass(frozen=True)
 class OcrCommand:
     request_id: UUID
-    scope: OcrScope
+    worker_document_id: UUID
     document_type: DocumentType
     country_code: str | None
     file: OcrFile
@@ -73,6 +73,8 @@ class OcrProcessResult:
     status: OcrStatus
     matched_template_id: int | None
     document_side: DocumentSide | None
+    fields: Mapping[str, FieldValue]
+    field_confidences: Mapping[str, float]
     review_reasons: tuple[str, ...]
 
 
@@ -106,6 +108,10 @@ class OcrRequestSuperseded(RuntimeError):
 
 class InvalidOcrRequest(ValueError):
     """The OCR command is invalid before any provider call."""
+
+
+class OcrFileTooLarge(InvalidOcrRequest):
+    """The uploaded OCR file exceeds the configured contract limit."""
 
 
 class WorkerDocumentNotFound(LookupError):

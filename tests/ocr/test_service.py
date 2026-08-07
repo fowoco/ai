@@ -1,9 +1,10 @@
-from datetime import UTC, datetime
+from datetime import date
 from typing import Any
 from uuid import UUID
 
 import pytest
 
+from app.ocr import models as ocr_models
 from app.ocr.models import (
     ClovaProviderError,
     ClovaTimeoutError,
@@ -11,21 +12,15 @@ from app.ocr.models import (
     InvalidOcrRequest,
     OcrCommand,
     OcrFile,
-    OcrPersistenceError,
-    OcrScope,
     OcrStatus,
     OcrUpstreamFailure,
     OcrUpstreamTimeout,
-    WorkerDocumentNotFound,
 )
 from app.ocr.service import OcrService
 from app.ocr.template_resolver import TemplateResolver
 
 REQUEST_ID = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 DOCUMENT_ID = UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
-WORKER_ID = UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
-COMPANY_ID = UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd")
-NOW = datetime(2026, 8, 4, 15, 30, tzinfo=UTC)
 
 
 def field(name: str, text: str, confidence: float = 0.99) -> dict[str, object]:
@@ -61,7 +56,7 @@ def command(
 ) -> OcrCommand:
     return OcrCommand(
         request_id=REQUEST_ID,
-        scope=OcrScope(DOCUMENT_ID, WORKER_ID, COMPANY_ID),
+        worker_document_id=DOCUMENT_ID,
         document_type=document_type,
         country_code=country_code,
         file=OcrFile(filename, content_type, content),
@@ -91,177 +86,109 @@ class FakeClovaClient:
         return self.response
 
 
-class FakeRepository:
-    def __init__(
-        self,
-        *,
-        scope_exists: bool = True,
-        fail_on: str | None = None,
-    ) -> None:
-        self.scope_exists = scope_exists
-        self.fail_on = fail_on
-        self.calls: list[str] = []
-        self.saved_result = None
-        self.failed_args = None
-
-    def _record(self, name: str) -> None:
-        self.calls.append(name)
-        if self.fail_on == name:
-            raise OcrPersistenceError("database operation failed")
-
-    async def verify_scope(self, scope: OcrScope, document_type: DocumentType) -> bool:
-        self._record("verify_scope")
-        assert scope.worker_document_id == DOCUMENT_ID
-        assert document_type in DocumentType
-        return self.scope_exists
-
-    async def mark_processing(self, scope: OcrScope, request_id: UUID) -> None:
-        self._record("mark_processing")
-
-    async def save_result(
-        self,
-        scope: OcrScope,
-        result: Any,
-        processed_at: datetime,
-        request_id: UUID,
-    ) -> None:
-        self._record("save_result")
-        self.saved_result = result
-        assert processed_at == NOW
-        assert request_id == REQUEST_ID
-
-    async def mark_failed(
-        self,
-        scope: OcrScope,
-        request_id: UUID,
-        error_code: str,
-        processed_at: datetime,
-    ) -> None:
-        self._record("mark_failed")
-        self.failed_args = (scope, request_id, error_code, processed_at)
-
-
 def build_service(
-    repository: FakeRepository | None = None,
     clova: FakeClovaClient | None = None,
-) -> tuple[OcrService, FakeRepository, FakeClovaClient]:
-    actual_repository = repository or FakeRepository()
+) -> tuple[OcrService, FakeClovaClient]:
     actual_clova = clova or FakeClovaClient()
     return (
         OcrService(
             resolver=TemplateResolver(),
             clova_client=actual_clova,
-            repository=actual_repository,
             confidence_threshold=0.80,
-            clock=lambda: NOW,
         ),
-        actual_repository,
         actual_clova,
     )
 
 
 @pytest.mark.asyncio
-async def test_success_orchestrates_scope_processing_clova_and_save_in_order() -> None:
-    service, repository, clova = build_service()
+async def test_success_calls_clova_and_returns_normalized_result() -> None:
+    service, clova = build_service()
 
     result = await service.process(command())
 
-    assert repository.calls == ["verify_scope", "mark_processing", "save_result"]
     assert clova.calls == [((43019,), "sample.png")]
     assert result.status is OcrStatus.SUCCEEDED
     assert result.worker_document_id == DOCUMENT_ID
     assert result.matched_template_id == 43019
+    assert result.fields == {
+        "passport_number": "M00000000",
+        "surname": "TEST",
+        "given_names": "USER",
+        "date_of_birth": date(2000, 1, 2),
+        "passport_expiry_date": date(2030, 1, 2),
+    }
+    assert result.field_confidences["passport_number"] == 0.99
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("invalid_command", "message"),
+    ("overrides", "message"),
     [
-        (command(content=b""), "empty"),
-        (command(content_type="image/gif"), "content type"),
-        (command(content=b"x" * (20 * 1024 * 1024 + 1)), "too large"),
-        (command(filename="../sample.png"), "filename"),
-        (command(filename="..\\sample.png"), "filename"),
+        ({"content": b""}, "empty"),
+        ({"content_type": "image/gif"}, "content type"),
+        ({"filename": "../sample.png"}, "filename"),
+        ({"filename": "..\\sample.png"}, "filename"),
     ],
 )
-async def test_invalid_file_is_rejected_before_database_state_changes(
-    invalid_command: OcrCommand,
+async def test_invalid_file_is_rejected_before_provider_call(
+    overrides: dict[str, object],
     message: str,
 ) -> None:
-    service, repository, clova = build_service()
+    service, clova = build_service()
 
     with pytest.raises(InvalidOcrRequest, match=message):
-        await service.process(invalid_command)
+        await service.process(command(**overrides))  # type: ignore[arg-type]
 
-    assert repository.calls == []
     assert clova.calls == []
 
 
 @pytest.mark.asyncio
-async def test_missing_scoped_worker_document_returns_not_found_before_clova() -> None:
-    repository = FakeRepository(scope_exists=False)
-    service, _, clova = build_service(repository=repository)
+async def test_oversized_file_has_a_distinct_application_error() -> None:
+    service, clova = build_service()
 
-    with pytest.raises(WorkerDocumentNotFound):
-        await service.process(command())
+    with pytest.raises(ocr_models.OcrFileTooLarge, match="too large"):
+        await service.process(command(content=b"x" * (20 * 1024 * 1024 + 1)))
 
-    assert repository.calls == ["verify_scope"]
     assert clova.calls == []
 
 
 @pytest.mark.asyncio
 async def test_unsupported_passport_country_is_an_invalid_request() -> None:
-    service, repository, clova = build_service()
+    service, clova = build_service()
 
     with pytest.raises(InvalidOcrRequest, match="unsupported passport country"):
         await service.process(command(country_code="USA"))
 
-    assert repository.calls == []
     assert clova.calls == []
 
 
 @pytest.mark.asyncio
-async def test_clova_timeout_marks_failed_then_raises_timeout() -> None:
-    clova = FakeClovaClient(error=ClovaTimeoutError("timed out"))
-    service, repository, _ = build_service(clova=clova)
+async def test_clova_timeout_raises_safe_timeout() -> None:
+    service, _ = build_service(FakeClovaClient(error=ClovaTimeoutError("timed out")))
 
-    with pytest.raises(OcrUpstreamTimeout):
-        await service.process(command())
-
-    assert repository.calls == ["verify_scope", "mark_processing", "mark_failed"]
-    assert repository.failed_args == (command().scope, REQUEST_ID, "CLOVA_TIMEOUT", NOW)
-
-
-@pytest.mark.asyncio
-async def test_clova_provider_error_marks_failed_then_raises_upstream_failure() -> None:
-    clova = FakeClovaClient(error=ClovaProviderError("request failed"))
-    service, repository, _ = build_service(clova=clova)
-
-    with pytest.raises(OcrUpstreamFailure):
-        await service.process(command())
-
-    assert repository.calls == ["verify_scope", "mark_processing", "mark_failed"]
-    assert repository.failed_args == (command().scope, REQUEST_ID, "CLOVA_ERROR", NOW)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("fail_on", ["verify_scope", "mark_processing", "save_result"])
-async def test_persistence_failure_propagates_without_becoming_provider_error(
-    fail_on: str,
-) -> None:
-    service, _, _ = build_service(repository=FakeRepository(fail_on=fail_on))
-
-    with pytest.raises(OcrPersistenceError):
+    with pytest.raises(OcrUpstreamTimeout, match="timed out"):
         await service.process(command())
 
 
 @pytest.mark.asyncio
-async def test_review_required_result_is_saved_and_returned() -> None:
-    clova = FakeClovaClient(response=successful_passport_response(confidence=0.50))
-    service, repository, _ = build_service(clova=clova)
+async def test_clova_provider_error_raises_safe_failure() -> None:
+    service, _ = build_service(
+        FakeClovaClient(error=ClovaProviderError("request failed"))
+    )
+
+    with pytest.raises(OcrUpstreamFailure, match="failed"):
+        await service.process(command())
+
+
+@pytest.mark.asyncio
+async def test_review_required_result_returns_fields_and_confidences() -> None:
+    service, _ = build_service(
+        FakeClovaClient(response=successful_passport_response(confidence=0.50))
+    )
 
     result = await service.process(command())
 
     assert result.status is OcrStatus.REVIEW_REQUIRED
-    assert repository.saved_result.status is OcrStatus.REVIEW_REQUIRED
+    assert result.fields["passport_number"] == "M00000000"
+    assert result.field_confidences["passport_number"] == 0.50
     assert result.review_reasons == ("low_confidence:passport_number",)
