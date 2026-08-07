@@ -4,8 +4,6 @@ $requiredVariables = @(
     "FOWOCO_INTERNAL_API_TOKEN",
     "OCR_SAMPLE_FILE",
     "OCR_WORKER_DOCUMENT_ID",
-    "OCR_WORKER_ID",
-    "OCR_COMPANY_ID",
     "OCR_DOCUMENT_TYPE"
 )
 
@@ -56,9 +54,8 @@ try {
             "Bearer",
             $env:FOWOCO_INTERNAL_API_TOKEN
         )
+    $client.DefaultRequestHeaders.Add("X-Request-Id", $requestId)
     $form.Add([System.Net.Http.StringContent]::new($requestId), "request_id")
-    $form.Add([System.Net.Http.StringContent]::new($env:OCR_WORKER_ID), "worker_id")
-    $form.Add([System.Net.Http.StringContent]::new($env:OCR_COMPANY_ID), "company_id")
     $form.Add([System.Net.Http.StringContent]::new($documentType), "document_type")
     if (-not [string]::IsNullOrWhiteSpace($env:OCR_COUNTRY_CODE)) {
         $form.Add(
@@ -96,6 +93,8 @@ try {
     Write-Output "matched_template_id: $($result.matched_template_id)"
     Write-Output "document_side: $($result.document_side)"
     Write-Output "review_reasons: $([string]::Join(',', $result.review_reasons))"
+    $fieldCount = @($result.fields.PSObject.Properties).Count
+    Write-Output "field_count: $fieldCount"
 }
 finally {
     if ($null -ne $stream) {
