@@ -101,6 +101,42 @@ def test_normalize_ocr_output_maps_clova_aliases() -> None:
     assert "passport_number" in out["missing_slots"]
 
 
+def test_normalize_ocr_output_consumes_stateless_response_fields_only() -> None:
+    """Stateless OCR 메타데이터를 제외하고 fields만 갱신 슬롯으로 사용한다."""
+    out = normalize_ocr_output(
+        {
+            "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "worker_document_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "ocr_status": "REVIEW_REQUIRED",
+            "matched_template_id": 43019,
+            "document_side": None,
+            "fields": {
+                "passport_number": "M12345678",
+                "surname": "NGUYEN",
+                "given_names": "VAN AN",
+                "date_of_birth": "1995-03-01",
+            },
+            "field_confidences": {
+                "passport_number": 0.98,
+                "surname": 0.94,
+            },
+            "review_reasons": ["low_confidence:given_names"],
+        },
+        base_slots={},
+        base_missing=["passport_number", "full_name"],
+    )
+
+    assert out["ocr_result"] == {
+        "passport_number": "M12345678",
+        "full_name": "NGUYEN VAN AN",
+        "date_of_birth": "1995-03-01",
+    }
+    assert out["slots"] == out["ocr_result"]
+    assert out["missing_slots"] == []
+    assert "field_confidences" not in out["slots"]
+    assert "matched_template_id" not in out["slots"]
+
+
 def test_task_resume_merges_slots_across_runs() -> None:
     """task_id로 재호출하면 이전 slots에 새 slots를 합친다."""
     store = InMemoryTaskStore()
