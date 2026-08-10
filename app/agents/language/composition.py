@@ -31,11 +31,13 @@ from app.agents.language.retrieval.encoder import (
 )
 from app.agents.language.retrieval.manifest import (
     BGE_M3_REVISION,
+    BGE_RERANKER_REVISION,
     QDRANT_COLLECTION_ALIAS,
     build_expected_index_contract,
 )
 from app.agents.language.retrieval.models import RetrievalResult
 from app.agents.language.retrieval.qdrant_store import QdrantStore
+from app.agents.language.retrieval.reranker import FlagEmbeddingReranker
 from app.agents.language.retrieval.service import HybridEpsRetriever
 from app.agents.language.service import LanguageAssistantService
 from app.agents.language.validation import GeneratedSemanticValidator
@@ -107,6 +109,14 @@ def _build_retriever(settings: Settings) -> EpsRetriever:
     encoder = BgeM3Encoder(
         backend=FlagEmbeddingBgeM3Backend(str(model_path)),
     )
+    reranker_path = (
+        settings.model_cache_dir / "bge-reranker-v2-m3" / BGE_RERANKER_REVISION
+    )
+    reranker = FlagEmbeddingReranker(
+        model_path=str(reranker_path),
+        expected_revision=BGE_RERANKER_REVISION,
+        use_fp16=False,
+    )
     store = QdrantStore(
         client=client,
         collection_alias=QDRANT_COLLECTION_ALIAS,
@@ -114,7 +124,7 @@ def _build_retriever(settings: Settings) -> EpsRetriever:
     return HybridEpsRetriever(
         encoder=encoder,
         store=store,
-        reranker=None,
+        reranker=reranker,
         expected_index_contract=build_expected_index_contract(),
     )
 

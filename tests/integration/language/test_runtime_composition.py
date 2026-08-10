@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from app.agents.language.contracts import LanguageExecutionPolicy
@@ -108,6 +110,31 @@ def test_factory_selects_hybrid_retriever_when_qdrant_is_configured() -> None:
     )
 
     assert isinstance(retriever, HybridEpsRetriever)
+
+
+def test_factory_wires_fixed_revision_reranker_when_qdrant_is_configured(
+    tmp_path: Path,
+) -> None:
+    from app.agents.language.composition import _build_production_ports
+    from app.agents.language.retrieval.manifest import BGE_RERANKER_REVISION
+    from app.agents.language.retrieval.reranker import FlagEmbeddingReranker
+
+    _, retriever, _, _, _ = _build_production_ports(
+        Settings(
+            llm_provider="ollama",
+            llm_base_url="http://localhost:11434/v1",
+            llm_model="gemma4:26b-mlx",
+            qdrant_url="http://qdrant:6333",
+            model_cache_dir=tmp_path,
+        )
+    )
+
+    assert isinstance(retriever, HybridEpsRetriever)
+    assert isinstance(retriever.reranker, FlagEmbeddingReranker)
+    assert retriever.reranker.model_path == str(
+        tmp_path / "bge-reranker-v2-m3" / BGE_RERANKER_REVISION
+    )
+    assert retriever.reranker.use_fp16 is False
 
 
 def test_factory_rejects_missing_generation_settings() -> None:
