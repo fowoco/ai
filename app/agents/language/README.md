@@ -157,7 +157,7 @@ inp = LanguageAssistantInput(
 ```env
 # Vector DB (Qdrant) 연동
 FOWOCO_QDRANT_URL=http://qdrant:6333
-FOWOCO_QDRANT_COLLECTION_ALIAS=eps_language_phrases_active
+# Runtime collection alias는 eps_language_phrases_active로 고정
 
 # LLM 연동 (OpenAI-compatible 규격)
 FOWOCO_LLM_PROVIDER=openai-compatible

@@ -1,6 +1,6 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from app.agents.language.ports import DenseSparseEncoder
 from app.agents.language.retrieval.models import HybridVector
@@ -24,6 +24,61 @@ class BGEM3Backend(Protocol):
         return_sparse: bool = True,
         return_colbert_vecs: bool = False,
     ) -> RawBgeBatch: ...
+
+
+class FlagEmbeddingBgeM3Backend(BGEM3Backend):
+    def __init__(self, model_path: str, *, use_fp16: bool = True) -> None:
+        self.model_path = model_path
+        self.use_fp16 = use_fp16
+        self._model: Any = None
+
+    def _get_model(self) -> Any:
+        if self._model is None:
+            try:
+                from FlagEmbedding import BGEM3FlagModel
+            except ImportError as err:
+                raise RuntimeError("FlagEmbedding BGE-M3 model is not available") from err
+            self._model = BGEM3FlagModel(
+                self.model_path,
+                use_fp16=self.use_fp16,
+            )
+        return self._model
+
+    def token_count(self, text: str) -> int:
+        model = self._get_model()
+        return len(model.tokenizer.encode(text, add_special_tokens=True))
+
+    def encode_queries(
+        self,
+        texts: Sequence[str],
+        *,
+        max_length: int = 128,
+        return_dense: bool = True,
+        return_sparse: bool = True,
+        return_colbert_vecs: bool = False,
+    ) -> RawBgeBatch:
+        output = self._get_model().encode(
+            texts,
+            max_length=max_length,
+            return_dense=return_dense,
+            return_sparse=return_sparse,
+            return_colbert_vecs=return_colbert_vecs,
+        )
+        try:
+            dense_vectors = tuple(
+                tuple(float(value) for value in vector)
+                for vector in output["dense_vecs"]
+            )
+            lexical_weights = tuple(
+                {int(token_id): float(weight) for token_id, weight in weights.items()}
+                for weights in output["lexical_weights"]
+            )
+        except (KeyError, TypeError, ValueError) as err:
+            raise RuntimeError("Invalid FlagEmbedding BGE-M3 output") from err
+        return RawBgeBatch(
+            dense_vectors=dense_vectors,
+            lexical_weights=lexical_weights,
+        )
 
 
 class BgeM3Encoder(DenseSparseEncoder):

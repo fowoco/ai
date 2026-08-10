@@ -5,6 +5,7 @@ from app.agents.language.generation.models import EasyKoreanDraft
 from app.agents.language.generation.ollama import OllamaGenerationPort
 from app.agents.language.ports import NoopTraceSink, SemanticValidationDecision
 from app.agents.language.retrieval.models import RetrievalResult
+from app.agents.language.retrieval.service import HybridEpsRetriever
 from app.agents.language.service import LanguageAssistantService
 from app.core.config import Settings
 from tests.agents.language.fakes import (
@@ -92,6 +93,21 @@ def test_factory_selects_native_adapter_for_ollama_provider() -> None:
     )
 
     assert isinstance(generator, OllamaGenerationPort)
+
+
+def test_factory_selects_hybrid_retriever_when_qdrant_is_configured() -> None:
+    from app.agents.language.composition import _build_production_ports
+
+    _, retriever, _, _, _ = _build_production_ports(
+        Settings(
+            llm_provider="ollama",
+            llm_base_url="http://localhost:11434/v1",
+            llm_model="gemma4:26b-mlx",
+            qdrant_url="http://qdrant:6333",
+        )
+    )
+
+    assert isinstance(retriever, HybridEpsRetriever)
 
 
 def test_factory_rejects_missing_generation_settings() -> None:

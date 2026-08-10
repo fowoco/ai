@@ -44,8 +44,8 @@ RUN apt-get update \
 # 의존성 정의 파일만 먼저 복사해 캐시를 활용
 COPY pyproject.toml uv.lock README.md ./
 
-# uv.lock 기반 재현 가능 설치 — 프로덕션 의존성만
-RUN uv sync --frozen --no-dev
+# uv.lock 기반 재현 가능 설치 — Language Assistant retrieval 포함
+RUN uv sync --frozen --no-dev --extra language-retrieval
 
 # 앱 패키지 복사
 COPY app ./app

@@ -70,6 +70,39 @@ def test_ollama_adapter_sends_native_schema_contract() -> None:
     assert "submission_method" in system_prompt
 
 
+def test_ollama_adapter_disables_thinking_for_structured_generation() -> None:
+    captured_requests: list[httpx.Request] = []
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        captured_requests.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "model": "gemma4:26b-mlx",
+                "message": {
+                    "role": "assistant",
+                    "content": _valid_easy_korean_content(),
+                },
+                "done": True,
+            },
+        )
+
+    port = OllamaGenerationPort(
+        base_url="http://localhost:11434",
+        model="gemma4:26b-mlx",
+        transport=httpx.MockTransport(handle_request),
+    )
+
+    port.generate(
+        operation="easy_korean",
+        payload={},
+        response_model=EasyKoreanDraft,
+    )
+
+    request_body = json.loads(captured_requests[0].content)
+    assert request_body["think"] is False
+
+
 def test_ollama_adapter_parses_single_json_code_fence() -> None:
     fenced_content = f"```json\n{_valid_easy_korean_content()}\n```"
 

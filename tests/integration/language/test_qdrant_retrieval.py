@@ -24,7 +24,7 @@ def test_real_store_mock_create_and_verify(
     mock_client = MagicMock()
     mock_client.get_aliases.return_value.aliases = [
         MagicMock(
-            alias_name="eps_language_phrases",
+            alias_name="eps_language_phrases_active",
             collection_name="eps_language_phrases_29106c33d43c_5617a9f61b02",
         )
     ]
@@ -51,6 +51,81 @@ def test_real_store_mock_create_and_verify(
     store = QdrantStore(client=mock_client)
     handle = store.verify_contract(expected=expected_contract)
     assert handle.collection_name == "eps_language_phrases_29106c33d43c_5617a9f61b02"
+
+
+def test_real_store_verifies_new_collection_before_alias_switch(
+    expected_contract: ExpectedIndexContract,
+) -> None:
+    mock_client = MagicMock()
+    mock_client.get_collection.return_value.points_count = 100
+    dense_param = MagicMock(size=1024, distance="Cosine")
+    mock_client.get_collection.return_value.config.params.vectors = {
+        "korean_dense": dense_param
+    }
+    mock_client.get_collection.return_value.config.params.sparse_vectors = {
+        "korean_sparse": MagicMock()
+    }
+    mock_client.count.return_value.count = 100
+
+    store = QdrantStore(client=mock_client)
+
+    store.verify_collection(
+        "new_collection",
+        expected_count=100,
+        spec=MagicMock(dense_vector_size=1024),
+        expected_languages=("en",),
+        expected_contract=expected_contract,
+    )
+
+
+def test_real_store_rejects_wrong_collection_point_count(
+    expected_contract: ExpectedIndexContract,
+) -> None:
+    mock_client = MagicMock()
+    mock_client.get_collection.return_value.points_count = 99
+    store = QdrantStore(client=mock_client)
+
+    with pytest.raises(ValueError, match="RETRIEVAL_UNAVAILABLE"):
+        store.verify_collection(
+            "new_collection",
+            expected_count=100,
+            spec=MagicMock(dense_vector_size=1024),
+            expected_languages=("en",),
+            expected_contract=expected_contract,
+        )
+
+
+def test_real_store_replaces_existing_active_alias() -> None:
+    mock_client = MagicMock()
+    mock_client.get_aliases.return_value.aliases = [
+        MagicMock(
+            alias_name="eps_language_phrases_active",
+            collection_name="old_collection",
+        )
+    ]
+    store = QdrantStore(client=mock_client)
+
+    store.swap_alias("eps_language_phrases_active", "new_collection")
+
+    operations = mock_client.update_collection_aliases.call_args.kwargs[
+        "change_aliases_operations"
+    ]
+    assert len(operations) == 2
+    assert operations[0].delete_alias.alias_name == "eps_language_phrases_active"
+    assert operations[1].create_alias.collection_name == "new_collection"
+
+
+def test_real_store_uses_qdrant_1_19_payload_schema_type() -> None:
+    from qdrant_client import models as qmodels
+
+    mock_client = MagicMock()
+    store = QdrantStore(client=mock_client)
+
+    store.ensure_payload_indexes("collection", ("target_language",))
+
+    assert mock_client.create_payload_index.call_args.kwargs[
+        "field_schema"
+    ] == qmodels.PayloadSchemaType.KEYWORD
 
 
 def test_real_store_mock_search_many(

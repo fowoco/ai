@@ -17,14 +17,18 @@ import argparse
 import sys
 from pathlib import Path
 
+from app.agents.language.retrieval.manifest import (
+    BGE_M3_MODEL_REPO,
+    BGE_M3_REVISION,
+)
+
 # 정확한 모델 리비전 — 변경 금지 (T13 계약)
-BGE_M3_REVISION = "5617a9f61b028005a4858fdac845db406aefb181"
 BGE_RERANKER_REVISION = "953dc6f6f85ac1e88eb36f5f9ce67a74a6edbc22"
 
 MODEL_SPECS: list[dict[str, str]] = [
     {
         "name": "bge-m3",
-        "repo": "BAAI/bge-m3",
+        "repo": BGE_M3_MODEL_REPO,
         "revision": BGE_M3_REVISION,
     },
     {

@@ -6,7 +6,23 @@ compose.test.yml: 테스트용 독립 Qdrant 볼륨 검증.
 
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.mark.parametrize("compose_file", ("compose.yml", "compose.test.yml"))
+def test_qdrant_healthcheck_uses_available_bash_tcp_probe(
+    compose_file: str,
+) -> None:
+    import yaml
+
+    data = yaml.safe_load((ROOT / compose_file).read_text())
+    command = data["services"]["qdrant"]["healthcheck"]["test"]
+
+    assert command[:2] == ["CMD", "/bin/bash"]
+    assert "/dev/tcp/127.0.0.1/6333" in command[-1]
+    assert "wget" not in " ".join(command)
 
 
 class TestComposeProdConfig:

@@ -75,6 +75,7 @@ class OllamaGenerationPort(StructuredGenerationPort):
                 {"role": "user", "content": json.dumps(safe_payload, ensure_ascii=False)},
             ],
             "stream": False,
+            "think": False,
             "format": json_schema,
             "options": {"temperature": 0},
         }

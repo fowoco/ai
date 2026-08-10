@@ -25,7 +25,18 @@ from app.agents.language.ports import (
     TraceSink,
 )
 from app.agents.language.queries import SearchQuery
+from app.agents.language.retrieval.encoder import (
+    BgeM3Encoder,
+    FlagEmbeddingBgeM3Backend,
+)
+from app.agents.language.retrieval.manifest import (
+    BGE_M3_REVISION,
+    QDRANT_COLLECTION_ALIAS,
+    build_expected_index_contract,
+)
 from app.agents.language.retrieval.models import RetrievalResult
+from app.agents.language.retrieval.qdrant_store import QdrantStore
+from app.agents.language.retrieval.service import HybridEpsRetriever
 from app.agents.language.service import LanguageAssistantService
 from app.agents.language.validation import GeneratedSemanticValidator
 from app.core.config import Settings
@@ -78,6 +89,36 @@ class _UnavailableRetriever(EpsRetriever):
         )
 
 
+def _build_retriever(settings: Settings) -> EpsRetriever:
+    if not settings.qdrant_url:
+        return _UnavailableRetriever("Qdrant is not configured")
+    try:
+        from qdrant_client import QdrantClient
+
+        client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key,
+            check_compatibility=False,
+        )
+    except (ImportError, ValueError):
+        return _UnavailableRetriever("Qdrant client is unavailable")
+
+    model_path = settings.model_cache_dir / "bge-m3" / BGE_M3_REVISION
+    encoder = BgeM3Encoder(
+        backend=FlagEmbeddingBgeM3Backend(str(model_path)),
+    )
+    store = QdrantStore(
+        client=client,
+        collection_alias=QDRANT_COLLECTION_ALIAS,
+    )
+    return HybridEpsRetriever(
+        encoder=encoder,
+        store=store,
+        reranker=None,
+        expected_index_contract=build_expected_index_contract(),
+    )
+
+
 def _required_generation_settings(settings: Settings) -> tuple[str, str, str]:
     provider = (settings.llm_provider or "").strip().lower()
     base_url = (settings.llm_base_url or "").strip()
@@ -114,12 +155,7 @@ def _build_production_ports(
         model=model,
         timeout_seconds=settings.llm_timeout_seconds,
     )
-    retrieval_message = (
-        "Qdrant is not configured"
-        if not settings.qdrant_url
-        else "Qdrant/BGE retrieval adapter is unavailable"
-    )
-    retriever = _UnavailableRetriever(retrieval_message)
+    retriever = _build_retriever(settings)
     return (
         generator,
         retriever,
