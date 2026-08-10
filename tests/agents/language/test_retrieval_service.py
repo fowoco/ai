@@ -5,7 +5,12 @@ import pytest
 
 from app.agents.language.contracts import WarningCode
 from app.agents.language.queries import SearchQuery
-from app.agents.language.retrieval.encoder import BGEM3Backend, BgeM3Encoder, RawBgeBatch
+from app.agents.language.retrieval.encoder import (
+    BGEM3Backend,
+    BgeM3Encoder,
+    FlagEmbeddingBgeM3Backend,
+    RawBgeBatch,
+)
 from app.agents.language.retrieval.models import (
     EpsReference,
     ExpectedIndexContract,
@@ -150,6 +155,39 @@ def test_encoder_batches_all_three_queries_once() -> None:
     res = encoder.encode_queries(["q1", "q2", "q3"])
     assert len(res) == 3
     assert backend.call_count == 1
+
+
+def test_flag_embedding_backend_converts_dense_and_lexical_weights() -> None:
+    class FakeTokenizer:
+        def encode(self, text: str, *, add_special_tokens: bool) -> list[int]:
+            assert text == "고맙습니다"
+            assert add_special_tokens is True
+            return [1, 2, 3]
+
+    class FakeFlagModel:
+        tokenizer = FakeTokenizer()
+
+        def encode(self, texts: Sequence[str], **kwargs: object) -> dict[str, object]:
+            assert tuple(texts) == ("고맙습니다",)
+            assert kwargs == {
+                "max_length": 128,
+                "return_dense": True,
+                "return_sparse": True,
+                "return_colbert_vecs": False,
+            }
+            return {
+                "dense_vecs": [[0.1] * 1024],
+                "lexical_weights": [{"9": 0.2, "1": 0.5}],
+            }
+
+    backend = FlagEmbeddingBgeM3Backend("/models/bge-m3")
+    backend._model = FakeFlagModel()
+
+    assert backend.token_count("고맙습니다") == 3
+    result = backend.encode_queries(("고맙습니다",))
+
+    assert len(result.dense_vectors[0]) == 1024
+    assert result.lexical_weights[0] == {9: 0.2, 1: 0.5}
 
 
 def test_encoder_requests_dense_and_sparse_only() -> None:

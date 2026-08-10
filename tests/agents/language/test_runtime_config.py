@@ -88,6 +88,21 @@ class TestLlmTimeoutConfig:
             Settings()
 
 
+class TestLlmBaseUrlConfig:
+    """FOWOCO_LLM_BASE_URL 환경변수 설정 검증."""
+
+    def test_llm_base_url_reads_from_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("FOWOCO_LLM_BASE_URL", "http://ollama:11434/v1")
+        from app.core.config import get_settings
+
+        get_settings.cache_clear()
+        try:
+            s = get_settings()
+            assert s.llm_base_url == "http://ollama:11434/v1"
+        finally:
+            get_settings.cache_clear()
+
+
 class TestModelCacheConfig:
     """FOWOCO_MODEL_CACHE_DIR 환경변수 설정 검증."""
 

@@ -8,7 +8,8 @@ from typing import Any
 
 from app.agents.language.codes import _LANGUAGE_ROWS
 from app.agents.language.contracts import EpsLanguageCode, SupportedLanguage
-from app.agents.language.ports import EpsIndexStore
+from app.agents.language.ports import DenseSparseEncoder, EpsIndexStore
+from app.agents.language.retrieval.manifest import QDRANT_COLLECTION_ALIAS
 from app.agents.language.retrieval.models import ExpectedIndexContract
 
 EPS_UUID_NAMESPACE = uuid.UUID("9a528e10-4f51-4d37-9759-38b71d607f2c")
@@ -144,7 +145,7 @@ def build_index_plan(
     records: Sequence[dict[str, Any]],
     expected_contract: ExpectedIndexContract,
     switch_alias: bool = False,
-    alias_name: str = "eps_language_phrases",
+    alias_name: str = QDRANT_COLLECTION_ALIAS,
     spec: CollectionSpec | None = None,
 ) -> None:
     if spec is None:
@@ -186,5 +187,67 @@ def build_index_plan(
         expected_contract=expected_contract,
     )
 
+    if switch_alias:
+        store.swap_alias(alias_name, collection_name)
+
+
+def build_embedded_index_plan(
+    *,
+    store: EpsIndexStore,
+    encoder: DenseSparseEncoder,
+    collection_name: str,
+    records: Sequence[dict[str, Any]],
+    expected_contract: ExpectedIndexContract,
+    batch_size: int = 100,
+    switch_alias: bool = False,
+    alias_name: str = QDRANT_COLLECTION_ALIAS,
+    spec: CollectionSpec | None = None,
+) -> None:
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+    if spec is None:
+        spec = CollectionSpec()
+
+    store.create_collection(collection_name, spec)
+    store.ensure_payload_indexes(
+        collection_name,
+        (
+            "eps_language_code",
+            "target_language",
+            "quality_status",
+            "dataset_revision",
+            "embedding_model_repo",
+            "embedding_model_revision",
+            "index_contract_version",
+        ),
+    )
+
+    for start in range(0, len(records), batch_size):
+        batch = records[start : start + batch_size]
+        vectors = encoder.encode_queries([str(record["korean_text"]) for record in batch])
+        points: list[dict[str, Any]] = []
+        for record, vector in zip(batch, vectors, strict=True):
+            payload = dict(record)
+            payload["dense"] = list(vector.dense)
+            payload["sparse_indices"] = list(vector.sparse_indices)
+            payload["sparse_values"] = list(vector.sparse_values)
+            points.append({"id": record["point_id"], "payload": payload})
+        store.upsert_batch(collection_name, tuple(points))
+
+    expected_count = (
+        expected_contract.point_count
+        if expected_contract.point_count is not None
+        else len(records)
+    )
+    expected_languages = tuple(
+        sorted({str(record["target_language"]) for record in records})
+    )
+    store.verify_collection(
+        collection_name,
+        expected_count=expected_count,
+        spec=spec,
+        expected_languages=expected_languages,
+        expected_contract=expected_contract,
+    )
     if switch_alias:
         store.swap_alias(alias_name, collection_name)
