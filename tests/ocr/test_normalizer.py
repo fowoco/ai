@@ -164,6 +164,24 @@ def test_arc_back_low_confidence_only_field_requires_review() -> None:
     assert result.review_reasons == ("low_confidence:residence_address_1",)
 
 
+def test_arc_back_invalid_date_requires_review_without_confidence() -> None:
+    resolver = TemplateResolver()
+    raw = response(43025, [field("stay_expiration_date", "31-01-2030")])
+
+    result = normalize_clova_response(
+        raw,
+        resolver.resolve(DocumentType.ARC, None),
+        0.80,
+        resolver,
+    )
+
+    assert result.status is OcrStatus.REVIEW_REQUIRED
+    assert result.error_code == "INVALID_DATE"
+    assert result.review_reasons == ("invalid_date:stay_expiration_date",)
+    assert "stay_expiration_date" not in result.fields
+    assert "stay_expiration_date" not in result.field_confidences
+
+
 def test_removed_arc_back_fields_are_ignored() -> None:
     resolver = TemplateResolver()
     raw = response(

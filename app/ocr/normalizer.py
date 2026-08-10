@@ -156,8 +156,10 @@ def normalize_clova_response(
         )
         if not back_fields:
             review_reasons.append("missing_required:arc_back_field")
-        elif not any(confidences[name] >= threshold for name in back_fields):
-            review_reasons.extend(f"low_confidence:{name}" for name in back_fields)
+        elif not any(confidences.get(name, 0.0) >= threshold for name in back_fields):
+            review_reasons.extend(
+                f"low_confidence:{name}" for name in back_fields if name in confidences
+            )
 
     for name in sorted(required):
         confidence = confidences.get(name)
