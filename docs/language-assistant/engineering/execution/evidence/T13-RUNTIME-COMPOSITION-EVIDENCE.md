@@ -6,12 +6,14 @@ task: issue-24-runtime-composition
 branch: feat/language-assistant-runtime-composition
 worktree: /Users/parktaejung/Desktop/workspace/ai/.worktrees/language-assistant-runtime-composition
 base_sha: 8837c5efcf1f161442e0adab8584488e0a656c0f
-implementation_commit: 177e695 (runtime/Ollama); 7c56654 (Qdrant/BGE/Docker); this commit (post-rebase evidence)
+implementation_commit: 177e695 (runtime/Ollama); 7c56654 (Qdrant/BGE/Docker); 8e227211 (reranker composition); d43e163 (model-baked Docker contract); this commit (Task 4 evidence)
 live_ollama_qdrant: success-with-easy-korean-fallback
 ollama_model: gemma4:26b-mlx
 ollama_structured_output: success
 qdrant_endpoint: fowoco-qdrant:6333 (production volume; temporary localhost:26333 proxy removed after verification)
 qdrant_retrieval: success
+docker_baked_model_build: failed-before-model-download
+docker_baked_model_failure: ModuleNotFoundError for app in download_language_models.py
 ```
 
 ## Claims
@@ -28,6 +30,7 @@ qdrant_retrieval: success
 | C08 | production Qdrant volume에 실제 BGE-M3 index를 생성하고, 검색에서 5개 reference를 반환하며 retrieval fallback/warning이 없다. | production Qdrant/BGE live result below |
 | C09 | production Docker image는 `language-retrieval` extra를 포함해 빌드된다. | `docker compose build ai` exit `0`; image metadata below |
 | C10 | feature HEAD는 검수 시점의 최신 `origin/develop`을 포함한다. | `git merge-base --is-ancestor origin/develop HEAD` exit `0`; base `8837c5e` |
+| C11 | production retriever는 고정 revision의 BGE reranker를 lazy하게 조립하고 실패 시 기존 degraded 계약을 유지한다. | `test_factory_wires_fixed_revision_reranker_when_qdrant_is_configured`, Task 2 focused suite `23 passed`; 실제 container reranking은 아래 Task 4 build 실패로 미검증 |
 
 ## Contract decision
 
@@ -245,13 +248,49 @@ live 인덱싱 중 qdrant-client 1.19 compatibility 오류 두 건을 재현하�
 - latest image one-shot smoke: Python 시작이 두 차례 장시간 정지해 중단했으며, OrbStack 재시작 후 Qdrant 데이터 영속성을 재확인함
 - 주의: Linux Torch가 CUDA 계열 wheel을 포함해 이미지가 3.51 GB다. 빌드는 성공했지만 이미지 경량화는 별도 최적화 대상이다.
 
+위 결과는 BGE-M3와 reranker를 이미지에 직접 포함하기 전 image의 기록이다. 모델 bake를 추가한 `d43e163`에서 2026-08-10에 다음 Task 4 검증을 별도로 수행했다.
+
+### Model-baked production Docker Task 4 attempt
+
+Preflight:
+
+- branch: `feat/language-assistant-runtime-composition`
+- HEAD: `d43e163d998657e2a2fe3cbcbb206493b6933776`
+- `git status --short`: 사용자 소유 untracked 계획 문서 1개만 존재
+- `fowoco-qdrant`: `running`, `healthy`
+- Qdrant collection, alias, point, volume 변경: 없음
+
+Build:
+
+```bash
+docker compose build ai
+```
+
+- Exit code: `1`
+- Python retrieval dependency 설치: 성공 (`FlagEmbedding==1.4.0`, `torch==2.13.0`, `qdrant-client==1.19.0` 포함)
+- 모델 bake command 진입: 성공
+- 실패 command: `/app/.venv/bin/python scripts/download_language_models.py --cache-dir /opt/fowoco/language-models`
+- 실패 원인: `ModuleNotFoundError: No module named 'app'`
+- 실패 위치: `download_language_models.py`가 `app.agents.language.retrieval.manifest`를 import하는 시점
+- BGE-M3/reranker model download 시작: 하지 못함
+
+Build가 model download 전에 실패했으므로 다음 항목은 성공으로 주장하지 않는다.
+
+- model-baked image platform manifest/size: 생성되지 않음
+- 두 모델의 `config.json` image 내부 존재: 미검증
+- 최신 image health 및 `/openapi.json`: 미검증
+- 최신 image one-shot `create_app()`: 미검증
+- 실제 Qdrant hybrid retrieval + BGE reranker JSON assert: 미검증
+
+실패 후 `fowoco-qdrant`가 계속 `running`, `healthy`임을 재확인했다. AI service는 시작되지 않았으므로 stop 대상이 없었고, Qdrant는 중지·삭제·재색인하지 않았다. 외부 LLM/Ollama/OpenAI 호출과 provider 설정 변경도 수행하지 않았다.
+
 ## Not yet verified
 
-- BGE reranker 연결; 현재 production composition은 cross-query RRF fallback을 사용함
-- actual OpenAI API structured-output compatibility
-- 최신 production image의 Python one-shot 실행 정지 원인; image build 자체는 성공함
+- model-baked production image의 실제 BGE reranker 성공 경로; build가 model download 전에 실패함
+- model-baked production image의 manifest/size, model `config.json`, health/OpenAPI, one-shot `create_app()`
+- actual OpenAI API structured-output compatibility; 현재 작업 범위에서 명시적으로 제외함
 
-현재 production composition은 Qdrant URL이 없으면 typed degraded fallback을 사용하고, 유효한 URL에서는 lazy BGE-M3 backend와 `HybridEpsRetriever`를 조립한다. production Qdrant volume의 실제 BGE-M3 indexing·retrieval과 Ollama 결합 API 호출은 검증됐으며, reranker·실제 OpenAI API 호환성·최신 image의 one-shot Python 실행 성공은 주장하지 않는다.
+현재 production composition은 Qdrant URL이 없으면 typed degraded fallback을 사용하고, 유효한 URL에서는 lazy BGE-M3 backend, `HybridEpsRetriever`, lazy BGE reranker를 조립한다. production Qdrant volume의 실제 BGE-M3 indexing·retrieval과 Ollama 결합 API 호출은 이전 단계에서 검증됐다. 다만 model-baked image build가 downloader import 오류로 중단되어, 최신 image의 reranker·health·one-shot 성공은 주장하지 않는다.
 
 ## Known unrelated environment failures
 
