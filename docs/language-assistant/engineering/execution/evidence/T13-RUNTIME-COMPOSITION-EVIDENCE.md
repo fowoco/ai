@@ -298,12 +298,64 @@ Service and import:
 
 Actual read-only Qdrant retrieval and reranking:
 
-- command: `docker compose run --rm --no-deps --entrypoint /app/.venv/bin/python ai -c '<_build_retriever(Settings())와 세 SearchQuery assert>'`
+재실행한 정확한 command와 `-c` 본문은 다음과 같다. provider/secret을 전달하거나 참조하지 않는다.
+
+```bash
+docker compose run --rm --no-deps --entrypoint /app/.venv/bin/python ai -c '
+import json
+
+from app.agents.language.composition import _build_retriever
+from app.agents.language.queries import SearchQuery
+from app.core.config import Settings
+
+queries = (
+    SearchQuery(
+        kind="canonical",
+        text="요청 목적 취업을 위한 고용허가서 발급; 자료 여권 사본, 사진; 기한 2026-08-31; 방법 고용센터 방문 제출",
+    ),
+    SearchQuery(
+        kind="reason_items",
+        text="요청 목적 취업을 위한 고용허가서 발급; 자료 여권 사본, 사진; 방법 고용센터 방문 제출; 기한 2026-08-31",
+    ),
+    SearchQuery(
+        kind="action_deadline",
+        text="기한 2026-08-31; 방법 고용센터 방문 제출; 요청 목적 취업을 위한 고용허가서 발급; 자료 여권 사본, 사진",
+    ),
+)
+result = _build_retriever(Settings()).retrieve(
+    queries=queries,
+    standard_korean_text=(
+        "취업을 위해 고용허가서를 발급받으려면 2026년 8월 31일까지 "
+        "여권 사본과 사진을 가지고 고용센터를 방문해 제출하세요."
+    ),
+    target_language="en",
+)
+summary = {
+    "dataset_version": result.dataset_version,
+    "context_count": len(result.contexts),
+    "selected_by": [context.selected_by for context in result.contexts],
+    "fallback_used": result.fallback_used,
+    "degraded_components": list(result.degraded_components),
+    "warnings": [warning.model_dump(mode="json") for warning in result.warnings],
+}
+assert len(result.contexts) == 5, summary
+assert all(context.selected_by == "reranker" for context in result.contexts), summary
+assert result.fallback_used is False, summary
+assert "reranker" not in result.degraded_components, summary
+assert result.warnings == (), summary
+print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
+'
+```
+
 - query kinds: `canonical`, `reason_items`, `action_deadline`
 - target language: `en`
 - Exit code: `0`
-- dataset version: `sha256:29106c33d43ccdd8453623ac1a0af44e0201d7c7cc1cc68c3fb438e0ccc61c6d`
-- JSON result: `context_count=5`, `selected_by=[reranker, reranker, reranker, reranker, reranker]`, `fallback_used=false`, `degraded_components=[]`, `warnings=[]`
+- raw stdout JSON:
+
+```json
+{"context_count": 5, "dataset_version": "sha256:29106c33d43ccdd8453623ac1a0af44e0201d7c7cc1cc68c3fb438e0ccc61c6d", "degraded_components": [], "fallback_used": false, "selected_by": ["reranker", "reranker", "reranker", "reranker", "reranker"], "warnings": []}
+```
+
 - strict asserts: contexts 5, 모두 `reranker`, fallback false, degraded에 `reranker` 없음, warning 빈 tuple — 모두 통과
 - `_build_retriever()`만 조립·호출했으며 LLM/Ollama/OpenAI와 provider 설정은 사용·변경하지 않음
 
