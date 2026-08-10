@@ -11,6 +11,30 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 
 
+def test_production_image_bakes_language_models() -> None:
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    dockerignore = (ROOT / ".dockerignore").read_text().splitlines()
+
+    assert "COPY scripts/download_language_models.py ./scripts/" in dockerfile
+    assert "/app/.venv/bin/python scripts/download_language_models.py" in dockerfile
+    assert "--cache-dir /opt/fowoco/language-models" in dockerfile
+    assert "FOWOCO_MODEL_CACHE_DIR=/opt/fowoco/language-models" in dockerfile
+    assert "scripts/*" in dockerignore
+    assert "!scripts/download_language_models.py" in dockerignore
+    assert "scripts" not in dockerignore
+
+
+def test_ai_service_uses_baked_model_path() -> None:
+    import yaml
+
+    data = yaml.safe_load((ROOT / "compose.yml").read_text())
+
+    assert (
+        data["services"]["ai"]["environment"]["FOWOCO_MODEL_CACHE_DIR"]
+        == "/opt/fowoco/language-models"
+    )
+
+
 @pytest.mark.parametrize("compose_file", ("compose.yml", "compose.test.yml"))
 def test_qdrant_healthcheck_uses_available_bash_tcp_probe(
     compose_file: str,

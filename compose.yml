@@ -38,7 +38,7 @@ services:
     environment:
       FOWOCO_DOCUMENT_SNAPSHOT_DIR: /data/document-snapshots
       FOWOCO_QDRANT_URL: http://qdrant:6333
-      FOWOCO_MODEL_CACHE_DIR: /data/model-cache
+      FOWOCO_MODEL_CACHE_DIR: /opt/fowoco/language-models
     volumes:
       - fowoco-document-data:/data
     depends_on:

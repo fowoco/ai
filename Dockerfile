@@ -26,7 +26,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     FOWOCO_HWPX_TO_HWP_ENABLED=true \
     FOWOCO_HWPX_PDF_ENABLED=true \
     FOWOCO_DOCUMENT_SNAPSHOT_DIR=/data/document-snapshots \
-    FOWOCO_MODEL_CACHE_DIR=/data/model-cache
+    FOWOCO_MODEL_CACHE_DIR=/opt/fowoco/language-models
 
 COPY --from=uv /uv /usr/local/bin/uv
 COPY --from=rhwp /opt/rhwp/rhwp /usr/local/bin/rhwp
@@ -49,6 +49,11 @@ RUN uv sync --frozen --no-dev --extra language-retrieval
 
 # 앱 패키지 복사
 COPY app ./app
+COPY scripts/download_language_models.py ./scripts/
+
+# 고정 revision의 검색 모델을 이미지에 포함해 런타임 다운로드를 없앤다.
+RUN /app/.venv/bin/python scripts/download_language_models.py \
+    --cache-dir /opt/fowoco/language-models
 
 # uvicorn 기본 포트
 EXPOSE 8000
