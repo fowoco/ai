@@ -102,6 +102,8 @@ def test_rejects_korean_passport_date_with_conflicting_months() -> None:
     assert result.error_code == "INVALID_DATE"
     assert result.review_reasons == ("invalid_date:date_of_birth",)
     assert "date_of_birth" not in result.fields
+    assert "date_of_birth" not in result.field_confidences
+    assert set(result.fields) == set(result.field_confidences)
 
 
 def test_normalizes_arc_front_and_registration_number() -> None:
@@ -160,6 +162,24 @@ def test_arc_back_low_confidence_only_field_requires_review() -> None:
     assert result.status is OcrStatus.REVIEW_REQUIRED
     assert result.error_code == "LOW_CONFIDENCE"
     assert result.review_reasons == ("low_confidence:residence_address_1",)
+
+
+def test_arc_back_invalid_date_requires_review_without_confidence() -> None:
+    resolver = TemplateResolver()
+    raw = response(43025, [field("stay_expiration_date", "31-01-2030")])
+
+    result = normalize_clova_response(
+        raw,
+        resolver.resolve(DocumentType.ARC, None),
+        0.80,
+        resolver,
+    )
+
+    assert result.status is OcrStatus.REVIEW_REQUIRED
+    assert result.error_code == "INVALID_DATE"
+    assert result.review_reasons == ("invalid_date:stay_expiration_date",)
+    assert "stay_expiration_date" not in result.fields
+    assert "stay_expiration_date" not in result.field_confidences
 
 
 def test_removed_arc_back_fields_are_ignored() -> None:
@@ -236,6 +256,8 @@ def test_invalid_recognized_date_requires_review_and_is_not_stored() -> None:
     assert result.error_code == "INVALID_DATE"
     assert result.review_reasons == ("invalid_date:passport_expiry_date",)
     assert "passport_expiry_date" not in result.fields
+    assert "passport_expiry_date" not in result.field_confidences
+    assert set(result.fields) == set(result.field_confidences)
 
 
 def test_no_matched_template_requires_review() -> None:

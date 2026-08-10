@@ -1,43 +1,66 @@
 # CLOVA Template OCR 연동 계약
 
-이 문서는 `fowoco/ai`가 원본 여권 또는 외국인등록증 파일을 받아 CLOVA Template
-OCR로 인식하고, 외부에서 준비된 PostgreSQL `worker_document` 행에 결과를 직접
-저장하는 내부 연동 계약이다. `fowoco/server`의 호출 코드와 DB 마이그레이션은 이
-구현 범위 밖이며 이 브랜치에서 수정하지 않는다.
+AI Runtime은 여권 사본과 외국인등록증 파일을 CLOVA Template OCR로 처리하고,
+허용된 필드만 정규화해 Server에 반환한다. 문서 소유권·사업장 권한 검증과 결과
+검증·암호화·저장은 Server가 담당한다. AI는 Server PostgreSQL을 조회하거나 수정하지
+않는다.
 
-## 처리 흐름
+## 역할 경계
 
-1. 인증된 호출자가 원본 파일과 문서·근로자·회사 식별자를 AI에 전송한다.
-2. AI가 문서 종류와 국가에 맞는 배포 템플릿 후보만 CLOVA `/infer`에 전달한다.
-3. AI가 템플릿 필드명과 같은 이름의 허용 컬럼만 정규화한다.
-4. 같은 DB 트랜잭션에서 `app.company_id`를 먼저 설정한 뒤 범위가 일치하는
-   `worker_document` 한 행만 갱신한다.
-5. HTTP 응답에는 인식된 신원정보를 포함하지 않고 처리 상태만 반환한다.
+### Server
 
-Document OCR가 아닌 CLOVA Template OCR V2를 사용한다. 한 요청에는 JPEG, PNG
-또는 한 페이지 PDF 하나만 허용하며 파일 크기 상한은 20 MiB이다. CLOVA가 여러
-`images` 결과를 반환하면 첫 결과만 구조화하고 상태를 `REVIEW_REQUIRED`로 저장한다.
+1. 문서 소유권과 사업장 접근 권한을 확인한다.
+2. Server가 발급한 요청 ID와 파일을 AI에 전달한다.
+3. AI 응답의 필드와 신뢰도를 검증한다.
+4. 민감정보를 암호화해 저장한다.
+5. HR 검토가 끝난 값을 Worker와 Document에 반영한다.
 
-## 내부 HTTP API
+### AI
 
-```text
+1. 파일 크기·MIME·파일명을 검증한다.
+2. 배포된 Template allowlist에서 호출 대상을 선택한다.
+3. CLOVA Template OCR를 한 번 호출한다.
+4. 허용된 필드와 필드별 신뢰도만 정규화한다.
+5. 저장 없이 구조화 결과를 반환한다.
+
+## 요청 계약
+
+```http
 POST /internal/v1/ocr/worker-documents/{worker_document_id}
-Authorization: Bearer <FOWOCO_INTERNAL_API_TOKEN>
+Authorization: Bearer <internal-token>
+X-Request-Id: <request-id>
 Content-Type: multipart/form-data
 ```
 
-multipart 필드:
-
-| 이름 | 형식 | 규칙 |
-| --- | --- | --- |
-| `file` | binary | 원본 JPEG, PNG 또는 PDF |
-| `request_id` | UUID | 추적 및 동일 재시도 식별자 |
-| `worker_id` | UUID | DB 행 범위 |
-| `company_id` | UUID | 테넌트 및 RLS 범위 |
+| Multipart 필드 | 형식 | 설명 |
+|---|---|---|
+| `file` | binary | JPEG·PNG·한 페이지 PDF, 최대 20 MiB |
+| `request_id` | UUID | Server가 발급한 실행 추적 ID |
 | `document_type` | enum | `PASSPORT_COPY` 또는 `ARC` |
-| `country_code` | string | 여권은 `KOR`, `PHL`, `JPN`, `CHN`, `VNM` 중 하나, ARC는 생략 가능 |
+| `country_code` | string | 여권 Template 선택용 alpha-3 코드, ARC는 생략 가능 |
 
-성공 또는 검토 필요 응답은 HTTP 200이며 구조는 다음과 같다.
+`X-Request-Id`와 multipart `request_id`는 모두 필수이며 같은 UUID여야 한다. AI가 DB
+범위를 확인하지 않으므로 근로자·사업장 식별자는 요청하지 않는다.
+
+## Template allowlist
+
+| 문서 | 국가/면 | Template ID |
+|---|---|---:|
+| 여권 | `KOR` | 43019 |
+| 여권 | `PHL` | 43021 |
+| 여권 | `JPN` | 43022 |
+| 여권 | `CHN` | 43023 |
+| 여권 | `VNM` | 43038 |
+| 외국인등록증 | 앞면 | 43024 |
+| 외국인등록증 | 뒷면 | 43025 |
+
+Server의 일반 국적 코드가 ISO 3166-1 alpha-2라면 AI 호출 전에 alpha-3로 변환한다.
+현재 대응은 `KR→KOR`, `PH→PHL`, `JP→JPN`, `CN→CHN`, `VN→VNM`이다. 배포된 여권
+Template이 없는 국가는 Server가 AI 호출 전에 지원하지 않는 OCR 국가로 처리한다.
+ARC 요청은 `country_code`를 보내지 않는다. AI는 ARC에 값이 오더라도 Template 선택에
+사용하지 않는다.
+
+## 응답 계약
 
 ```json
 {
@@ -46,135 +69,97 @@ multipart 필드:
   "ocr_status": "SUCCEEDED",
   "matched_template_id": 43019,
   "document_side": null,
+  "fields": {
+    "passport_number": "M12345678",
+    "surname": "NGUYEN",
+    "given_names": "VAN AN",
+    "date_of_birth": "1995-03-01",
+    "passport_expiry_date": "2028-03-01"
+  },
+  "field_confidences": {
+    "passport_number": 0.98,
+    "surname": 0.94,
+    "given_names": 0.91,
+    "date_of_birth": 0.99,
+    "passport_expiry_date": 0.97
+  },
   "review_reasons": []
 }
 ```
 
-응답과 애플리케이션 로그에는 여권번호, 외국인등록번호, 이름, 주소, 원본 파일 또는
-CLOVA 원문 응답을 기록하지 않는다.
+- `ocr_status`는 정상 결과면 `SUCCEEDED`, 누락·형식·신뢰도 검토가 필요하면
+  `REVIEW_REQUIRED`이다.
+- `fields`에는 기존 정규화 allowlist를 통과한 값만 포함한다.
+- 날짜는 `YYYY-MM-DD` 문자열로 반환한다.
+- `field_confidences`에는 정규화 대상 필드별 `0.0..1.0` 신뢰도를 포함한다.
+- ARC의 `document_side`는 `FRONT` 또는 `BACK`이며, 여권은 `null`이다.
 
-## 배포 템플릿
+## 허용 필드
 
-| 문서 | 국가/면 | 템플릿 ID | 템플릿명 |
-| --- | --- | ---: | --- |
-| 여권 | KOR | 43019 | `KOR_PASSPORT` |
-| 여권 | PHL | 43021 | `PHL_PASSPORT` |
-| 여권 | JPN | 43022 | `JPN_PASSPORT` |
-| 여권 | CHN | 43023 | `CHN_PASSPORT` |
-| 여권 | VNM | 43038 | `VNM_PASSPORT` |
-| 외국인등록증 | 앞면 | 43024 | `KOR_ARC_FRONT` |
-| 외국인등록증 | 뒷면 | 43025 | `KOR_ARC_BACK` |
+| 필드 | 비고 |
+|---|---|
+| `passport_number` | 공백 제거 |
+| `surname` | 내부 공백 정규화 |
+| `given_names` | 내부 공백 정규화 |
+| `date_of_birth` | 날짜 정규화 |
+| `sex` | 문자열 정규화 |
+| `passport_issue_date` | 날짜 정규화 |
+| `passport_expiry_date` | 날짜 정규화 |
+| `alien_registration_number` | 공백 제거 |
+| `visa_type` | 문자열 정규화 |
+| `stay_expiration_date` | 날짜 정규화 |
+| `residence_address_1` | 문자열 정규화 |
 
-ARC 요청에는 43024와 43025를 함께 전달하고 `matchedTemplate.id`로 `FRONT` 또는
-`BACK`을 결정한다.
+allowlist에 없는 CLOVA 필드는 값과 신뢰도 모두 버린다.
 
-## 환경 설정
+## 오류 계약
 
-```text
-FOWOCO_CLOVA_OCR_ENABLED=true
-FOWOCO_CLOVA_OCR_INVOKE_URL=<API Gateway /infer URL>
-FOWOCO_CLOVA_OCR_SECRET=<X-OCR-SECRET value>
+| 조건 | HTTP 상태 |
+|---|---:|
+| 필수 header/form 누락, UUID·enum 형식 오류 | 422 |
+| header와 multipart 요청 ID 불일치 | 400 |
+| 빈 파일, 미지원 MIME, 위험한 파일명, 여권 국가 누락·미지원 | 400 |
+| 파일이 20 MiB를 초과함 | 413 |
+| CLOVA 전송·상태·응답 크기·JSON·인식 오류 | 502 |
+| CLOVA timeout | 504 |
+| OCR 비활성 또는 런타임 준비 실패 | 503 |
+
+AI는 자동 재시도하지 않는다. 재시도와 결과 저장의 멱등성은 Server가 같은
+`request_id`를 기준으로 관리한다.
+
+## 환경변수
+
+```dotenv
+FOWOCO_CLOVA_OCR_ENABLED=false
+FOWOCO_CLOVA_OCR_INVOKE_URL=https://example.invalid/clova-template-ocr
+FOWOCO_CLOVA_OCR_SECRET=replace-with-secret
 FOWOCO_CLOVA_OCR_TIMEOUT_SECONDS=30
 FOWOCO_CLOVA_OCR_CONFIDENCE_THRESHOLD=0.80
-FOWOCO_DATABASE_URL=postgresql://<restricted-role>@<host>/<database>
-FOWOCO_INTERNAL_API_TOKEN=<internal bearer token>
+FOWOCO_INTERNAL_API_TOKEN=replace-with-internal-token
 ```
 
-OCR은 기본적으로 비활성화된다. 활성화했는데 invoke URL, secret, DB URL 또는 내부
-Bearer 토큰이 없으면 애플리케이션이 기동 전에 실패한다. secret과 DB 자격 증명은
-환경변수로만 주입하며 커밋하거나 로그로 출력하지 않는다.
+OCR가 비활성화되면 CLOVA HTTP client를 만들지 않는다. 활성화할 때는 CLOVA URL,
+secret, Internal API token이 필수다. Server DB 계정은 필요하지 않다.
 
-## 외부 DB 선행 조건
+## 개인정보와 로그
 
-AI는 테이블을 생성하거나 변경하지 않는다. 외부에서 아래 컬럼을 먼저 준비해야 한다.
+- 원본 파일과 CLOVA 원문 응답은 HTTP 응답에 포함하지 않는다.
+- 원본 파일 bytes, CLOVA 원문, 정규화된 민감 필드 값을 일반 로그에 기록하지 않는다.
+- Provider 오류 응답 본문이나 secret을 예외 메시지에 포함하지 않는다.
+- 오류 응답은 고정된 안전한 설명만 사용한다.
 
-| 그룹 | 컬럼과 PostgreSQL 형식 |
-| --- | --- |
-| 범위 | `worker_document_id UUID`, `worker_id UUID`, `company_id UUID`, `document_type VARCHAR` |
-| OCR 메타데이터 | `ocr_status VARCHAR(20)`, `ocr_request_id UUID`, `ocr_document_side VARCHAR(10)`, `ocr_error_code VARCHAR(60)`, `ocr_processed_at TIMESTAMPTZ` |
-| 여권 | `passport_number VARCHAR(32)`, `surname VARCHAR(120)`, `given_names VARCHAR(160)`, `date_of_birth DATE`, `sex VARCHAR(20)`, `passport_issue_date DATE`, `passport_expiry_date DATE` |
-| ARC 앞면 | `alien_registration_number VARCHAR(32)`, `visa_type VARCHAR(40)` |
-| ARC 뒷면 | `stay_expiration_date DATE`, `residence_address_1 VARCHAR(300)` |
-
-모든 구조화 필드는 nullable이며 `ocr_status`는 기본값 `NOT_REQUESTED`여야 한다.
-AI 시작 시 컬럼 집합을 검사하고 누락 시 컬럼명만 포함한 오류로 기동을 중단한다.
-일반 이름과 국적은 기존 `worker.display_name`, `worker.nationality_code`를 사용한다.
-
-예시 최소 권한 역할은 다음과 같다. 실제 역할 생성과 권한 부여는 DB 소유자가 수행한다.
-
-```sql
-CREATE ROLE fowoco_ai_ocr LOGIN;
-GRANT USAGE ON SCHEMA public TO fowoco_ai_ocr;
-GRANT SELECT (worker_document_id, worker_id, company_id, document_type)
-    ON public.worker_document TO fowoco_ai_ocr;
-GRANT UPDATE (
-    ocr_status, ocr_request_id, ocr_document_side,
-    ocr_error_code, ocr_processed_at,
-    passport_number, surname, given_names, date_of_birth, sex,
-    passport_issue_date, passport_expiry_date,
-    alien_registration_number, visa_type,
-    stay_expiration_date, residence_address_1
-) ON public.worker_document TO fowoco_ai_ocr;
-```
-
-모든 `worker_document` 조회와 갱신은 같은 트랜잭션에서 먼저 다음 구문을 실행한다.
-
-```sql
-SELECT pg_catalog.set_config('app.company_id', '<company UUID>', true);
-```
-
-행 조건은 항상 `worker_document_id`, `worker_id`, `company_id`를 모두 포함한다. AI는
-`submission_status`, 기존 `expiry_date`, `updated_at`, `version`을 갱신하지 않는다.
-
-## 필드 정규화와 상태
-
-- 템플릿 `fields[].name`이 승인된 DB 컬럼명과 정확히 같은 경우만 저장한다.
-- 문자열 양끝과 반복 공백을 정리하고, 식별번호에서는 공백만 제거한다.
-- 날짜는 `YYYY-MM-DD`, `YYYY.MM.DD`, `YYYY/MM/DD`와 한국 여권의
-  `DD N월/MON YYYY` 형식을 `DATE`로 변환한다. 병기된 두 월은 일치해야 한다.
-- 여권 필수 필드는 `passport_number`, `surname`, `given_names`, `date_of_birth`,
-  `passport_expiry_date`이다.
-- ARC 앞면 필수 필드는 `alien_registration_number`이다.
-- ARC 뒷면은 `stay_expiration_date` 또는 `residence_address_1` 중 하나 이상이
-  인식돼야 한다.
-- 신뢰도는 검토 상태를 결정할 때만 사용하고 DB에는 저장하지 않는다.
-- 필수값 누락, 기준 미만 신뢰도, 잘못된 날짜, 불일치 템플릿은
-  `REVIEW_REQUIRED`로 저장한다.
-
-| 상황 | HTTP | DB `ocr_status` |
-| --- | ---: | --- |
-| 정상 인식 | 200 | `SUCCEEDED` |
-| 검토 필요 | 200 | `REVIEW_REQUIRED` |
-| 잘못된 요청 | 400/422 | 변경 없음 |
-| 범위 행 없음 | 404 | 변경 없음 |
-| 더 최신 OCR 요청이 처리 중 | 409 | 최신 요청 상태 유지 |
-| CLOVA 오류 | 502 | `FAILED`, `CLOVA_ERROR` |
-| CLOVA 타임아웃 | 504 | `FAILED`, `CLOVA_TIMEOUT` |
-| DB 오류 | 500 | 트랜잭션 결과에 따름 |
-| OCR 비활성/미기동 | 503 | 변경 없음 |
-
-AI는 자동 재시도를 수행하지 않는다. 호출자는 같은 `request_id`로 재호출할 수 있고
-같은 범위 행을 안전하게 갱신한다. 최종 결과와 실패 상태는 현재 행의
-`ocr_request_id`가 처리 중인 요청과 일치할 때만 기록하므로, 느린 이전 요청은 더 최신
-요청을 덮어쓰지 않는다. 인식되지 않은 구조화 컬럼과 기존 필드 신뢰도는 보존한다.
-소비자는 `SUCCEEDED` 또는 사람이 확인한 `REVIEW_REQUIRED` 상태의 값만 신뢰해야 한다.
-
-## 직접 AI 스모크 테스트
-
-실제 외부 스키마, 제한 DB 계정, CLOVA 설정과 비운영 샘플이 준비된 경우에만 실행한다.
+## Smoke 실행
 
 ```powershell
-$env:FOWOCO_INTERNAL_API_TOKEN="..."
-$env:OCR_SAMPLE_FILE="C:\samples\synthetic-passport.png"
-$env:OCR_WORKER_DOCUMENT_ID="..."
-$env:OCR_WORKER_ID="..."
-$env:OCR_COMPANY_ID="..."
+$env:FOWOCO_INTERNAL_API_TOKEN="replace-with-internal-token"
+$env:FOWOCO_AI_BASE_URL="http://localhost:8000"
+$env:OCR_SAMPLE_FILE="C:\samples\passport.png"
+$env:OCR_WORKER_DOCUMENT_ID="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 $env:OCR_DOCUMENT_TYPE="PASSPORT_COPY"
 $env:OCR_COUNTRY_CODE="KOR"
-$env:FOWOCO_AI_BASE_URL="http://localhost:8000" # 선택
-.\scripts\smoke_clova_ocr.ps1
+./scripts/smoke_clova_ocr.ps1
 ```
 
-`OCR_COUNTRY_CODE`는 `OCR_DOCUMENT_TYPE=ARC`일 때만 생략할 수 있다. 스크립트는 HTTP
-상태, `ocr_status`, 템플릿 ID, 면, 검토 사유만 출력하며 파일 내용이나 인식 필드는
+smoke script는 요청 ID header와 multipart 값을 동일하게 전송한다. 성공 시 상태,
+Template ID, 문서 면, 검토 사유, 반환 필드 개수만 출력하며 민감 필드 값과 신뢰도는
 출력하지 않는다.

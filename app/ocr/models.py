@@ -27,13 +27,6 @@ class DocumentSide(StrEnum):
 
 
 @dataclass(frozen=True)
-class OcrScope:
-    worker_document_id: UUID
-    worker_id: UUID
-    company_id: UUID
-
-
-@dataclass(frozen=True)
 class OcrFile:
     filename: str
     content_type: str
@@ -43,7 +36,7 @@ class OcrFile:
 @dataclass(frozen=True)
 class OcrCommand:
     request_id: UUID
-    scope: OcrScope
+    worker_document_id: UUID
     document_type: DocumentType
     country_code: str | None
     file: OcrFile
@@ -73,6 +66,8 @@ class OcrProcessResult:
     status: OcrStatus
     matched_template_id: int | None
     document_side: DocumentSide | None
+    fields: Mapping[str, FieldValue]
+    field_confidences: Mapping[str, float]
     review_reasons: tuple[str, ...]
 
 
@@ -88,28 +83,12 @@ class ClovaProviderError(RuntimeError):
     """CLOVA returned an unusable transport response."""
 
 
-class DatabaseSchemaMismatch(RuntimeError):
-    """The externally managed worker_document table lacks OCR columns."""
-
-    def __init__(self, missing_columns: tuple[str, ...]) -> None:
-        self.missing_columns = missing_columns
-        super().__init__(f"missing OCR database columns: {', '.join(missing_columns)}")
-
-
-class OcrPersistenceError(RuntimeError):
-    """A safe wrapper for database failures."""
-
-
-class OcrRequestSuperseded(RuntimeError):
-    """A newer OCR request owns the worker document update."""
-
-
 class InvalidOcrRequest(ValueError):
     """The OCR command is invalid before any provider call."""
 
 
-class WorkerDocumentNotFound(LookupError):
-    """No worker document exists in the supplied tenant scope."""
+class OcrFileTooLarge(InvalidOcrRequest):
+    """The uploaded OCR file exceeds the configured contract limit."""
 
 
 class OcrUpstreamTimeout(RuntimeError):

@@ -28,7 +28,7 @@ OPENAPI_TAGS_METADATA = [
     },
     {
         "name": OCR_TAG,
-        "description": "CLOVA Template OCR를 실행하고 worker_document에 결과를 저장합니다.",
+        "description": "CLOVA Template OCR를 실행하고 정규화된 결과를 Server에 반환합니다.",
     },
     {
         "name": DOCUMENT_CAPABILITIES_TAG,

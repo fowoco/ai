@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import UUID
 
 import pytest
@@ -9,19 +10,15 @@ from app.main import create_app
 from app.ocr.models import (
     DocumentSide,
     InvalidOcrRequest,
-    OcrPersistenceError,
+    OcrFileTooLarge,
     OcrProcessResult,
-    OcrRequestSuperseded,
     OcrStatus,
     OcrUpstreamFailure,
     OcrUpstreamTimeout,
-    WorkerDocumentNotFound,
 )
 
 REQUEST_ID = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 DOCUMENT_ID = UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
-WORKER_ID = UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
-COMPANY_ID = UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd")
 
 
 class FakeOcrService:
@@ -37,6 +34,11 @@ class FakeOcrService:
             status=OcrStatus.SUCCEEDED,
             matched_template_id=43019,
             document_side=None,
+            fields={
+                "passport_number": "M00000000",
+                "date_of_birth": date(2000, 1, 2),
+            },
+            field_confidences={"passport_number": 0.99, "date_of_birth": 0.98},
             review_reasons=(),
         )
         self.error = error
@@ -66,8 +68,6 @@ def authenticated_client(monkeypatch: pytest.MonkeyPatch):
 def request_data(**overrides: str) -> dict[str, str]:
     data = {
         "request_id": str(REQUEST_ID),
-        "worker_id": str(WORKER_ID),
-        "company_id": str(COMPANY_ID),
         "document_type": "PASSPORT_COPY",
         "country_code": "KOR",
     }
@@ -86,14 +86,19 @@ def post_ocr(
         headers=(
             headers
             if headers is not None
-            else {"Authorization": "Bearer internal-test-token"}
+            else {
+                "Authorization": "Bearer internal-test-token",
+                "X-Request-Id": str(REQUEST_ID),
+            }
         ),
         data=data or request_data(),
         files={"file": ("sample.png", b"synthetic-image-bytes", "image/png")},
     )
 
 
-def test_endpoint_returns_status_only_and_builds_command(authenticated_client) -> None:
+def test_endpoint_returns_normalized_result_and_builds_stateless_command(
+    authenticated_client,
+) -> None:
     client, service = authenticated_client
 
     response = post_ocr(client)
@@ -105,22 +110,82 @@ def test_endpoint_returns_status_only_and_builds_command(authenticated_client) -
         "ocr_status": "SUCCEEDED",
         "matched_template_id": 43019,
         "document_side": None,
+        "fields": {
+            "passport_number": "M00000000",
+            "date_of_birth": "2000-01-02",
+        },
+        "field_confidences": {
+            "passport_number": 0.99,
+            "date_of_birth": 0.98,
+        },
         "review_reasons": [],
     }
     command = service.commands[0]
-    assert command.scope.worker_id == WORKER_ID
-    assert command.scope.company_id == COMPANY_ID
+    assert command.worker_document_id == DOCUMENT_ID
     assert command.file.content == b"synthetic-image-bytes"
-    assert "fields" not in response.json()
-    assert "passport_number" not in response.json()
+    assert not hasattr(command, "worker_id")
+    assert not hasattr(command, "company_id")
+
+
+def test_openapi_exposes_stateless_form_and_response_contract(
+    authenticated_client,
+) -> None:
+    client, _ = authenticated_client
+
+    schema = client.get("/openapi.json").json()
+    operation = schema["paths"][
+        "/internal/v1/ocr/worker-documents/{worker_document_id}"
+    ]["post"]
+    body_ref = operation["requestBody"]["content"]["multipart/form-data"]["schema"]["$ref"]
+    body_name = body_ref.rsplit("/", 1)[-1]
+    body_properties = schema["components"]["schemas"][body_name]["properties"]
+    response_properties = schema["components"]["schemas"]["OcrResponse"]["properties"]
+
+    assert set(body_properties) == {
+        "request_id",
+        "document_type",
+        "file",
+        "country_code",
+    }
+    assert "fields" in response_properties
+    assert "field_confidences" in response_properties
+    assert any(parameter["name"] == "X-Request-Id" for parameter in operation["parameters"])
 
 
 def test_endpoint_requires_configured_internal_bearer(authenticated_client) -> None:
     client, service = authenticated_client
 
-    response = post_ocr(client, headers={})
+    response = post_ocr(client, headers={"X-Request-Id": str(REQUEST_ID)})
 
     assert response.status_code == 401
+    assert service.commands == []
+
+
+def test_endpoint_requires_x_request_id(authenticated_client) -> None:
+    client, service = authenticated_client
+
+    response = post_ocr(
+        client,
+        headers={"Authorization": "Bearer internal-test-token"},
+    )
+
+    assert response.status_code == 422
+    assert service.commands == []
+
+
+def test_endpoint_rejects_mismatched_request_ids(authenticated_client) -> None:
+    client, service = authenticated_client
+
+    response = post_ocr(
+        client,
+        headers={
+            "Authorization": "Bearer internal-test-token",
+            "X-Request-Id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid OCR request"}
     assert service.commands == []
 
 
@@ -151,6 +216,21 @@ def test_invalid_uuid_or_enum_returns_422(authenticated_client, data) -> None:
     assert service.commands == []
 
 
+def test_invalid_x_request_id_returns_422(authenticated_client) -> None:
+    client, service = authenticated_client
+
+    response = post_ocr(
+        client,
+        headers={
+            "Authorization": "Bearer internal-test-token",
+            "X-Request-Id": "not-a-uuid",
+        },
+    )
+
+    assert response.status_code == 422
+    assert service.commands == []
+
+
 def test_missing_passport_country_returns_400(authenticated_client) -> None:
     client, _ = authenticated_client
     data = request_data()
@@ -162,19 +242,18 @@ def test_missing_passport_country_returns_400(authenticated_client) -> None:
 
 
 @pytest.mark.parametrize(
-    ("error", "status_code"),
+    ("error", "status_code", "detail"),
     [
-        (WorkerDocumentNotFound("not found"), 404),
-        (OcrUpstreamFailure("provider failed"), 502),
-        (OcrUpstreamTimeout("provider timed out"), 504),
-        (OcrPersistenceError("database operation failed"), 500),
-        (OcrRequestSuperseded("OCR request was superseded"), 409),
+        (OcrFileTooLarge("too large"), 413, "OCR file is too large"),
+        (OcrUpstreamFailure("provider failed"), 502, "OCR provider failed"),
+        (OcrUpstreamTimeout("provider timed out"), 504, "OCR provider timed out"),
     ],
 )
 def test_application_errors_are_translated_to_safe_http_statuses(
     authenticated_client,
     error: Exception,
     status_code: int,
+    detail: str,
 ) -> None:
     client, service = authenticated_client
     service.error = error
@@ -182,10 +261,10 @@ def test_application_errors_are_translated_to_safe_http_statuses(
     response = post_ocr(client)
 
     assert response.status_code == status_code
-    assert set(response.json()) == {"detail"}
+    assert response.json() == {"detail": detail}
 
 
-def test_review_required_is_returned_with_http_200(authenticated_client) -> None:
+def test_review_required_is_returned_with_fields(authenticated_client) -> None:
     client, service = authenticated_client
     service.result = OcrProcessResult(
         request_id=REQUEST_ID,
@@ -193,6 +272,8 @@ def test_review_required_is_returned_with_http_200(authenticated_client) -> None
         status=OcrStatus.REVIEW_REQUIRED,
         matched_template_id=43025,
         document_side=DocumentSide.BACK,
+        fields={"stay_expiration_date": date(2028, 3, 1)},
+        field_confidences={"stay_expiration_date": 0.51},
         review_reasons=("low_confidence:stay_expiration_date",),
     )
 
@@ -201,6 +282,8 @@ def test_review_required_is_returned_with_http_200(authenticated_client) -> None
     assert response.status_code == 200
     assert response.json()["ocr_status"] == "REVIEW_REQUIRED"
     assert response.json()["document_side"] == "BACK"
+    assert response.json()["fields"] == {"stay_expiration_date": "2028-03-01"}
+    assert response.json()["field_confidences"] == {"stay_expiration_date": 0.51}
 
 
 @pytest.mark.parametrize(
@@ -208,22 +291,39 @@ def test_review_required_is_returned_with_http_200(authenticated_client) -> None
     [
         ("FOWOCO_CLOVA_OCR_INVOKE_URL", "clova_ocr_invoke_url"),
         ("FOWOCO_CLOVA_OCR_SECRET", "clova_ocr_secret"),
-        ("FOWOCO_DATABASE_URL", "database_url"),
         ("FOWOCO_INTERNAL_API_TOKEN", "internal_api_token"),
     ],
 )
 def test_enabled_ocr_rejects_missing_required_startup_setting(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
     missing_name: str,
     message: str,
 ) -> None:
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("FOWOCO_CLOVA_OCR_ENABLED", "true")
     monkeypatch.setenv("FOWOCO_CLOVA_OCR_INVOKE_URL", "https://example.invalid/infer")
     monkeypatch.setenv("FOWOCO_CLOVA_OCR_SECRET", "local-test-secret")
-    monkeypatch.setenv("FOWOCO_DATABASE_URL", "postgresql://example.invalid/test")
     monkeypatch.setenv("FOWOCO_INTERNAL_API_TOKEN", "internal-test-token")
     monkeypatch.delenv(missing_name, raising=False)
     get_settings.cache_clear()
 
     with pytest.raises(ValueError, match=message):
         create_app()
+
+
+def test_enabled_ocr_accepts_missing_database_url(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FOWOCO_CLOVA_OCR_ENABLED", "true")
+    monkeypatch.setenv("FOWOCO_CLOVA_OCR_INVOKE_URL", "https://example.invalid/infer")
+    monkeypatch.setenv("FOWOCO_CLOVA_OCR_SECRET", "local-test-secret")
+    monkeypatch.setenv("FOWOCO_INTERNAL_API_TOKEN", "internal-test-token")
+    monkeypatch.delenv("FOWOCO_DATABASE_URL", raising=False)
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.clova_ocr_enabled is True
