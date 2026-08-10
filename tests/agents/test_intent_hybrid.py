@@ -53,6 +53,9 @@ def test_hybrid_agent_maps_pipeline_prediction() -> None:
     assert result.intent == "EXPIRY_RENEWAL"
     assert result.confidence == 0.93
     assert result.workflow_id == "WF-STY-001"
+    assert result.model_provider == "huggingface"
+    assert result.model_name == get_settings().intent_bert_model_dir
+    assert result.model_version == "BERT"
 
 
 # INTENT_MODEL_ENABLED=true → HybridHfIntentAgent
@@ -75,6 +78,9 @@ def test_hybrid_load_failure_falls_back_to_fixed(monkeypatch) -> None:
     agent = HybridHfIntentAgent()
     result = agent.classify("체류연장 준비해줘")
     assert result.intent == "EXPIRY_RENEWAL"
+    assert result.model_provider == "internal"
+    assert result.model_name == "fixed-expiry-renewal"
+    assert result.model_version == "fallback"
     assert agent._load_error is not None
 
 

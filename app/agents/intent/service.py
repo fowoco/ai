@@ -85,6 +85,9 @@ class IntentResult:
     intent: str
     confidence: float
     workflow_id: str
+    model_provider: str
+    model_name: str
+    model_version: str
     extracted_slots: dict[str, str] = field(default_factory=dict)
 
 
@@ -116,6 +119,9 @@ class FixedExpiryRenewalIntentAgent:
             intent=intent,
             confidence=1.0,
             workflow_id=resolve_workflow_id(intent, workflow_constraints),
+            model_provider="internal",
+            model_name="fixed-expiry-renewal",
+            model_version="rules",
             extracted_slots={},
         )
 
@@ -187,11 +193,21 @@ class HybridHfIntentAgent:
     ) -> IntentResult:
         pipeline = self._ensure_pipeline()
         if pipeline is None:
-            return FixedExpiryRenewalIntentAgent().classify(
+            result = FixedExpiryRenewalIntentAgent().classify(
                 instruction, workflow_constraints=workflow_constraints
             )
+            result.model_version = "fallback"
+            return result
         prediction = pipeline.predict(instruction)  # type: ignore[attr-defined]
         intent, confidence = _primary_intent(prediction.intents, prediction.scores)
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        model_name = (
+            settings.intent_ax_base_model
+            if prediction.selected_model == "AX"
+            else settings.intent_bert_model_dir
+        )
         slots: dict[str, str] = {}
         for name, evidence in (prediction.evidence or {}).items():
             if evidence:
@@ -201,6 +217,9 @@ class HybridHfIntentAgent:
             confidence=max(0.0, min(1.0, confidence)),
             workflow_id=resolve_workflow_id(intent, workflow_constraints),
             extracted_slots=slots,
+            model_provider="huggingface",
+            model_name=model_name,
+            model_version=prediction.selected_model,
         )
 
 

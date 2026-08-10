@@ -96,9 +96,9 @@ class AnalysisCandidate(BaseModel):
 class AnalysisVersions(BaseModel):
 
     agent_version: str = Field(..., alias="agentVersion")
-    model_provider: str = Field("stub", alias="modelProvider")
-    model_name: str = Field("stub", alias="modelName")
-    model_version: str = Field("stub", alias="modelVersion")
+    model_provider: str = Field(..., alias="modelProvider")
+    model_name: str = Field(..., alias="modelName")
+    model_version: str = Field(..., alias="modelVersion")
     prompt_version: str = Field("prompt-1", alias="promptVersion")
     context_pack_version: str = Field(DEFAULT_KNOWLEDGE_VERSION, alias="contextPackVersion")
     workflow_catalog_version: str = Field(

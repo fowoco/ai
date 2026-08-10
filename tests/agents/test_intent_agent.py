@@ -11,6 +11,9 @@ def test_fixed_expiry_renewal_ignores_unrelated_text() -> None:
     assert result.confidence == 1.0
     assert result.workflow_id == "WF-STY-001"
     assert result.extracted_slots == {}
+    assert result.model_provider == "internal"
+    assert result.model_name == "fixed-expiry-renewal"
+    assert result.model_version == "rules"
 
 
 def test_fixed_does_not_extract_slots_from_instruction() -> None:
