@@ -132,6 +132,7 @@ def normalize_clova_response(
             parsed = _parse_date(text.strip())
             if parsed is None:
                 fields.pop(name, None)
+                confidences.pop(name, None)
                 reason = f"invalid_date:{name}"
                 if reason not in review_reasons:
                     review_reasons.append(reason)

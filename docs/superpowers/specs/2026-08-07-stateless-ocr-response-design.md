@@ -70,7 +70,7 @@ ARC는 43024와 43025를 사용하며 전달된 `country_code`를 무시한다.
 {
   "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   "worker_document_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-  "ocr_status": "REVIEW_REQUIRED",
+  "ocr_status": "SUCCEEDED",
   "matched_template_id": 43019,
   "document_side": null,
   "fields": {

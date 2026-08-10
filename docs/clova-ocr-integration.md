@@ -66,7 +66,7 @@ ARC 요청은 `country_code`를 보내지 않는다. AI는 ARC에 값이 오더�
 {
   "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   "worker_document_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-  "ocr_status": "REVIEW_REQUIRED",
+  "ocr_status": "SUCCEEDED",
   "matched_template_id": 43019,
   "document_side": null,
   "fields": {
