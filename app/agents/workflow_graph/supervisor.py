@@ -12,7 +12,7 @@ from app.core.config import get_settings
 
 from .document_validation import DocumentValidation, validate_identity_documents
 from .phases import WorkflowPhase, WorkflowStep
-from .state import IDENTITY_SLOTS
+from .state import HR_EXCLUDED_SLOTS, IDENTITY_SLOTS
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ def decide_route_rules(state: dict[str, Any]) -> SupervisorDecision:
     validation = validate_identity_documents(state)
     missing = list(state.get("missing_slots") or [])
     identity_missing = [m for m in missing if m in IDENTITY_SLOTS]
-    other_missing = [m for m in missing if m not in IDENTITY_SLOTS]
+    other_missing = [m for m in missing if m not in IDENTITY_SLOTS | HR_EXCLUDED_SLOTS]
     has_docs = bool(state.get("documents"))
     has_ocr = bool(state.get("ocr_result"))
 
@@ -103,7 +103,7 @@ def decide_route_rules(state: dict[str, Any]) -> SupervisorDecision:
             case_signals=tuple(signals),
         )
 
-    if other_missing or missing:
+    if other_missing:
         return SupervisorDecision(
             route="ask_hr",
             phase=WorkflowPhase.VALIDATION_COMMUNICATION,

@@ -30,6 +30,41 @@ def test_passport_only_requests_alien() -> None:
     assert "REQUEST_ALIEN_REGISTRATION" in decision.case_signals
 
 
+def test_arc_missing_status_routes_ask_worker() -> None:
+    state = empty_renewal_state(
+        task_id="t", request_id="r", instruction="연장", worker_id="w1"
+    )
+    state["intent"] = "EXPIRY_RENEWAL"
+    state["slots"] = {
+        "passport_status": "VERIFIED",
+        "arc_status": "MISSING",
+        "arc_expiry_date": "",
+    }
+    state["missing_slots"] = ["arc_expiry_date"]
+
+    decision = decide_route_rules(state)
+
+    assert decision.route == "ask_worker"
+    assert "REQUEST_ALIEN_REGISTRATION" in decision.case_signals
+    assert "REQUEST_PASSPORT" not in decision.case_signals
+
+
+def test_document_statuses_present_do_not_route_ask_worker() -> None:
+    state = empty_renewal_state(
+        task_id="t", request_id="r", instruction="연장", worker_id="w1"
+    )
+    state["intent"] = "EXPIRY_RENEWAL"
+    state["slots"] = {
+        "passport_status": "SUBMITTED",
+        "arc_status": "VERIFIED",
+    }
+    state["missing_slots"] = ["arc_expiry_date"]
+
+    decision = decide_route_rules(state)
+
+    assert decision.route == "generate"
+
+
 def test_documents_route_ocr() -> None:
     state = empty_renewal_state(
         task_id="t", request_id="r", instruction="연장", worker_id="w1"

@@ -44,6 +44,40 @@ def test_plan_returns_context_required_for_expiry() -> None:
     assert res.context_requirement is not None
     assert res.context_requirement.detected_intent == "EXPIRY_RENEWAL"
     assert "worker_id" in res.context_requirement.required_field_keys
+    assert "passport_status" in res.context_requirement.required_field_keys
+    assert "arc_status" in res.context_requirement.required_field_keys
+
+
+def test_analyze_does_not_ask_hr_for_document_managed_fields() -> None:
+    pipe = AnalysisPipeline(
+        intent_agent=_FakeIntent(intent="EXPIRY_RENEWAL", workflow_id="WF-STY-001")
+    )
+    worker = WorkerContext(
+        workerRef="30000000-0000-0000-0000-000000000001",
+        requestedFields={
+            "worker_id": "30000000-0000-0000-0000-000000000001",
+            "stay_expiry_date": "2026-12-31",
+        },
+    )
+    req = AnalysisRequest(
+        requestId=str(uuid4()),
+        phase="ANALYZE",
+        analysisInput=AnalysisInput(
+            instruction="체류 연장",
+            requestedFieldKeys=[
+                "worker_id",
+                "passport_status",
+                "arc_status",
+                "arc_expiry_date",
+            ],
+            workers=[worker],
+        ),
+    )
+
+    res = pipe.run(req)
+
+    assert res.outcome == "REVIEW_REQUIRED"
+    assert res.questions == []
 
 
 # OUT_OF_SCOPE PLAN은 worker_id만 요청

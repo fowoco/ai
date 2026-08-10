@@ -22,6 +22,7 @@ from app.api.schemas.analyses import (
 from .ambiguity import AmbiguityAgent
 from .intent import IntentClassifier, build_intent_agent
 from .workflow import WorkflowAgent
+from .workflow_graph.state import HR_EXCLUDED_SLOTS
 
 # instruction 끝의 `, INTENT_TAG` 제거
 _INTENT_TAG_SUFFIX = re.compile(r",\s*[A-Z][A-Z0-9_]+\s*$")
@@ -194,12 +195,16 @@ class AnalysisPipeline:
         # Server가 못 채운 PLAN 요청 키 → HR 질문 후보
         hr_keys: list[str] = []
         for key in ai.requested_field_keys:
-            if key not in worker.requested_fields and key not in slots:
+            if (
+                key not in HR_EXCLUDED_SLOTS
+                and key not in worker.requested_fields
+                and key not in slots
+            ):
                 hr_keys.append(key)
 
         amb = self._ambiguity.check(workflow_id, slots, instruction)
         for key in amb.missing_slots:
-            if key not in slots and key not in hr_keys:
+            if key not in HR_EXCLUDED_SLOTS and key not in slots and key not in hr_keys:
                 hr_keys.append(key)
 
         if hr_keys:

@@ -16,7 +16,12 @@ _BUILTIN_CATALOG: dict[str, dict[str, object]] = {
         "name": "체류기간 연장 준비",
         "intent": "EXPIRY_RENEWAL",
         "sensitivity": "high",
-        "required_slots": ["worker_id", "stay_expiry_date"],
+        "required_slots": [
+            "worker_id",
+            "stay_expiry_date",
+            "passport_status",
+            "arc_status",
+        ],
         "input_modes": ["AGENT_TASK", "INTERNAL_REQUEST"],
     },
     "WF-CON-001": {
