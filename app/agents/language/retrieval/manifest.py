@@ -6,6 +6,8 @@ EPS_DATASET_REVISION = (
 )
 BGE_M3_MODEL_REPO = "BAAI/bge-m3"
 BGE_M3_REVISION = "5617a9f61b028005a4858fdac845db406aefb181"
+BGE_RERANKER_MODEL_REPO = "BAAI/bge-reranker-v2-m3"
+BGE_RERANKER_REVISION = "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
 INDEX_CONTRACT_VERSION = "eps-language-index-v1"
 EPS_POINT_COUNT = 17_902
 
@@ -23,6 +25,8 @@ def build_expected_index_contract() -> ExpectedIndexContract:
 __all__ = [
     "BGE_M3_MODEL_REPO",
     "BGE_M3_REVISION",
+    "BGE_RERANKER_MODEL_REPO",
+    "BGE_RERANKER_REVISION",
     "EPS_DATASET_REVISION",
     "EPS_POINT_COUNT",
     "INDEX_CONTRACT_VERSION",

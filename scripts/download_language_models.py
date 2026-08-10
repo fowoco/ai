@@ -20,10 +20,9 @@ from pathlib import Path
 from app.agents.language.retrieval.manifest import (
     BGE_M3_MODEL_REPO,
     BGE_M3_REVISION,
+    BGE_RERANKER_MODEL_REPO,
+    BGE_RERANKER_REVISION,
 )
-
-# 정확한 모델 리비전 — 변경 금지 (T13 계약)
-BGE_RERANKER_REVISION = "953dc6f6f85ac1e88eb36f5f9ce67a74a6edbc22"
 
 MODEL_SPECS: list[dict[str, str]] = [
     {
@@ -33,7 +32,7 @@ MODEL_SPECS: list[dict[str, str]] = [
     },
     {
         "name": "bge-reranker-v2-m3",
-        "repo": "BAAI/bge-reranker-v2-m3",
+        "repo": BGE_RERANKER_MODEL_REPO,
         "revision": BGE_RERANKER_REVISION,
     },
 ]
