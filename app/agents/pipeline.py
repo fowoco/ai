@@ -20,7 +20,7 @@ from app.api.schemas.analyses import (
 )
 
 from .ambiguity import AmbiguityAgent
-from .intent import IntentClassifier, build_intent_agent
+from .intent import IntentClassifier, IntentResult, build_intent_agent
 from .workflow import WorkflowAgent
 
 # instruction 끝의 `, INTENT_TAG` 제거
@@ -102,9 +102,12 @@ def _seed_slots_from_worker(worker: WorkerContext) -> dict[str, str]:
 
 
 # 고정 버전 블록
-def _versions() -> AnalysisVersions:
+def _versions(intent_result: IntentResult) -> AnalysisVersions:
     return AnalysisVersions(
         agent_version=__version__,
+        model_provider=intent_result.model_provider,
+        model_name=intent_result.model_name,
+        model_version=intent_result.model_version,
         contract_version=DEFAULT_CONTRACT_VERSION,
         workflow_catalog_version=DEFAULT_KNOWLEDGE_VERSION,
         context_pack_version=DEFAULT_KNOWLEDGE_VERSION,
@@ -162,7 +165,7 @@ class AnalysisPipeline:
             questions=[],
             candidates=[],
             validation_errors=[],
-            versions=_versions(),
+            versions=_versions(intent_result),
             provider_attempt_count=1,
             latency_ms=0,
         )
@@ -182,7 +185,7 @@ class AnalysisPipeline:
                 questions=[_question_for("worker_id")],
                 candidates=[],
                 validation_errors=[],
-                versions=_versions(),
+                versions=_versions(intent_result),
                 provider_attempt_count=1,
                 latency_ms=0,
             )
@@ -210,7 +213,7 @@ class AnalysisPipeline:
                 questions=[_question_for(k) for k in hr_keys],
                 candidates=[],
                 validation_errors=[],
-                versions=_versions(),
+                versions=_versions(intent_result),
                 provider_attempt_count=1,
                 latency_ms=0,
             )
@@ -231,7 +234,7 @@ class AnalysisPipeline:
             questions=[],
             candidates=[candidate],
             validation_errors=[],
-            versions=_versions(),
+            versions=_versions(intent_result),
             provider_attempt_count=1,
             latency_ms=0,
         )

@@ -62,6 +62,9 @@ async def test_plan_returns_context_required() -> None:
     assert "worker_id" in ctx["requiredFieldKeys"]
     assert data["versions"]["contractVersion"] == "1.0.0"
     assert data["versions"]["workflowCatalogVersion"] == "0.2.0"
+    assert data["versions"]["modelProvider"] != "stub"
+    assert data["versions"]["modelName"] != "stub"
+    assert data["versions"]["modelVersion"] != "stub"
     assert "attemptId" not in data
 
 

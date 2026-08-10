@@ -25,6 +25,9 @@ class _FakeIntent:
             intent=self.intent,
             confidence=self.confidence,
             workflow_id=self.workflow_id,
+            model_provider="test",
+            model_name="fake-intent",
+            model_version="1",
             extracted_slots={},
         )
 
@@ -43,6 +46,9 @@ def test_plan_returns_context_required_for_expiry() -> None:
     assert res.outcome == "CONTEXT_REQUIRED"
     assert res.context_requirement is not None
     assert res.context_requirement.detected_intent == "EXPIRY_RENEWAL"
+    assert res.versions.model_provider == "test"
+    assert res.versions.model_name == "fake-intent"
+    assert res.versions.model_version == "1"
     assert "worker_id" in res.context_requirement.required_field_keys
 
 
