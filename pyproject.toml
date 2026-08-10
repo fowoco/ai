@@ -21,6 +21,7 @@ dependencies = [
   "ms-cfb==0.0.6",
   "Pillow>=11.3,<12",
   "hwp2hwpx==1.0.1",
+  "langgraph>=0.2,<1",
 ]
 
 [project.optional-dependencies]
@@ -29,7 +30,20 @@ dev = [
   "pytest-asyncio>=0.25,<1",
   "ruff>=0.12,<1",
 ]
-
+# 로컬: pip install -e ../knowledge/fowoco-knowledge
+knowledge = []
+# HF Intent BERT (Windows CPU 권장: pip install -e ".[intent]")
+intent = [
+  "torch>=2.2,<3",
+  "transformers>=4.46,<5",
+  "accelerate>=0.34,<2",
+]
+# A.X 경로 (Linux/CUDA 권장). Windows에선 bitsandbytes 설치 실패 흔함
+intent-ax = [
+  "fowoco-ai[intent]",
+  "peft>=0.13,<1",
+  "bitsandbytes>=0.44,<1",
+]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["app*"]
@@ -37,11 +51,17 @@ include = ["app*"]
 [tool.setuptools.package-data]
 "app.documents.hwp5.templates" = ["*.json", "*.hwp"]
 "app.documents.hwpx.templates" = ["*.hwpx"]
+"app.agents.language.resources" = ["*.json", "*.sha256", "prompts/*.md"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "qdrant_integration: mark test as requiring Qdrant integration",
+    "language_models: mark test as requiring language model cache",
+]
+
 
 [tool.ruff]
 target-version = "py311"

@@ -1,6 +1,23 @@
 name: fowoco
 
 services:
+  qdrant:
+    image: qdrant/qdrant:v1.18.3
+    container_name: fowoco-qdrant
+    restart: unless-stopped
+    # 내부전용 — 호스트 포트 노출 없음
+    expose:
+      - "6333"
+      - "6334"
+    volumes:
+      - fowoco-qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
   ai:
     build:
       context: .
@@ -13,8 +30,13 @@ services:
       - "${FOWOCO_PORT:-8000}:8000"
     environment:
       FOWOCO_DOCUMENT_SNAPSHOT_DIR: /data/document-snapshots
+      FOWOCO_QDRANT_URL: http://qdrant:6333
+      FOWOCO_MODEL_CACHE_DIR: /data/model-cache
     volumes:
       - fowoco-document-data:/data
+    depends_on:
+      qdrant:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -29,3 +51,5 @@ services:
 volumes:
   fowoco-document-data:
     name: fowoco-document-data
+  fowoco-qdrant-data:
+    name: fowoco-qdrant-data

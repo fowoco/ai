@@ -1,0 +1,26 @@
+{
+  "requestId": "req-renewal-002",
+  "instruction": "???? ?? ??",
+  "workerId": "worker-001",
+  "taskId": "task-abc123",
+  "documents": [
+    {
+      "documentType": "passport",
+      "filename": "pass.jpg",
+      "fields": {
+        "passport_number": "M12345678",
+        "surname": "NGUYEN",
+        "given_names": "VAN AN",
+        "date_of_birth": "1990-03-15"
+      }
+    },
+    {
+      "documentType": "alien_registration",
+      "filename": "arc.jpg",
+      "fields": {
+        "alien_registration_number": "900315-5123456",
+        "stay_expiration_date": "2026-12-31"
+      }
+    }
+  ]
+}

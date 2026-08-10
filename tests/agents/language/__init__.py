@@ -1,0 +1,1 @@
+"""Language Assistant contract tests."""

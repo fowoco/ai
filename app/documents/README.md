@@ -57,6 +57,7 @@ app/documents/
 ├─ editing/
 │  ├─ service.py                  HWP/HWPX 편집·생성 facade
 │  ├─ models.py                   템플릿·검사·편집 결과
+│  ├─ template_names.py           공식 양식 표시명
 │  └─ exceptions.py               편집 도메인 오류
 ├─ hwp5/
 │  ├─ editor.py                   HWP 5.x 본문 레코드 편집
@@ -72,6 +73,11 @@ app/documents/
 │  ├─ service.py                  생성·XML 추출·재패키징
 │  ├─ template_registry.py        HWPX 템플릿 조회
 │  └─ templates/                  원본 HWPX
+├─ records/
+│  ├─ text_reader.py              TXT/DB RecordReader 계약
+│  ├─ rules.py                    템플릿별 XmlCellRule
+│  ├─ service.py                  레코드 → HWPX 자동 기입
+│  └─ README.md                   ERD 매핑 정리
 ├─ snapshots/
 │  ├─ repository.py               패키지·메타데이터·이름 별칭
 │  ├─ fingerprint.py              입력값을 제외한 레이아웃 지문

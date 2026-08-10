@@ -1,0 +1,25 @@
+{
+  "requestId": "10000000-0000-0000-0000-000000000001",
+  "outcome": "NEEDS_INFO",
+  "contextRequirement": null,
+  "questions": [
+    {
+      "slotKey": "monthly_wage",
+      "prompt": "월 급여를 입력해 주세요."
+    }
+  ],
+  "candidates": [],
+  "validationErrors": [],
+  "versions": {
+    "agentVersion": "0.1.0",
+    "modelProvider": "stub",
+    "modelName": "stub",
+    "modelVersion": "stub",
+    "promptVersion": "prompt-1",
+    "contextPackVersion": "0.2.0",
+    "workflowCatalogVersion": "0.2.0",
+    "contractVersion": "1.0.0"
+  },
+  "providerAttemptCount": 1,
+  "latencyMs": 180
+}

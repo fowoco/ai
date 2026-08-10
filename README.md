@@ -37,16 +37,36 @@ docker compose down
 
 ```text
 app/
-├─ agents/       자연어 의도 분석, 값 추출, 누락 정보 확인
-├─ api/          FastAPI Internal API, 요청·응답과 서비스 조립
-├─ documents/    HWP/HWPX/XML/PDF 처리, 편집, 변환, 스냅샷
-└─ core/         환경설정 등 공통 기반
+├─ agents/
+│  ├─ intent/            Analyses Intent·슬롯
+│  ├─ ambiguity/         모호성·누락 판단
+│  ├─ workflow/          Knowledge Catalog 조회
+│  ├─ workflow_graph/    재갱신 LangGraph 오케스트레이션
+│  ├─ language/          Language 노드 (외국인근로자 다국어·쉬운 한국어 지원 구현 완료)
+│  ├─ pipeline.py        Analyses 파이프라인
+│  └─ slot_catalog.py    슬롯 카탈로그
+├─ api/
+│  ├─ routes/            analyses · workflows · documents
+│  ├─ schemas/           요청·응답 모델
+│  ├─ dependencies.py    서비스·변환기 조립
+│  └─ router.py          `/api/v1` 라우터
+├─ db/                   worker/company 조회·신분 슬롯 저장
+├─ documents/
+│  ├─ common/            포맷 enum·감지
+│  ├─ editing/           HWP/HWPX 편집·생성 facade
+│  ├─ hwp5/ · hwpx/      포맷별 편집·템플릿
+│  ├─ conversion/        변환기·외부 엔진
+│  ├─ records/           TXT/DB 레코드 → XML 기입
+│  ├─ snapshots/         XML 왕복 스냅샷
+│  └─ xml/               XML 전용 확장 위치
+└─ core/                 환경설정 등 공통 기반
 ```
 
 의존 방향은 다음 원칙을 따른다.
 
 ```text
-Server → API → agents
+Server → API → agents (workflow_graph)
+             ├→ db
              └→ documents
 ```
 
@@ -58,6 +78,22 @@ Server → API → agents
 
 - [Internal API 안내](app/api/README.md)
 - [문서 처리 아키텍처](app/documents/README.md)
+- [재갱신 워크플로 노드 통합](app/agents/workflow_graph/README.md)
+- [Language Assistant 운영 런북](docs/language-assistant-operations.md)
+- [Language Assistant 평가 baseline](docs/evaluations/language-assistant-baseline.md)
+
+## Analyses / Workflows / Language Assistant
+
+```text
+POST /internal/v1/analyses
+POST /internal/v1/workflows/renewal/run
+POST /internal/v1/language-assistant
+```
+
+- Analyses: 재갱신 고정 Intent + Catalog 필수슬롯·Knowledge 모호표현 ([docs/analyses-contract.md](docs/analyses-contract.md))
+- Workflows: 재갱신 LangGraph — 슈퍼바이저 → 안내문(태정) / OCR(주현) / 초안 4종 — [docs/workflows-contract.md](docs/workflows-contract.md)
+- Language Assistant: 외국인근로자 15개 언어 번역, 쉬운 한국어 변환 및 표준 한국어 생성 — [docs/contracts/language-assistant-http-request.schema.json](docs/contracts/language-assistant-http-request.schema.json)
+- 최종 흐름도: [app/agents/workflow_graph/README.md](app/agents/workflow_graph/README.md)
 
 ## 문서 API
 
@@ -114,6 +150,16 @@ FOWOCO_DOCUMENT_UPLOAD_MAX_BYTES=52428800
 FOWOCO_DOCUMENT_CONVERSION_TIMEOUT_SECONDS=120
 FOWOCO_DOCUMENT_SNAPSHOT_DIR=/data/document-snapshots
 ```
+
+## CLOVA Template OCR
+
+AI는 인증된 multipart 요청으로 원본 여권/외국인등록증 파일을 받아 CLOVA Template
+OCR를 실행한 뒤 허용된 정규화 필드와 필드별 신뢰도를 Server에 반환한다. 문서·사업장
+권한 검증, 결과 검증·암호화·저장은 Server가 담당하며 AI는 Server PostgreSQL을
+조회하거나 수정하지 않는다. 기능은 기본적으로 비활성화된다.
+
+요청·응답 계약, Template ID, 환경변수와 안전한 smoke 실행 방법은
+[`docs/clova-ocr-integration.md`](docs/clova-ocr-integration.md)를 참고한다.
 
 호스트 포트를 변경하려면 Compose 실행 전에 설정한다.
 

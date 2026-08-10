@@ -1,0 +1,20 @@
+{
+  "requestId": "10000000-0000-0000-0000-000000000001",
+  "phase": "ANALYZE",
+  "analysisInput": {
+    "instruction": "응웬반안 체류연장 준비해줘",
+    "requestedFieldKeys": [
+      "worker_id",
+      "stay_expiry_date"
+    ],
+    "workers": [
+      {
+        "workerRef": "30000000-0000-0000-0000-000000000001",
+        "requestedFields": {
+          "worker_id": "30000000-0000-0000-0000-000000000001",
+          "stay_expiry_date": "2026-12-31"
+        }
+      }
+    ]
+  }
+}

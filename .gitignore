@@ -50,6 +50,7 @@ test-results/
 .idea/
 .vscode/
 .fleet/
+.cursor/
 *.code-workspace
 *.swp
 *.swo
@@ -62,7 +63,6 @@ Desktop.ini
 /logs/
 /tmp/
 /temp/
-/data/
 /runtime/
 /uploads/
 /downloads/

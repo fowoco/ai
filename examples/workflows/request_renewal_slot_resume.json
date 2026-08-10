@@ -1,0 +1,14 @@
+{
+  "requestId": "req-renewal-003",
+  "instruction": "체류기간 ?�장 갱신",
+  "taskId": "task-abc123",
+  "workerId": "worker-001",
+  "slots": {
+    "wage": "2500000",
+    "working_hours": "09:00-18:00",
+    "job_description": "?�조",
+    "work_location": "?�울",
+    "lodging": "기숙??,
+    "contract_period": "12"
+  }
+}
