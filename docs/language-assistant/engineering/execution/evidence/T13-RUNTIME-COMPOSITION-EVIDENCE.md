@@ -5,12 +5,12 @@ evidence_version: 1
 task: issue-24-runtime-composition
 branch: feat/language-assistant-runtime-composition
 worktree: /Users/parktaejung/Desktop/workspace/ai/.worktrees/language-assistant-runtime-composition
-base_sha: f7058c2ece93e2b3723a715780e6bac5adb3eae1
-implementation_commit: 91e08af (runtime/Ollama); this commit (Qdrant/BGE/Docker)
+base_sha: 8837c5efcf1f161442e0adab8584488e0a656c0f
+implementation_commit: 177e695 (runtime/Ollama); 7c56654 (Qdrant/BGE/Docker); this commit (post-rebase evidence)
 live_ollama_qdrant: success-with-easy-korean-fallback
 ollama_model: gemma4:26b-mlx
 ollama_structured_output: success
-qdrant_endpoint: http://localhost:16333 (isolated compose.test.yml)
+qdrant_endpoint: fowoco-qdrant:6333 (production volume; temporary localhost:26333 proxy removed after verification)
 qdrant_retrieval: success
 ```
 
@@ -25,8 +25,9 @@ qdrant_retrieval: success
 | C05 | Ollama/Qdrant live 호출 없이도 offline baseline을 재현할 수 있고, secret 파일 변경이 없다. | test commands below; no `.env` or secret file is in the change set |
 | C06 | `provider=ollama`은 native `/api/chat` adapter를 사용하고 thinking을 끄며, 실제 모델의 코드펜스 JSON을 정규화해 typed output으로 검증한다. | `test_ollama_adapter_sends_native_schema_contract`, `test_ollama_adapter_disables_thinking_for_structured_generation`, `test_ollama_adapter_parses_single_json_code_fence`, live Ollama/API result below |
 | C07 | 유효한 Qdrant 설정은 production `HybridEpsRetriever`를 조립하고, 고정 index contract를 통과한 collection만 검색한다. | `test_factory_selects_hybrid_retriever_when_qdrant_is_configured`, `test_real_store_mock_create_and_verify`, live retrieval result below |
-| C08 | 실제 BGE-M3/Qdrant 검색은 5개 reference를 반환하며 retrieval fallback/warning이 없다. | isolated Qdrant/BGE live result below |
-| C09 | production Docker image는 `language-retrieval` extra를 설치하고 앱과 retrieval 의존성을 import할 수 있다. | `docker compose build ai` exit `0`; image import smoke result below |
+| C08 | production Qdrant volume에 실제 BGE-M3 index를 생성하고, 검색에서 5개 reference를 반환하며 retrieval fallback/warning이 없다. | production Qdrant/BGE live result below |
+| C09 | production Docker image는 `language-retrieval` extra를 포함해 빌드된다. | `docker compose build ai` exit `0`; image metadata below |
+| C10 | feature HEAD는 검수 시점의 최신 `origin/develop`을 포함한다. | `git merge-base --is-ancestor origin/develop HEAD` exit `0`; base `8837c5e` |
 
 ## Contract decision
 
@@ -96,7 +97,7 @@ PYTHONPATH=. /opt/homebrew/bin/uv run --frozen \
 ```
 
 - Exit code: `0`
-- Result: `573 passed, 1 skipped`
+- Result: `576 passed, 1 skipped, 1164 warnings in 2.18s`
 
 ### Static checks
 
@@ -183,11 +184,12 @@ curl http://localhost:11434/v1/models
 기존 `wget` healthcheck는 Qdrant 이미지에 실행 파일이 없어 false `unhealthy`를 만들었다. 이미지에 실제 존재하는 `/bin/bash`와 `/dev/tcp`로 `/readyz`를 검사하도록 production/test Compose를 수정했다.
 
 - production `fowoco-qdrant`: `healthy`
-- isolated `fowoco-qdrant-test`: `healthy`
-- `http://localhost:16333/readyz`: HTTP `200`, `all shards are ready`
+- isolated `fowoco-qdrant-test`: 이전 격리 검증에서 `healthy`; OrbStack 재시작 후 중지 상태
+- production Qdrant 검증용 임시 proxy `localhost:26333`: 검증 후 제거
+- host `6333`, `26333`: 모두 비공개/연결 거부 상태
 - production Compose의 host port 비공개 계약 유지
 
-### Actual BGE-M3 indexing and Qdrant retrieval
+### Actual BGE-M3 indexing and production Qdrant retrieval
 
 - model: `BAAI/bge-m3@5617a9f61b028005a4858fdac845db406aefb181`
 - source: `data/eps_language_db.json`
@@ -199,6 +201,9 @@ curl http://localhost:11434/v1/models
 - sparse vector: `korean_sparse`
 - dataset/model/index provenance verification: 성공
 - full indexing CLI idempotent rerun: exit `0`, `17,902` points
+- production collection status: `green`, optimizer status: `ok`
+- production alias: `eps_language_phrases_active` → `eps_language_phrases_29106c33d43c_5617a9f61b02`
+- provenance payload indexes: 각 `17,902` points
 - actual `HybridEpsRetriever`: contexts `5`, fallback `false`, warnings `[]`
 
 live 인덱싱 중 qdrant-client 1.19 compatibility 오류 두 건을 재현하고 수정했다.
@@ -214,9 +219,10 @@ live 인덱싱 중 qdrant-client 1.19 compatibility 오류 두 건을 재현하�
 - adapter 수정: native Ollama 요청에 `think: false` 명시
 - 실제 API 검증 설정: 테스트 프로세스에만 `FOWOCO_LLM_TIMEOUT_SECONDS=180` 주입; `.env`와 전역 Provider 설정은 변경하지 않음
 - HTTP status: `200`
-- elapsed: `94.56`초
+- post-rebase production-Qdrant run elapsed: `65.51`초
 - retrieval dataset version: `sha256:29106c33d43ccdd8453623ac1a0af44e0201d7c7cc1cc68c3fb438e0ccc61c6d`
 - retrieval reference count: `5`
+- retrieval reference IDs: `ef4b8686-5a53-5133-9ca2-df615070af86`, `b9f625d6-4bcd-5758-85df-3f700ad8e25b`, `497d29fd-ea15-569e-9419-f4bc0dd87af0`, `8be7ab57-92d5-5148-9e31-00b21f8a37c1`, `fa19ac87-d641-5da7-ba60-4c85171ea8ac`
 - retrieval fallback: `false`
 - `RETRIEVAL_UNAVAILABLE`: 발생하지 않음
 - translation status: `success`
@@ -231,20 +237,21 @@ live 인덱싱 중 qdrant-client 1.19 compatibility 오류 두 건을 재현하�
 - command: `docker compose build ai`
 - exit: `0`
 - image: `fowoco-ai:latest`
-- image id: `sha256:81de153f32fdcb7222af1281352ef4759c7c91a82c1f78c55c7f481e6a86b291`
+- application platform manifest: `sha256:08af20ea1794e4eadf53e75158e6d7dd92b4edec81ea2113d26b4e403b54f319`
 - architecture: `arm64`
-- image size: `3,506,302,676` bytes
+- image size: `3,506,131,198` bytes
 - installed retrieval packages: `qdrant-client==1.19.0`, `FlagEmbedding==1.4.0`, `torch==2.13.0`
-- production execution path smoke: `docker run --rm fowoco-ai:latest uv run python -c ...` → `FastAPI`
+- BuildKit attestation 때문에 `latest` manifest-list digest는 빌드마다 달라질 수 있어 재현성 기준으로 사용하지 않음
+- latest image one-shot smoke: Python 시작이 두 차례 장시간 정지해 중단했으며, OrbStack 재시작 후 Qdrant 데이터 영속성을 재확인함
 - 주의: Linux Torch가 CUDA 계열 wheel을 포함해 이미지가 3.51 GB다. 빌드는 성공했지만 이미지 경량화는 별도 최적화 대상이다.
 
 ## Not yet verified
 
-- production Qdrant volume indexing; live data는 격리된 test volume에 생성함
 - BGE reranker 연결; 현재 production composition은 cross-query RRF fallback을 사용함
 - actual OpenAI API structured-output compatibility
+- 최신 production image의 Python one-shot 실행 정지 원인; image build 자체는 성공함
 
-현재 production composition은 Qdrant URL이 없으면 typed degraded fallback을 사용하고, 유효한 URL에서는 lazy BGE-M3 backend와 `HybridEpsRetriever`를 조립한다. 실제 BGE-M3/Qdrant indexing·retrieval과 Ollama 결합 API 호출은 검증됐으며, reranker와 실제 OpenAI API 호환성은 주장하지 않는다.
+현재 production composition은 Qdrant URL이 없으면 typed degraded fallback을 사용하고, 유효한 URL에서는 lazy BGE-M3 backend와 `HybridEpsRetriever`를 조립한다. production Qdrant volume의 실제 BGE-M3 indexing·retrieval과 Ollama 결합 API 호출은 검증됐으며, reranker·실제 OpenAI API 호환성·최신 image의 one-shot Python 실행 성공은 주장하지 않는다.
 
 ## Known unrelated environment failures
 
