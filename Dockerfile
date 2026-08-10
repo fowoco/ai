@@ -52,7 +52,7 @@ COPY app ./app
 COPY scripts/download_language_models.py ./scripts/
 
 # 고정 revision의 검색 모델을 이미지에 포함해 런타임 다운로드를 없앤다.
-RUN /app/.venv/bin/python scripts/download_language_models.py \
+RUN /app/.venv/bin/python -m scripts.download_language_models \
     --cache-dir /opt/fowoco/language-models
 
 # uvicorn 기본 포트

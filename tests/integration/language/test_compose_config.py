@@ -16,7 +16,7 @@ def test_production_image_bakes_language_models() -> None:
     dockerignore = (ROOT / ".dockerignore").read_text().splitlines()
 
     assert "COPY scripts/download_language_models.py ./scripts/" in dockerfile
-    assert "/app/.venv/bin/python scripts/download_language_models.py" in dockerfile
+    assert "/app/.venv/bin/python -m scripts.download_language_models" in dockerfile
     assert "--cache-dir /opt/fowoco/language-models" in dockerfile
     assert "FOWOCO_MODEL_CACHE_DIR=/opt/fowoco/language-models" in dockerfile
     assert "scripts/*" in dockerignore
