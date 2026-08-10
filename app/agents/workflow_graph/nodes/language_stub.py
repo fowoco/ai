@@ -7,7 +7,7 @@ from typing import Any
 from app.agents.ambiguity import AmbiguityAgent
 from app.agents.intent import IntentClassifier, build_intent_agent
 
-from ..state import IDENTITY_SLOTS, RenewalState
+from ..state import HR_EXCLUDED_SLOTS, IDENTITY_SLOTS, RenewalState
 
 # 담당자 입력 — 클라이언트가 채우는 계약·근무 슬롯.
 CONTRACT_SLOTS: tuple[str, ...] = (
@@ -53,7 +53,7 @@ class StubLanguageNode:
 
         workflow_id = result.workflow_id or "UNKNOWN"
         amb = self._ambiguity.check(workflow_id, slots, state["instruction"])
-        missing = list(amb.missing_slots)
+        missing = [key for key in amb.missing_slots if key not in HR_EXCLUDED_SLOTS]
 
         # 재갱신: 신분(근로자 서류) + 계약(담당자 입력) 슬롯 누락 함께 확인
         if result.intent == "EXPIRY_RENEWAL":

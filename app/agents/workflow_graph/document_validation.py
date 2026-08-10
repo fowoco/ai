@@ -47,18 +47,32 @@ def _presence_from_docs_and_slots(
     def has_slot(keys: tuple[str, ...]) -> bool:
         return any(slots.get(k) or ocr.get(k) for k in keys)
 
-    passport: DocPresence = "unknown"
-    if any("passport" in t or "여권" in t for t in types) or has_slot(passport_keys):
+    def from_status(key: str) -> DocPresence:
+        status = str(slots.get(key) or "").strip().upper()
+        if status == "MISSING":
+            return "missing"
+        if status in {"SUBMITTED", "VERIFIED"}:
+            return "present"
+        return "unknown"
+
+    passport: DocPresence = from_status("passport_status")
+    if passport == "unknown" and (
+        any("passport" in t or "여권" in t for t in types) or has_slot(passport_keys)
+    ):
         passport = "present"
-    elif "passport_number" in _explicit_missing(slots):
+    elif passport == "unknown" and "passport_number" in _explicit_missing(slots):
         passport = "missing"
 
-    alien: DocPresence = "unknown"
-    if any(
-        "alien" in t or "registration" in t or "등록증" in t or "arc" in t for t in types
-    ) or has_slot(alien_keys):
+    alien: DocPresence = from_status("arc_status")
+    if alien == "unknown" and (
+        any(
+            "alien" in t or "registration" in t or "등록증" in t or "arc" in t
+            for t in types
+        )
+        or has_slot(alien_keys)
+    ):
         alien = "present"
-    elif "alien_registration_number" in _explicit_missing(slots):
+    elif alien == "unknown" and "alien_registration_number" in _explicit_missing(slots):
         alien = "missing"
 
     # 신분 슬롯이 비어 있고 관련 문서도 없으면 missing으로 간주

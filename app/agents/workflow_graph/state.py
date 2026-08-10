@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, NotRequired, TypedDict
 
-
 # 여권/외국인등록증 OCR로 채우는 신분 항목
 IDENTITY_SLOTS: frozenset[str] = frozenset(
     {
@@ -14,6 +13,10 @@ IDENTITY_SLOTS: frozenset[str] = frozenset(
         "full_name",
         "date_of_birth",
     }
+)
+
+HR_EXCLUDED_SLOTS: frozenset[str] = frozenset(
+    {"passport_status", "arc_status", "arc_expiry_date"}
 )
 
 
