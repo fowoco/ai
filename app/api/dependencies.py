@@ -3,6 +3,7 @@
 from functools import lru_cache
 
 from fastapi import HTTPException, Request, status
+from pydantic import ValidationError
 
 from app.agents.ambiguity import AmbiguityAgent
 from app.agents.intent import IntentClassifier, build_intent_agent
@@ -12,14 +13,19 @@ from app.agents.knowledge_support import (
     load_workflow_catalog,
     try_get_repository,
 )
+from app.agents.language.composition import (
+    LanguageAssistantCompositionUnavailable,
+    build_language_assistant_service,
+)
+from app.agents.language.service import LanguageAssistantService
 from app.agents.pipeline import AnalysisPipeline
 from app.agents.workflow import WorkflowAgent
 from app.agents.workflow_graph import RenewalOrchestrator
+from app.agents.workflow_graph.language_bridge import build_renewal_language_guide
 from app.agents.workflow_graph.nodes.document_generator import (
     EditingServiceDocumentGenerator,
 )
 from app.agents.workflow_graph.nodes.language_stub import StubLanguageNode
-from app.agents.workflow_graph.language_bridge import build_renewal_language_guide
 from app.agents.workflow_graph.ocr_bridge import DocumentOcrNode
 from app.agents.workflow_graph.task_store import InMemoryTaskStore
 from app.core.config import get_settings
@@ -197,10 +203,12 @@ def get_document_conversion_service() -> DocumentConversionService:
     return DocumentConversionService(tuple(converters))
 
 
-def get_language_assistant_service() -> "LanguageAssistantService":  # type: ignore[name-defined] # noqa: F821
-    from fastapi import HTTPException
-
-    raise HTTPException(status_code=503, detail="LANGUAGE_ASSISTANT_NOT_CONFIGURED")
+@lru_cache
+def get_language_assistant_service() -> LanguageAssistantService:
+    try:
+        return build_language_assistant_service(get_settings())
+    except (LanguageAssistantCompositionUnavailable, ValidationError) as exc:
+        raise HTTPException(status_code=503, detail="LANGUAGE_ASSISTANT_NOT_CONFIGURED") from exc
 
 
 def get_ocr_service(request: Request) -> OcrService:

@@ -220,3 +220,213 @@ def test_endpoint_not_mounted_under_api_v1(
     assert resp.status_code == 200
     openapi = resp.json()
     assert "/api/v1/internal/v1/language-assistant" not in openapi["paths"]
+
+
+def test_dependency_returns_service_from_composition_factory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.api import dependencies
+
+    expected_service = object()
+    monkeypatch.setattr(
+        dependencies,
+        "build_language_assistant_service",
+        lambda settings: expected_service,
+        raising=False,
+    )
+    cache_clear = getattr(dependencies.get_language_assistant_service, "cache_clear", None)
+    if cache_clear is not None:
+        cache_clear()
+    try:
+        assert dependencies.get_language_assistant_service() is expected_service
+    finally:
+        if cache_clear is not None:
+            cache_clear()
+
+
+def test_dependency_maps_composition_unavailable_to_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastapi import HTTPException
+
+    from app.agents.language.composition import LanguageAssistantCompositionUnavailable
+    from app.api import dependencies
+
+    def fail_to_build(settings: object) -> object:
+        raise LanguageAssistantCompositionUnavailable("missing language settings")
+
+    monkeypatch.setattr(dependencies, "build_language_assistant_service", fail_to_build)
+    cache_clear = getattr(dependencies.get_language_assistant_service, "cache_clear", None)
+    if cache_clear is not None:
+        cache_clear()
+    try:
+        with pytest.raises(HTTPException) as exc_info:
+            dependencies.get_language_assistant_service()
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.detail == "LANGUAGE_ASSISTANT_NOT_CONFIGURED"
+    finally:
+        if cache_clear is not None:
+            cache_clear()
+
+
+def test_dependency_returns_503_when_generation_settings_are_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastapi import HTTPException
+
+    from app.api import dependencies
+    from app.core.config import get_settings
+
+    for name in (
+        "FOWOCO_LLM_PROVIDER",
+        "FOWOCO_LLM_BASE_URL",
+        "FOWOCO_LLM_MODEL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    get_settings.cache_clear()
+    dependencies.get_language_assistant_service.cache_clear()
+    try:
+        with pytest.raises(HTTPException) as exc_info:
+            dependencies.get_language_assistant_service()
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.detail == "LANGUAGE_ASSISTANT_NOT_CONFIGURED"
+    finally:
+        dependencies.get_language_assistant_service.cache_clear()
+        get_settings.cache_clear()
+
+
+def test_endpoint_uses_real_dependency_with_deterministic_ports(
+    monkeypatch: pytest.MonkeyPatch,
+    app_instance: FastAPI,
+    request_payload: dict[str, object],
+) -> None:
+    from app.agents.language.composition import (
+        LanguageAssistantCompositionOverrides,
+        build_language_assistant_service,
+    )
+    from app.agents.language.contracts import LanguageExecutionPolicy
+    from app.agents.language.generation.models import (
+        EasyKoreanDraft,
+        TranslationDraft,
+    )
+    from app.agents.language.ports import NoopTraceSink, SemanticValidationDecision
+    from app.agents.language.retrieval.models import RetrievalResult
+    from app.agents.language.service import LanguageAssistantService
+    from app.core.config import Settings
+    from tests.agents.language.fakes import (
+        FakeEpsRetriever,
+        FakeSemanticValidationPort,
+    )
+
+    class DeterministicGenerator:
+        def generate(
+            self,
+            *,
+            operation: str,
+            payload: dict[str, object],
+            response_model: type[object],
+        ) -> object:
+            del operation, payload
+            if response_model is EasyKoreanDraft:
+                return EasyKoreanDraft(
+                    request_reason="신청",
+                    requested_items=("체류기간",),
+                    submission_method="방문",
+                )
+            if response_model is TranslationDraft:
+                return TranslationDraft(
+                    translated_reason="Application",
+                    translated_items=("stay period",),
+                    translated_submission_method="In person",
+                )
+            raise AssertionError(f"unexpected response model: {response_model}")
+
+    overrides = LanguageAssistantCompositionOverrides(
+        generator=DeterministicGenerator(),
+        retriever=FakeEpsRetriever(
+            result=RetrievalResult(
+                dataset_version=None,
+                query_strategies=(),
+                contexts=(),
+                warnings=(),
+                fallback_used=True,
+                degraded_components=("retrieval",),
+            )
+        ),
+        semantic_validator=FakeSemanticValidationPort(
+            result=SemanticValidationDecision(status="passed")
+        ),
+        trace_sink=NoopTraceSink(),
+        execution_policy=LanguageExecutionPolicy(),
+    )
+    service = build_language_assistant_service(Settings(), overrides=overrides)
+    assert isinstance(service, LanguageAssistantService)
+
+    from app.api import dependencies
+
+    monkeypatch.setattr(dependencies, "build_language_assistant_service", lambda _: service)
+    dependencies.get_language_assistant_service.cache_clear()
+    app_instance.dependency_overrides.clear()
+    try:
+        response = TestClient(app_instance).post(
+            "/internal/v1/language-assistant",
+            json=request_payload,
+        )
+        assert response.status_code == 200
+        assert response.json()["worker_id"] == "worker-123"
+        assert "Reason: Application" in response.json()["translated_text"]
+    finally:
+        dependencies.get_language_assistant_service.cache_clear()
+
+
+def test_endpoint_returns_503_from_real_dependency_when_settings_are_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    app_instance: FastAPI,
+    request_payload: dict[str, object],
+) -> None:
+    from app.api import dependencies
+    from app.core.config import get_settings
+
+    for name in (
+        "FOWOCO_LLM_PROVIDER",
+        "FOWOCO_LLM_BASE_URL",
+        "FOWOCO_LLM_MODEL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    get_settings.cache_clear()
+    dependencies.get_language_assistant_service.cache_clear()
+    app_instance.dependency_overrides.clear()
+    try:
+        response = TestClient(app_instance).post(
+            "/internal/v1/language-assistant",
+            json=request_payload,
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"] == "LANGUAGE_ASSISTANT_NOT_CONFIGURED"
+    finally:
+        dependencies.get_language_assistant_service.cache_clear()
+        get_settings.cache_clear()
+
+
+def test_endpoint_returns_503_from_real_dependency_when_settings_are_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+    app_instance: FastAPI,
+    request_payload: dict[str, object],
+) -> None:
+    from app.api import dependencies
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("FOWOCO_LLM_TIMEOUT_SECONDS", "0")
+    get_settings.cache_clear()
+    dependencies.get_language_assistant_service.cache_clear()
+    app_instance.dependency_overrides.clear()
+    try:
+        response = TestClient(app_instance).post(
+            "/internal/v1/language-assistant",
+            json=request_payload,
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"] == "LANGUAGE_ASSISTANT_NOT_CONFIGURED"
+    finally:
+        dependencies.get_language_assistant_service.cache_clear()
+        get_settings.cache_clear()

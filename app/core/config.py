@@ -34,8 +34,9 @@ class Settings(BaseSettings):
         / "fowoco-document-snapshots"
     )
 
-    # LLM — 미설정 시 템플릿 기반 stub 동작
+    # LLM — 미설정 시 Language Assistant composition unavailable
     llm_provider: str | None = None
+    llm_base_url: str | None = None
     llm_api_key: str | None = None
     llm_model: str | None = None
 

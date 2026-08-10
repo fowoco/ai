@@ -5,6 +5,7 @@ from .models import (
     StructuredGenerator,
     TranslationDraft,
 )
+from .ollama import OllamaGenerationPort
 from .openai_compatible import (
     GenerationError,
     GenerationHTTPError,
@@ -23,6 +24,7 @@ __all__ = [
     "GenerationSchemaError",
     "GenerationTransportError",
     "OpenAICompatibleGenerationPort",
+    "OllamaGenerationPort",
     "SemanticValidationDraft",
     "StructuredGenerator",
     "TranslationDraft",
