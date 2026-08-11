@@ -10,12 +10,17 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 AUTO_PRECISION_THRESHOLD = 0.99
 SENSITIVE_PRECISION_THRESHOLD = 0.995
+_CANONICAL_ID_PATTERN = r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$"
+_BoundedCanonicalId = Annotated[
+    str, Field(max_length=200, pattern=_CANONICAL_ID_PATTERN)
+]
+_BoundedText = Annotated[str, Field(max_length=200)]
 
 
 class EvaluationStatus(StrEnum):
@@ -33,11 +38,12 @@ class EvaluationCase(BaseModel):
     case_id: str = Field(min_length=1, max_length=200)
     document_id: str = Field(min_length=1, max_length=200)
     expected_status: EvaluationStatus
-    expected_canonical_field_id: str | None = None
+    expected_canonical_field_id: _BoundedCanonicalId | None = None
     expected_sensitive: bool
     predicted_status: EvaluationStatus
-    predicted_canonical_field_id: str | None = None
-    candidate_ids: tuple[str, ...] = Field(default=(), max_length=20)
+    predicted_canonical_field_id: _BoundedCanonicalId | None = None
+    predicted_sensitive: bool = False
+    candidate_ids: tuple[_BoundedCanonicalId, ...] = Field(default=(), max_length=20)
 
     @model_validator(mode="after")
     def _matched_prediction_has_id(self) -> EvaluationCase:
@@ -61,14 +67,31 @@ class EvaluationMetrics(BaseModel):
     document_zero_error_rate: float
 
 
+class _FixtureContext(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    field_id: str = Field(min_length=1, max_length=200)
+    label: str = Field(max_length=200)
+    normalized_label: str = Field(max_length=200)
+    field_type: str = Field(min_length=1, max_length=100)
+    document_title: str = Field(max_length=200)
+    section: str = Field(max_length=200)
+    row_labels: tuple[_BoundedText, ...] = Field(max_length=3)
+    nearby_labels: tuple[_BoundedText, ...] = Field(max_length=4)
+    options: tuple[_BoundedText, ...] = Field(max_length=50)
+    repeat_index: int = Field(ge=0)
+    required: bool
+    kind: str = Field(min_length=1, max_length=100)
+
+
 class _FixtureCase(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     case_id: str = Field(min_length=1, max_length=200)
     document_id: str = Field(min_length=1, max_length=200)
-    context: dict[str, Any]
+    context: _FixtureContext
     expected_status: EvaluationStatus
-    expected_canonical_field_id: str | None = None
+    expected_canonical_field_id: _BoundedCanonicalId | None = None
 
 
 def evaluate_cases(
@@ -103,6 +126,9 @@ def evaluate_cases(
     )
 
     automatic = [
+        case for case in validated if case.predicted_status is EvaluationStatus.MATCHED
+    ]
+    automatic_on_expected_data = [
         case for case in actual_data if case.predicted_status is EvaluationStatus.MATCHED
     ]
     correct_automatic = sum(_is_correct(case) for case in automatic)
@@ -112,7 +138,9 @@ def evaluate_cases(
     correct_ambiguous = sum(
         case.predicted_status is EvaluationStatus.AMBIGUOUS for case in expected_ambiguous
     )
-    sensitive_automatic = [case for case in automatic if case.expected_sensitive]
+    sensitive_automatic = [
+        case for case in automatic if case.expected_sensitive or case.predicted_sensitive
+    ]
     correct_sensitive = sum(_is_correct(case) for case in sensitive_automatic)
 
     documents: dict[str, list[EvaluationCase]] = defaultdict(list)
@@ -129,7 +157,7 @@ def evaluate_cases(
         top_1_accuracy=_ratio(top_1_hits, len(ranked)),
         top_k_recall=_ratio(top_k_hits, len(ranked)),
         auto_precision=_ratio(correct_automatic, len(automatic)),
-        coverage=_ratio(len(automatic), len(actual_data)),
+        coverage=_ratio(len(automatic_on_expected_data), len(actual_data)),
         ambiguous_accuracy=_ratio(correct_ambiguous, len(expected_ambiguous)),
         sensitive_field_precision=_ratio(correct_sensitive, len(sensitive_automatic)),
         document_zero_error_rate=_ratio(zero_error_documents, len(documents)),
@@ -201,7 +229,10 @@ def _run_cases(
     from app.documents.dynamic_automation.models import DocumentFieldContext
 
     catalog = CanonicalCatalog.load(catalog_path)
-    contexts = tuple(DocumentFieldContext.model_validate(case.context) for case in fixture_cases)
+    contexts = tuple(
+        DocumentFieldContext.model_validate(case.context.model_dump(mode="json"))
+        for case in fixture_cases
+    )
     mapper = _make_mapper(catalog, mode=mode)
     plan = mapper.map(contexts)
     evaluated: list[EvaluationCase] = []
@@ -210,6 +241,10 @@ def _run_cases(
         if fixture.expected_canonical_field_id is not None:
             definition = catalog.get(fixture.expected_canonical_field_id)
             expected_sensitive = definition.sensitivity == "sensitive"
+        predicted_sensitive = False
+        if mapping.canonical_field_id is not None:
+            predicted_definition = catalog.get(mapping.canonical_field_id)
+            predicted_sensitive = predicted_definition.sensitivity == "sensitive"
         evaluated.append(
             EvaluationCase(
                 case_id=fixture.case_id,
@@ -219,6 +254,7 @@ def _run_cases(
                 expected_sensitive=expected_sensitive,
                 predicted_status=mapping.status.value,
                 predicted_canonical_field_id=mapping.canonical_field_id,
+                predicted_sensitive=predicted_sensitive,
                 candidate_ids=tuple(
                     candidate.canonical_field_id for candidate in mapping.candidates
                 ),

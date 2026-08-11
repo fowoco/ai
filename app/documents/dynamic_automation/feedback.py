@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .models import CanonicalMappingPlan, DocumentFieldContext, MappingStatus, ScoredCandidate
+from .models import CanonicalMappingPlan, DocumentFieldContext, MappingStatus
 
 _CANONICAL_ID_PATTERN = r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$"
 _HASH_PATTERN = r"^[0-9a-f]{64}$"
@@ -26,6 +26,16 @@ class ReviewerDecision(StrEnum):
     ACCEPTED = "accepted"
     CORRECTED = "corrected"
     REJECTED = "rejected"
+
+
+class FeedbackCandidateScore(BaseModel):
+    """Bounded candidate evidence safe for feedback persistence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    canonical_field_id: str = Field(max_length=200, pattern=_CANONICAL_ID_PATTERN)
+    score: float = Field(ge=0, le=1)
+    rank: int = Field(ge=1)
 
 
 class MappingFeedbackRecord(BaseModel):
@@ -44,12 +54,14 @@ class MappingFeedbackRecord(BaseModel):
     nearby_labels: tuple[Annotated[str, Field(max_length=200)], ...] = Field(max_length=4)
     predicted_status: MappingStatus
     predicted_canonical_field_id: str | None = Field(
-        default=None, pattern=_CANONICAL_ID_PATTERN
+        default=None, max_length=200, pattern=_CANONICAL_ID_PATTERN
     )
-    final_canonical_field_id: str | None = Field(default=None, pattern=_CANONICAL_ID_PATTERN)
+    final_canonical_field_id: str | None = Field(
+        default=None, max_length=200, pattern=_CANONICAL_ID_PATTERN
+    )
     decision: ReviewerDecision
-    candidate_scores: tuple[ScoredCandidate, ...] = Field(default=(), max_length=20)
-    catalog_version: str = Field(pattern=r"^v[1-9][0-9]*$")
+    candidate_scores: tuple[FeedbackCandidateScore, ...] = Field(default=(), max_length=20)
+    catalog_version: str = Field(max_length=20, pattern=r"^v[1-9][0-9]*$")
     model_version: str | None = Field(default=None, max_length=200)
 
     @model_validator(mode="before")
@@ -98,7 +110,10 @@ class MappingFeedbackRecord(BaseModel):
             predicted_canonical_field_id=mapping.canonical_field_id,
             final_canonical_field_id=final_canonical_field_id,
             decision=decision,
-            candidate_scores=mapping.candidates,
+            candidate_scores=tuple(
+                FeedbackCandidateScore.model_validate(candidate.model_dump())
+                for candidate in mapping.candidates
+            ),
             catalog_version=plan.catalog_version,
             model_version=mapping.evidence.model_version,
         )

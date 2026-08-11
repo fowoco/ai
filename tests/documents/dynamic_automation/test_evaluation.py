@@ -4,9 +4,12 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
+import scripts.evaluate_dynamic_mapping as evaluation
 from scripts.evaluate_dynamic_mapping import EvaluationCase, evaluate_cases
 
 ROOT = Path(__file__).parents[3]
@@ -52,6 +55,175 @@ def test_selective_metrics_count_wrong_auto_match() -> None:
 
     assert metrics.auto_precision == 0.0
     assert metrics.coverage == 0.5
+
+
+def test_auto_precision_counts_false_match_on_expected_non_data() -> None:
+    correct_sensitive = EvaluationCase(
+        case_id="correct-sensitive",
+        document_id="document-1",
+        expected_status="MATCHED",
+        expected_canonical_field_id="identity.passport_number",
+        expected_sensitive=True,
+        predicted_status="MATCHED",
+        predicted_canonical_field_id="identity.passport_number",
+        candidate_ids=("identity.passport_number",),
+    )
+    false_non_data = EvaluationCase(
+        case_id="false-non-data",
+        document_id="document-2",
+        expected_status="NON_DATA",
+        expected_canonical_field_id=None,
+        expected_sensitive=False,
+        predicted_status="MATCHED",
+        predicted_canonical_field_id="company.phone",
+        candidate_ids=("company.phone",),
+    )
+
+    metrics = evaluate_cases([correct_sensitive, false_non_data])
+
+    assert metrics.auto_precision == 0.5
+    assert metrics.coverage == 1.0
+
+
+def test_cli_exits_two_when_auto_precision_is_below_threshold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cases = (
+        EvaluationCase(
+            case_id="correct-sensitive",
+            document_id="document-1",
+            expected_status="MATCHED",
+            expected_canonical_field_id="identity.passport_number",
+            expected_sensitive=True,
+            predicted_status="MATCHED",
+            predicted_canonical_field_id="identity.passport_number",
+            candidate_ids=("identity.passport_number",),
+        ),
+        EvaluationCase(
+            case_id="false-non-data",
+            document_id="document-2",
+            expected_status="NON_DATA",
+            expected_canonical_field_id=None,
+            expected_sensitive=False,
+            predicted_status="MATCHED",
+            predicted_canonical_field_id="company.phone",
+            candidate_ids=("company.phone",),
+        ),
+    )
+    cases_path = tmp_path / "cases.jsonl"
+    cases_path.write_text("", encoding="utf-8")
+    output_path = tmp_path / "report.json"
+    monkeypatch.setattr(
+        evaluation,
+        "_run_cases",
+        lambda *_args, **_kwargs: (SimpleNamespace(version="v1"), cases),
+    )
+
+    exit_code = evaluation.main(
+        [
+            "--cases",
+            str(cases_path),
+            "--catalog",
+            "unused.yaml",
+            "--mode",
+            "rule",
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert exit_code == 2
+    assert json.loads(output_path.read_text(encoding="utf-8"))["gate"]["passed"] is False
+
+
+def test_sensitive_precision_counts_false_assignment_into_sensitive_target() -> None:
+    correct_non_sensitive = EvaluationCase(
+        case_id="correct-company-phone",
+        document_id="document-1",
+        expected_status="MATCHED",
+        expected_canonical_field_id="company.phone",
+        expected_sensitive=False,
+        predicted_status="MATCHED",
+        predicted_canonical_field_id="company.phone",
+        predicted_sensitive=False,
+        candidate_ids=("company.phone",),
+    )
+    false_sensitive_target = EvaluationCase(
+        case_id="wrong-passport-target",
+        document_id="document-2",
+        expected_status="MATCHED",
+        expected_canonical_field_id="company.phone",
+        expected_sensitive=False,
+        predicted_status="MATCHED",
+        predicted_canonical_field_id="identity.passport_number",
+        predicted_sensitive=True,
+        candidate_ids=("identity.passport_number", "company.phone"),
+    )
+
+    metrics = evaluate_cases([correct_non_sensitive, false_sensitive_target])
+
+    assert metrics.auto_precision == 0.5
+    assert metrics.sensitive_field_precision == 0.0
+
+
+def test_cli_exits_two_when_sensitive_precision_is_below_threshold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    correct = tuple(
+        EvaluationCase(
+            case_id=f"correct-{index}",
+            document_id=f"document-{index}",
+            expected_status="MATCHED",
+            expected_canonical_field_id="company.phone",
+            expected_sensitive=False,
+            predicted_status="MATCHED",
+            predicted_canonical_field_id="company.phone",
+            predicted_sensitive=False,
+            candidate_ids=("company.phone",),
+        )
+        for index in range(100)
+    )
+    false_sensitive_target = EvaluationCase(
+        case_id="wrong-passport-target",
+        document_id="document-sensitive-error",
+        expected_status="MATCHED",
+        expected_canonical_field_id="company.phone",
+        expected_sensitive=False,
+        predicted_status="MATCHED",
+        predicted_canonical_field_id="identity.passport_number",
+        predicted_sensitive=True,
+        candidate_ids=("identity.passport_number", "company.phone"),
+    )
+    cases_path = tmp_path / "cases.jsonl"
+    cases_path.write_text("", encoding="utf-8")
+    output_path = tmp_path / "report.json"
+    monkeypatch.setattr(
+        evaluation,
+        "_run_cases",
+        lambda *_args, **_kwargs: (
+            SimpleNamespace(version="v1"),
+            (*correct, false_sensitive_target),
+        ),
+    )
+
+    exit_code = evaluation.main(
+        [
+            "--cases",
+            str(cases_path),
+            "--catalog",
+            "unused.yaml",
+            "--mode",
+            "rule",
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    report = json.loads(output_path.read_text(encoding="utf-8"))
+    assert exit_code == 2
+    assert report["metrics"]["auto_precision"] == 0.9900990099009901
+    assert report["metrics"]["sensitive_field_precision"] == 0.0
+    assert report["gate"]["passed"] is False
 
 
 def test_metrics_are_derived_from_literal_case_outcomes() -> None:
@@ -124,6 +296,89 @@ def test_empty_evaluation_is_deterministic() -> None:
         "sensitive_field_precision": 0.0,
         "document_zero_error_rate": 0.0,
     }
+
+
+@pytest.mark.parametrize(
+    "updates",
+    (
+        {"expected_canonical_field_id": "identity." + "x" * 200},
+        {"predicted_canonical_field_id": "identity." + "x" * 200},
+        {"candidate_ids": ("identity." + "x" * 200,)},
+    ),
+)
+def test_evaluation_bounds_canonical_and_candidate_ids(
+    updates: dict[str, object],
+) -> None:
+    payload: dict[str, object] = {
+        "case_id": "bounded-case",
+        "document_id": "bounded-document",
+        "expected_status": "MATCHED",
+        "expected_canonical_field_id": "company.phone",
+        "expected_sensitive": False,
+        "predicted_status": "MATCHED",
+        "predicted_canonical_field_id": "company.phone",
+        "candidate_ids": ("company.phone",),
+    }
+    payload.update(updates)
+
+    with pytest.raises(ValidationError):
+        EvaluationCase.model_validate(payload)
+
+
+def test_cli_rejects_unbounded_fixture_context_before_mapping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cases_path = tmp_path / "cases.jsonl"
+    cases_path.write_text(
+        json.dumps(
+            {
+                "case_id": "oversized-context",
+                "document_id": "document-1",
+                "context": {
+                    "field_id": "field-1",
+                    "label": "x" * 201,
+                    "normalized_label": "x" * 200,
+                    "field_type": "text",
+                    "document_title": "Application",
+                    "section": "Company",
+                    "row_labels": ["Company"],
+                    "nearby_labels": [],
+                    "options": [],
+                    "repeat_index": 0,
+                    "required": True,
+                    "kind": "text_field",
+                },
+                "expected_status": "MATCHED",
+                "expected_canonical_field_id": "company.name",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    output_path = tmp_path / "report.json"
+    monkeypatch.setattr(
+        evaluation,
+        "_run_cases",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("unbounded fixture reached mapping")
+        ),
+    )
+
+    exit_code = evaluation.main(
+        [
+            "--cases",
+            str(cases_path),
+            "--catalog",
+            "unused.yaml",
+            "--mode",
+            "rule",
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert exit_code == 1
+    assert not output_path.exists()
 
 
 def test_rule_mode_cli_writes_json_without_model_packages(tmp_path: Path) -> None:

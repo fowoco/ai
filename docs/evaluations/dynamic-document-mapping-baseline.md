@@ -41,8 +41,9 @@ design: uncertain fields are deferred instead of being accepted automatically.
 - Automatic-match precision measures correct `MATCHED` outcomes among automatic matches; coverage
   measures automatic matches among expected data fields.
 - Ambiguous accuracy measures correct deferral for cases labeled `AMBIGUOUS`.
-- Sensitive-field precision restricts automatic-match precision to catalog fields marked
-  `sensitive`.
+- Sensitive-field precision covers automatic matches where either the expected field or the
+  predicted canonical target is catalog-marked `sensitive`, so false assignments into sensitive
+  targets cannot escape the release gate.
 - Document zero-error rate requires every evaluated field in a document to have the expected status
   and, for a match, the expected canonical ID.
 

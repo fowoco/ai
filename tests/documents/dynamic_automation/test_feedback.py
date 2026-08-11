@@ -83,6 +83,28 @@ def test_feedback_bounds_structural_text() -> None:
         MappingFeedbackRecord.model_validate(feedback_payload(label="x" * 201))
 
 
+@pytest.mark.parametrize(
+    "updates",
+    (
+        {"predicted_canonical_field_id": "identity." + "x" * 200},
+        {"final_canonical_field_id": "identity." + "x" * 200},
+        {
+            "candidate_scores": [
+                {
+                    "canonical_field_id": "identity." + "x" * 200,
+                    "score": 1.0,
+                    "rank": 1,
+                }
+            ]
+        },
+        {"catalog_version": "v" + "1" * 200},
+    ),
+)
+def test_feedback_bounds_every_persisted_identifier(updates: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        MappingFeedbackRecord.model_validate(feedback_payload(**updates))
+
+
 def test_feedback_rejects_inconsistent_matched_prediction() -> None:
     with pytest.raises(ValidationError):
         MappingFeedbackRecord.model_validate(
@@ -138,7 +160,13 @@ def test_feedback_builds_deterministic_record_from_mapping_plan() -> None:
     assert record.field_context_hash == (
         "428f0f637ef4c20f9e085ee4b25c30af9f5d2ec6822e7f3bdc4555eba35ddc5a"
     )
-    assert record.candidate_scores == plan.mappings[0].candidates
+    assert [candidate.model_dump() for candidate in record.candidate_scores] == [
+        {
+            "canonical_field_id": "identity.passport_number",
+            "score": 1.0,
+            "rank": 1,
+        }
+    ]
     assert record.model_version == "deterministic-rules-v1"
 
 
