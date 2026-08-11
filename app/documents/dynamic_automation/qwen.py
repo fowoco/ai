@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -270,6 +270,7 @@ class Qwen3CandidateReranker:
         model_path: str | Path | None = None,
         *,
         backend: RerankerBackend | None = None,
+        definition_resolver: Callable[[str], CanonicalFieldDefinition] | None = None,
         max_length: int = 512,
         batch_size: int = 8,
     ) -> None:
@@ -285,6 +286,7 @@ class Qwen3CandidateReranker:
             )
             backend = LocalQwen3RerankerBackend(local_path)
         self.backend = backend
+        self.definition_resolver = definition_resolver
         self.max_length = max_length
         self.batch_size = batch_size
 
@@ -299,9 +301,25 @@ class Qwen3CandidateReranker:
     ) -> tuple[ScoredCandidate, ...]:
         if not candidates:
             return ()
+        if self.definition_resolver is None:
+            raise ValueError("canonical definition_resolver is required for reranking")
+        definitions: list[CanonicalFieldDefinition] = []
+        for candidate in candidates:
+            try:
+                definition = self.definition_resolver(candidate.canonical_field_id)
+            except KeyError as error:
+                raise ValueError(
+                    f"unknown canonical candidate: {candidate.canonical_field_id}"
+                ) from error
+            if definition.field_id != candidate.canonical_field_id:
+                raise ValueError(
+                    f"definition resolver returned the wrong canonical candidate: "
+                    f"{candidate.canonical_field_id}"
+                )
+            definitions.append(definition)
         query = _format_context(context)
         scores = self.backend.score_pairs(
-            tuple((query, candidate.canonical_field_id) for candidate in candidates),
+            tuple((query, _format_definition(definition)) for definition in definitions),
             max_length=self.max_length,
             batch_size=self.batch_size,
         )

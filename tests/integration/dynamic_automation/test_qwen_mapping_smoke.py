@@ -61,7 +61,11 @@ def test_qwen_mapping_models_run_from_pinned_local_cache_only(
         candidates,
         top_k=2,
     )
-    reranked = Qwen3CandidateReranker(reranker_path).rerank(context, retrieved)
+    definitions_by_id = {definition.field_id: definition for definition in candidates}
+    reranked = Qwen3CandidateReranker(
+        reranker_path,
+        definition_resolver=definitions_by_id.__getitem__,
+    ).rerank(context, retrieved)
 
     assert len(retrieved) == 2
     assert len(reranked) == 2

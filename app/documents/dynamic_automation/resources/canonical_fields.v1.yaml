@@ -5,7 +5,7 @@ fields:
     value_type: string
     aliases: [근로자 성명, 신청인 성명, Name of employee]
     description: Worker's legal name.
-    compatible_field_types: [text, name]
+    compatible_field_types: [text]
     source: {view: document_worker_view, column: legal_name, scope_keys: [tenant_id, worker_id]}
     sensitivity: personal
     formatter: person_name
@@ -14,7 +14,7 @@ fields:
     value_type: string
     aliases: [국적, Nationality]
     description: Worker's nationality.
-    compatible_field_types: [text, nationality, select]
+    compatible_field_types: [text]
     source: {view: document_worker_view, column: nationality, scope_keys: [tenant_id, worker_id]}
     sensitivity: personal
     formatter: string
@@ -41,7 +41,7 @@ fields:
     value_type: email
     aliases: [이메일, Email]
     description: Worker's email address.
-    compatible_field_types: [email, text]
+    compatible_field_types: [text]
     source: {view: document_worker_view, column: email, scope_keys: [tenant_id, worker_id]}
     sensitivity: personal
     formatter: email
@@ -50,7 +50,7 @@ fields:
     value_type: string
     aliases: [회사명, 사업장명, Company name]
     description: Company's legal name.
-    compatible_field_types: [text, name]
+    compatible_field_types: [text]
     source: {view: document_company_view, column: name, scope_keys: [tenant_id, company_id]}
     sensitivity: business
     formatter: string
@@ -68,7 +68,7 @@ fields:
     value_type: address
     aliases: [사업장 주소, Address]
     description: Company's address.
-    compatible_field_types: [address, text]
+    compatible_field_types: [text]
     source: {view: document_company_view, column: address, scope_keys: [tenant_id, company_id]}
     sensitivity: business
     formatter: address
@@ -77,7 +77,7 @@ fields:
     value_type: string
     aliases: [대표자 성명, Representative name]
     description: Company's representative name.
-    compatible_field_types: [text, name]
+    compatible_field_types: [text]
     source: {view: document_company_view, column: representative_name, scope_keys: [tenant_id, company_id]}
     sensitivity: personal
     formatter: person_name
@@ -86,7 +86,7 @@ fields:
     value_type: business_number
     aliases: [사업자등록번호, Business Registration No.]
     description: Company's business registration number.
-    compatible_field_types: [business_number, text]
+    compatible_field_types: [number, text]
     source: {view: document_company_view, column: business_number, scope_keys: [tenant_id, company_id]}
     sensitivity: business
     formatter: business_number
@@ -95,7 +95,7 @@ fields:
     value_type: passport_number
     aliases: [여권번호, Passport number]
     description: Worker's passport number.
-    compatible_field_types: [passport_number, text]
+    compatible_field_types: [text]
     source: {view: document_identity_view, column: passport_number, scope_keys: [tenant_id, worker_id]}
     sensitivity: sensitive
     formatter: string
@@ -104,7 +104,7 @@ fields:
     value_type: alien_registration_number
     aliases: [외국인등록번호, Alien registration number]
     description: Worker's alien registration number.
-    compatible_field_types: [alien_registration_number, text]
+    compatible_field_types: [number, text]
     source: {view: document_identity_view, column: alien_registration_number, scope_keys: [tenant_id, worker_id]}
     sensitivity: sensitive
     formatter: string
@@ -140,7 +140,7 @@ fields:
     value_type: string
     aliases: [근로시간, Working hours]
     description: Contract working hours.
-    compatible_field_types: [text, hours]
+    compatible_field_types: [text]
     source: {view: document_task_view, column: working_hours, scope_keys: [tenant_id, task_id]}
     sensitivity: business
     formatter: string
@@ -149,7 +149,7 @@ fields:
     value_type: string
     aliases: [업무내용, Job description]
     description: Contract job description.
-    compatible_field_types: [text, textarea]
+    compatible_field_types: [text]
     source: {view: document_task_view, column: job_description, scope_keys: [tenant_id, task_id]}
     sensitivity: business
     formatter: string
@@ -158,7 +158,7 @@ fields:
     value_type: address
     aliases: [근무장소, Work location]
     description: Contract work location.
-    compatible_field_types: [address, text]
+    compatible_field_types: [text]
     source: {view: document_task_view, column: work_location, scope_keys: [tenant_id, task_id]}
     sensitivity: business
     formatter: address
@@ -167,7 +167,7 @@ fields:
     value_type: string
     aliases: [숙식, Lodging]
     description: Contract lodging arrangement.
-    compatible_field_types: [text, textarea]
+    compatible_field_types: [text]
     source: {view: document_task_view, column: lodging, scope_keys: [tenant_id, task_id]}
     sensitivity: business
     formatter: string

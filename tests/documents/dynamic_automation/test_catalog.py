@@ -92,7 +92,20 @@ def test_catalog_returns_known_field_and_rejects_unknown_field() -> None:
         catalog.get("company.unknown")
 
 
-def test_compatible_filters_wrong_type_and_non_repeatable_role() -> None:
+def test_catalog_definitions_are_immutable_and_stably_iterable() -> None:
+    catalog = CanonicalCatalog.load(DEFAULT_CATALOG_PATH)
+
+    field_ids = tuple(definition.field_id for definition in catalog.definitions)
+    assert field_ids == tuple(sorted(field_ids))
+    assert tuple(catalog) == catalog.definitions
+
+    with pytest.raises(TypeError):
+        catalog._fields_by_id["fabricated.field"] = catalog.definitions[0]  # type: ignore[index]
+    with pytest.raises(ValidationError):
+        catalog.definitions[0].field_id = "fabricated.field"  # type: ignore[misc]
+
+
+def test_compatible_filters_wrong_type_without_repeat_index_eligibility() -> None:
     catalog = CanonicalCatalog.load(DEFAULT_CATALOG_PATH)
 
     compatible_ids = {item.field_id for item in catalog.compatible(_context())}
@@ -100,7 +113,7 @@ def test_compatible_filters_wrong_type_and_non_repeatable_role() -> None:
     assert "worker.date_of_birth" not in compatible_ids
 
     repeated_ids = {item.field_id for item in catalog.compatible(_context(repeat_index=1))}
-    assert "company.phone" not in repeated_ids
+    assert "company.phone" in repeated_ids
 
 
 def test_document_field_context_rejects_oversized_labels_and_options() -> None:

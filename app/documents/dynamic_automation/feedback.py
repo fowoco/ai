@@ -43,8 +43,11 @@ class MappingFeedbackRecord(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal["v1"] = "v1"
+    schema_version: Literal["v2"] = "v2"
     layout_hash: str = Field(pattern=_HASH_PATTERN)
+    document_kind: str = Field(min_length=1, max_length=100)
+    document_version: str = Field(min_length=1, max_length=100)
+    source_institution: str = Field(min_length=1, max_length=100)
     field_context_hash: str = Field(pattern=_HASH_PATTERN)
     field_id: str = Field(min_length=1, max_length=200)
     repeat_index: int = Field(ge=0)
@@ -84,6 +87,9 @@ class MappingFeedbackRecord(BaseModel):
         context: DocumentFieldContext,
         *,
         layout_hash: str,
+        document_kind: str,
+        document_version: str,
+        source_institution: str,
         decision: ReviewerDecision,
         final_canonical_field_id: str | None,
     ) -> MappingFeedbackRecord:
@@ -99,6 +105,9 @@ class MappingFeedbackRecord(BaseModel):
         mapping = matches[0]
         return cls(
             layout_hash=layout_hash,
+            document_kind=document_kind,
+            document_version=document_version,
+            source_institution=source_institution,
             field_context_hash=hash_field_context(context),
             field_id=context.field_id,
             repeat_index=context.repeat_index,

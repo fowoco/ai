@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -22,6 +23,66 @@ CATALOG_PATH = (
     / "resources"
     / "canonical_fields.v1.yaml"
 )
+
+
+class SemanticEmbeddingBackend:
+    """Complete deterministic stand-in for the unavailable local Qwen encoder."""
+
+    def __init__(self) -> None:
+        self.query_batches = 0
+        self.document_batches = 0
+
+    def encode_queries(
+        self,
+        texts: Sequence[str],
+        *,
+        max_length: int,
+        batch_size: int,
+    ) -> tuple[tuple[float, ...], ...]:
+        assert max_length == 512
+        assert batch_size == 8
+        self.query_batches += 1
+        return tuple((1.0, 0.0) for _ in texts)
+
+    def encode_documents(
+        self,
+        texts: Sequence[str],
+        *,
+        max_length: int,
+        batch_size: int,
+    ) -> tuple[tuple[float, ...], ...]:
+        assert max_length == 512
+        assert batch_size == 8
+        self.document_batches += 1
+        return tuple(
+            (1.0, 0.0) if "canonical field: company.phone" in text else (0.0, 1.0)
+            for text in texts
+        )
+
+
+class SemanticRerankerBackend:
+    """Complete deterministic stand-in for the unavailable local Qwen reranker."""
+
+    def __init__(self) -> None:
+        self.pair_batches = 0
+
+    def score_pairs(
+        self,
+        pairs: Sequence[tuple[str, str]],
+        *,
+        max_length: int,
+        batch_size: int,
+    ) -> tuple[float, ...]:
+        assert max_length == 512
+        assert batch_size == 8
+        self.pair_batches += 1
+        scores: list[float] = []
+        for query, definition in pairs:
+            if "Employer contact line" in query:
+                scores.append(0.99 if "company.phone" in definition else 0.20)
+            else:
+                scores.append(0.75 if "company.phone" in definition else 0.74)
+        return tuple(scores)
 
 
 def matched_case(*, correct: bool) -> EvaluationCase:
@@ -407,7 +468,103 @@ def test_rule_mode_cli_writes_json_without_model_packages(tmp_path: Path) -> Non
     assert report["mode"] == "rule"
     assert report["catalog_version"] == "v1"
     assert report["metrics"]["auto_precision"] == 1.0
-    assert report["metrics"]["coverage"] == 0.5
+    assert report["metrics"]["coverage"] == 0.4
     assert report["gate"]["passed"] is True
     assert "precision=1.000000" in result.stdout
-    assert "coverage=0.500000" in result.stdout
+    assert "coverage=0.400000" in result.stdout
+
+
+def test_qwen_cli_fails_closed_when_lazy_model_inference_never_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class UnavailableSentenceTransformer:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            raise RuntimeError("model cache is unavailable")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sentence_transformers",
+        SimpleNamespace(SentenceTransformer=UnavailableSentenceTransformer),
+    )
+    model_cache = tmp_path / "missing-model-cache"
+    embedding_path = (
+        model_cache
+        / "qwen3-embedding-0.6b"
+        / "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+    )
+    reranker_path = (
+        model_cache
+        / "qwen3-reranker-0.6b"
+        / "e61197ed45024b0ed8a2d74b80b4d909f1255473"
+    )
+    monkeypatch.setenv("FOWOCO_QWEN3_EMBEDDING_PATH", str(embedding_path))
+    monkeypatch.setenv("FOWOCO_QWEN3_RERANKER_PATH", str(reranker_path))
+    monkeypatch.setenv("FOWOCO_MODEL_CACHE_DIR", str(model_cache))
+    monkeypatch.setenv("FOWOCO_DYNAMIC_AUTOMATION_MAPPING_ENABLED", "true")
+    output_path = tmp_path / "false-green-report.json"
+
+    exit_code = evaluation.main(
+        [
+            "--cases",
+            str(CASES_PATH),
+            "--catalog",
+            str(CATALOG_PATH),
+            "--mode",
+            "qwen",
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    report = json.loads(output_path.read_text(encoding="utf-8"))
+    assert exit_code == 2
+    assert report["model_execution"] == {
+        "embedding_success_count": 0,
+        "reranker_success_count": 0,
+        "required": True,
+        "semantic_case_count": 1,
+        "semantic_case_pass_count": 0,
+    }
+    assert report["gate"]["passed"] is False
+
+
+def test_qwen_cli_uses_documented_settings_and_records_fake_backend_execution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    model_cache = tmp_path / "model-cache"
+    monkeypatch.setenv("FOWOCO_MODEL_CACHE_DIR", str(model_cache))
+    monkeypatch.setenv("FOWOCO_DYNAMIC_AUTOMATION_MAPPING_ENABLED", "true")
+    monkeypatch.delenv("FOWOCO_QWEN3_EMBEDDING_PATH", raising=False)
+    monkeypatch.delenv("FOWOCO_QWEN3_RERANKER_PATH", raising=False)
+    embedding = SemanticEmbeddingBackend()
+    reranker = SemanticRerankerBackend()
+    output_path = tmp_path / "qwen-report.json"
+
+    exit_code = evaluation.main(
+        [
+            "--cases",
+            str(CASES_PATH),
+            "--catalog",
+            str(CATALOG_PATH),
+            "--mode",
+            "qwen",
+            "--output",
+            str(output_path),
+        ],
+        embedding_backend=embedding,
+        reranker_backend=reranker,
+    )
+
+    report = json.loads(output_path.read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert embedding.query_batches > 0
+    assert embedding.document_batches > 0
+    assert reranker.pair_batches > 0
+    assert report["model_execution"] == {
+        "embedding_success_count": 2,
+        "reranker_success_count": 2,
+        "required": True,
+        "semantic_case_count": 1,
+        "semantic_case_pass_count": 1,
+    }
+    assert report["gate"]["passed"] is True

@@ -7,6 +7,18 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+RegistryFieldType = Literal[
+    "checkbox",
+    "checkbox_group",
+    "text",
+    "date",
+    "phone",
+    "number",
+    "amount",
+    "signature",
+    "placeholder",
+]
+
 
 class MappingStatus(StrEnum):
     MATCHED = "MATCHED"
@@ -31,7 +43,7 @@ class CanonicalFieldDefinition(BaseModel):
     value_type: str
     aliases: tuple[str, ...]
     description: str
-    compatible_field_types: tuple[str, ...]
+    compatible_field_types: tuple[RegistryFieldType, ...]
     repeatable: bool = False
     source: CanonicalSource
     sensitivity: Literal["public", "business", "personal", "sensitive"]
@@ -44,6 +56,7 @@ class DocumentFieldContext(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     field_id: str = Field(min_length=1, max_length=200)
+    container_id: str = Field(default="", max_length=200)
     label: str = Field(max_length=200)
     normalized_label: str = Field(max_length=200)
     field_type: str = Field(min_length=1, max_length=100)

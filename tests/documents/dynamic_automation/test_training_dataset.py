@@ -46,6 +46,74 @@ def test_layout_hash_never_crosses_train_and_test() -> None:
     assert train_layouts.isdisjoint(test_layouts)
 
 
+def test_all_required_group_identities_are_disjoint_across_split() -> None:
+    split = build_training_split(load_feedback_fixture())
+
+    for attribute in (
+        "document_layout_hash",
+        "document_kind",
+        "document_version",
+        "source_institution",
+    ):
+        train_values = {getattr(item, attribute) for item in split.train}
+        test_values = {getattr(item, attribute) for item in split.test}
+        assert train_values.isdisjoint(test_values)
+
+
+def test_training_split_keeps_transitively_connected_groups_together() -> None:
+    base = load_feedback_fixture()[0]
+    records = (
+        base.model_copy(
+            update={
+                "layout_hash": "1" * 64,
+                "field_context_hash": "1" * 64,
+                "field_id": "bridge-a",
+                "document_kind": "shared-kind",
+                "document_version": "version-a",
+                "source_institution": "institution-a",
+            }
+        ),
+        base.model_copy(
+            update={
+                "layout_hash": "2" * 64,
+                "field_context_hash": "2" * 64,
+                "field_id": "bridge-b",
+                "document_kind": "shared-kind",
+                "document_version": "version-b",
+                "source_institution": "shared-institution",
+            }
+        ),
+        base.model_copy(
+            update={
+                "layout_hash": "3" * 64,
+                "field_context_hash": "3" * 64,
+                "field_id": "bridge-c",
+                "document_kind": "kind-c",
+                "document_version": "version-c",
+                "source_institution": "shared-institution",
+            }
+        ),
+        base.model_copy(
+            update={
+                "layout_hash": "4" * 64,
+                "field_context_hash": "4" * 64,
+                "field_id": "independent",
+                "document_kind": "kind-d",
+                "document_version": "version-d",
+                "source_institution": "institution-d",
+            }
+        ),
+    )
+
+    split = build_training_split(records)
+    train_ids = {item.field_id for item in split.train}
+    test_ids = {item.field_id for item in split.test}
+    bridge_ids = {"bridge-a", "bridge-b", "bridge-c"}
+
+    assert bridge_ids <= train_ids or bridge_ids <= test_ids
+    assert "independent" in train_ids | test_ids
+
+
 def test_training_split_is_reproducible_and_preserves_corrected_labels() -> None:
     records = load_feedback_fixture()
 

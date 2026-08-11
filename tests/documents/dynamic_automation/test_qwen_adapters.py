@@ -84,6 +84,13 @@ CANDIDATES = (
 )
 
 
+def resolve_definition(field_id: str) -> CanonicalFieldDefinition:
+    try:
+        return next(item for item in CANDIDATE_DEFINITIONS if item.field_id == field_id)
+    except StopIteration as error:
+        raise KeyError(field_id) from error
+
+
 class RecordingEmbeddingBackend:
     def __init__(self) -> None:
         self.queries: list[str] = []
@@ -131,6 +138,39 @@ class FakeLogitBackend:
         return self.scores
 
 
+def test_reranker_backend_receives_full_resolved_canonical_definitions() -> None:
+    backend = FakeLogitBackend(scores=(0.8, 0.2))
+    reranker = Qwen3CandidateReranker(
+        backend=backend,
+        definition_resolver=resolve_definition,
+    )
+
+    reranker.rerank(COMPANY_PHONE_CONTEXT, CANDIDATES)
+
+    worker_definition = backend.pairs[0][1]
+    assert "canonical field: worker.phone" in worker_definition
+    assert "entity: worker" in worker_definition
+    assert "value type: phone" in worker_definition
+    assert "aliases: worker phone" in worker_definition
+    assert "description: Worker's phone number." in worker_definition
+
+
+def test_reranker_rejects_unknown_candidate_before_backend_execution() -> None:
+    backend = FakeLogitBackend(scores=(0.5,))
+    reranker = Qwen3CandidateReranker(
+        backend=backend,
+        definition_resolver=resolve_definition,
+    )
+    unknown = (
+        ScoredCandidate(canonical_field_id="unknown.field", score=0.5, rank=1),
+    )
+
+    with pytest.raises(ValueError, match="unknown canonical candidate"):
+        reranker.rerank(COMPANY_PHONE_CONTEXT, unknown)
+
+    assert backend.pairs == []
+
+
 def test_embedding_query_includes_instruction_and_structural_context() -> None:
     backend = RecordingEmbeddingBackend()
     retriever = Qwen3EmbeddingRetriever(backend=backend)
@@ -159,7 +199,9 @@ def test_embedding_batches_candidates_and_returns_bounded_ranked_scores() -> Non
 
 def test_reranker_uses_yes_no_probability_and_returns_zero_to_one() -> None:
     backend = FakeLogitBackend(scores=(0.8, 0.2))
-    reranker = Qwen3CandidateReranker(backend=backend)
+    reranker = Qwen3CandidateReranker(
+        backend=backend, definition_resolver=resolve_definition
+    )
 
     ranked = reranker.rerank(COMPANY_PHONE_CONTEXT, CANDIDATES)
 
@@ -169,15 +211,20 @@ def test_reranker_uses_yes_no_probability_and_returns_zero_to_one() -> None:
     assert all(0 <= item.score <= 1 for item in ranked)
 
 
-def test_reranker_batches_structural_query_and_canonical_ids_at_512_tokens() -> None:
+def test_reranker_batches_structural_query_and_definitions_at_512_tokens() -> None:
     backend = FakeLogitBackend(scores=(0.2, 0.9))
-    reranker = Qwen3CandidateReranker(backend=backend, max_length=512, batch_size=4)
+    reranker = Qwen3CandidateReranker(
+        backend=backend,
+        definition_resolver=resolve_definition,
+        max_length=512,
+        batch_size=4,
+    )
 
     ranked = reranker.rerank(COMPANY_PHONE_CONTEXT, CANDIDATES)
 
     assert len(backend.pairs) == 2
     assert "현재 근무처" in backend.pairs[0][0]
-    assert backend.pairs[1][1] == "company.phone"
+    assert "canonical field: company.phone" in backend.pairs[1][1]
     assert backend.calls == [(512, 4)]
     assert [item.canonical_field_id for item in ranked] == [
         "company.phone",

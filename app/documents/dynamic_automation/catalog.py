@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from pathlib import Path
+from types import MappingProxyType
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -21,7 +24,11 @@ class _CatalogDocument(BaseModel):
 @dataclass(frozen=True)
 class CanonicalCatalog:
     version: str
-    _fields_by_id: dict[str, CanonicalFieldDefinition]
+    definitions: tuple[CanonicalFieldDefinition, ...]
+    _fields_by_id: Mapping[str, CanonicalFieldDefinition] = dataclass_field(
+        repr=False,
+        compare=False,
+    )
 
     @classmethod
     def load(cls, path: Path) -> CanonicalCatalog:
@@ -43,7 +50,18 @@ class CanonicalCatalog:
                 raise ValueError(f"duplicate canonical field identifier: {field.field_id}")
             fields_by_id[field.field_id] = field
 
-        return cls(version=document.version, _fields_by_id=fields_by_id)
+        definitions = tuple(sorted(fields_by_id.values(), key=lambda item: item.field_id))
+        immutable_lookup = MappingProxyType(
+            {definition.field_id: definition for definition in definitions}
+        )
+        return cls(
+            version=document.version,
+            definitions=definitions,
+            _fields_by_id=immutable_lookup,
+        )
+
+    def __iter__(self) -> Iterator[CanonicalFieldDefinition]:
+        return iter(self.definitions)
 
     def get(self, field_id: str) -> CanonicalFieldDefinition:
         try:
@@ -54,7 +72,6 @@ class CanonicalCatalog:
     def compatible(self, context: DocumentFieldContext) -> tuple[CanonicalFieldDefinition, ...]:
         return tuple(
             field
-            for field in self._fields_by_id.values()
+            for field in self.definitions
             if context.field_type in field.compatible_field_types
-            and (field.repeatable or context.repeat_index == 0)
         )

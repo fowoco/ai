@@ -20,6 +20,8 @@ from .qwen import (
 
 AUTO_PRECISION_FLOOR = 0.99
 SENSITIVE_PRECISION_FLOOR = 0.995
+TRAINING_CODE_VERSION = "dynamic-mapping-training-v2"
+EVALUATION_CODE_VERSION = "dynamic-mapping-evaluation-v2"
 
 _CANONICAL_ID_PATTERN = r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$"
 _SHA256_PATTERN = r"^[0-9a-f]{64}$"
@@ -34,6 +36,9 @@ class TrainingExample(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     document_layout_hash: str = Field(pattern=_SHA256_PATTERN)
+    document_kind: str = Field(min_length=1, max_length=100)
+    document_version: str = Field(min_length=1, max_length=100)
+    source_institution: str = Field(min_length=1, max_length=100)
     field_context_hash: str = Field(pattern=_SHA256_PATTERN)
     field_id: str = Field(min_length=1, max_length=200)
     repeat_index: int = Field(ge=0)
@@ -62,11 +67,52 @@ class TrainingPair(BaseModel):
     negative_canonical_field_id: _BoundedCanonicalId
 
 
+class EvaluationMetricsEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    auto_precision: float = Field(ge=0, le=1)
+    sensitive_precision: float = Field(ge=0, le=1)
+    coverage: float = Field(ge=0, le=1)
+    expected_calibration_error: float = Field(ge=0, le=1)
+    p95_latency_ms: float = Field(ge=0)
+
+
+class UnseenFieldEvidence(BaseModel):
+    """Generated catalog-field retrieval evidence, never a self-asserted boolean."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    case_id: str = Field(min_length=1, max_length=200)
+    canonical_field_id: _BoundedCanonicalId
+    query_sha256: str = Field(pattern=_SHA256_PATTERN)
+    candidate_ids: tuple[_BoundedCanonicalId, ...] = Field(max_length=20)
+    retrieved_rank: int | None = Field(default=None, ge=1, le=20)
+
+
+class HeldOutEvaluationReport(BaseModel):
+    """Hashed evidence produced by loading and executing an exported artifact."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["dynamic-mapping-held-out-v2"]
+    evaluation_code_version: Literal["dynamic-mapping-evaluation-v2"]
+    model_artifact_sha256: str = Field(pattern=_SHA256_PATTERN)
+    dataset_sha256: str = Field(pattern=_SHA256_PATTERN)
+    catalog_sha256: str = Field(pattern=_SHA256_PATTERN)
+    catalog_version: str = Field(max_length=20, pattern=r"^v[1-9][0-9]*$")
+    sample_count: int = Field(ge=1)
+    cohort_count: int = Field(ge=1)
+    model_execution_count: int = Field(ge=1)
+    metrics: EvaluationMetricsEvidence
+    unseen_field_evidence: UnseenFieldEvidence
+
+
 class ModelManifest(BaseModel):
     """Immutable evidence used to compare a candidate with the pinned baseline."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    schema_version: Literal["dynamic-mapping-model-manifest-v2"]
     model_kind: Literal[
         "qwen_baseline", "domain_bi_encoder", "domain_pair_reranker"
     ]
@@ -74,7 +120,15 @@ class ModelManifest(BaseModel):
     base_model_revision: str = Field(min_length=1, max_length=200)
     dataset_sha256: str = Field(pattern=_SHA256_PATTERN)
     catalog_sha256: str = Field(pattern=_SHA256_PATTERN)
+    model_artifact_sha256: str = Field(pattern=_SHA256_PATTERN)
+    evaluation_report_sha256: str = Field(pattern=_SHA256_PATTERN)
     catalog_version: str = Field(max_length=20, pattern=r"^v[1-9][0-9]*$")
+    training_code_version: Literal["dynamic-mapping-training-v2"]
+    evaluation_code_version: Literal["dynamic-mapping-evaluation-v2"]
+    training_sample_count: int = Field(ge=1)
+    evaluation_sample_count: int = Field(ge=1)
+    training_cohort_count: int = Field(ge=1)
+    evaluation_cohort_count: int = Field(ge=1)
     auto_precision: float = Field(ge=0, le=1)
     sensitive_precision: float = Field(ge=0, le=1)
     coverage: float = Field(ge=0, le=1)
@@ -87,14 +141,17 @@ class ModelManifest(BaseModel):
     catalog_field_ids: tuple[_BoundedCanonicalId, ...] = Field(
         min_length=1, max_length=10_000
     )
-    unseen_catalog_field_id: _BoundedCanonicalId | None = None
-    unseen_catalog_retrieved: bool
 
-    @field_validator("catalog_sha256")
+    @field_validator(
+        "dataset_sha256",
+        "catalog_sha256",
+        "model_artifact_sha256",
+        "evaluation_report_sha256",
+    )
     @classmethod
-    def _catalog_hash_is_not_a_placeholder(cls, value: str) -> str:
+    def _hash_is_not_a_placeholder(cls, value: str) -> str:
         if value == "0" * 64:
-            raise ValueError("catalog_sha256 must not be the zero placeholder")
+            raise ValueError("evidence SHA-256 must not be the zero placeholder")
         return value
 
     @field_validator("catalog_field_ids")
@@ -131,26 +188,38 @@ def build_training_split(
             key=_example_sort_key,
         )
     )
-    layouts = sorted({example.document_layout_hash for example in examples})
-    if len(layouts) < 2:
-        test_layouts: set[str] = set()
+    components = _group_components(examples)
+    if len(components) < 2:
+        test_indices: set[int] = set()
     else:
-        test_count = max(1, len(layouts) // 5)
-        ranked_layouts = sorted(
-            layouts,
-            key=lambda layout: (hashlib.sha256(layout.encode("ascii")).hexdigest(), layout),
+        test_count = max(1, len(components) // 5)
+        ranked_components = sorted(
+            components,
+            key=lambda component: (
+                hashlib.sha256(
+                    "\n".join(
+                        _example_group_fingerprint(examples[index])
+                        for index in component
+                    ).encode("utf-8")
+                ).hexdigest(),
+                tuple(_example_sort_key(examples[index]) for index in component),
+            ),
         )
-        test_layouts = set(ranked_layouts[:test_count])
+        test_indices = {
+            index
+            for component in ranked_components[:test_count]
+            for index in component
+        }
     return TrainingSplit(
         train=tuple(
             example
-            for example in examples
-            if example.document_layout_hash not in test_layouts
+            for index, example in enumerate(examples)
+            if index not in test_indices
         ),
         test=tuple(
             example
-            for example in examples
-            if example.document_layout_hash in test_layouts
+            for index, example in enumerate(examples)
+            if index in test_indices
         ),
     )
 
@@ -159,7 +228,7 @@ def build_hard_negatives(
     split: TrainingSplit, catalog: CanonicalCatalog
 ) -> tuple[TrainingPair, ...]:
     """Return deterministic catalog negatives, with known entity confusions first."""
-    definitions = tuple(catalog._fields_by_id.values())
+    definitions = catalog.definitions
     pairs: list[TrainingPair] = []
     for example in split.train:
         positive = catalog.get(example.canonical_field_id)
@@ -192,7 +261,15 @@ def build_hard_negatives(
 
 
 def compare_manifests(
-    *, baseline: ModelManifest, candidate: ModelManifest
+    *,
+    baseline: ModelManifest,
+    candidate: ModelManifest,
+    baseline_report: HeldOutEvaluationReport,
+    candidate_report: HeldOutEvaluationReport,
+    baseline_artifact_sha256: str | None = None,
+    candidate_artifact_sha256: str | None = None,
+    baseline_report_sha256: str | None = None,
+    candidate_report_sha256: str | None = None,
 ) -> PromotionDecision:
     """Require every safety, quality, efficiency, and generalization gate."""
     reasons: list[str] = []
@@ -211,21 +288,47 @@ def compare_manifests(
         or (candidate.base_model_repo, candidate.base_model_revision) != expected_base
     ):
         reasons.append("base_model_manifest")
+    baseline_evidence_valid = _manifest_matches_evidence(
+        baseline,
+        baseline_report,
+        artifact_sha256=baseline_artifact_sha256,
+        report_sha256=baseline_report_sha256,
+    )
+    candidate_evidence_valid = _manifest_matches_evidence(
+        candidate,
+        candidate_report,
+        artifact_sha256=candidate_artifact_sha256,
+        report_sha256=candidate_report_sha256,
+    )
+    if not baseline_evidence_valid:
+        reasons.append("baseline_evaluation_evidence")
+    if not candidate_evidence_valid:
+        reasons.append("candidate_evaluation_evidence")
+
+    baseline_metrics = baseline_report.metrics
+    candidate_metrics = candidate_report.metrics
     if (
-        candidate.auto_precision < AUTO_PRECISION_FLOOR
-        or candidate.auto_precision < baseline.auto_precision
+        candidate_metrics.auto_precision < AUTO_PRECISION_FLOOR
+        or candidate_metrics.auto_precision < baseline_metrics.auto_precision
     ):
         reasons.append("auto_precision")
     if (
-        candidate.sensitive_precision < SENSITIVE_PRECISION_FLOOR
-        or candidate.sensitive_precision < baseline.sensitive_precision
+        candidate_metrics.sensitive_precision < SENSITIVE_PRECISION_FLOOR
+        or candidate_metrics.sensitive_precision < baseline_metrics.sensitive_precision
     ):
         reasons.append("sensitive_precision")
-    if candidate.expected_calibration_error > baseline.expected_calibration_error:
+    if (
+        candidate_metrics.expected_calibration_error
+        > baseline_metrics.expected_calibration_error
+    ):
         reasons.append("expected_calibration_error")
-    if not (
-        candidate.coverage > baseline.coverage
-        or candidate.p95_latency_ms < baseline.p95_latency_ms
+    if candidate_metrics.coverage < baseline_metrics.coverage:
+        reasons.append("coverage")
+    if candidate_metrics.p95_latency_ms > baseline_metrics.p95_latency_ms:
+        reasons.append("p95_latency_ms")
+    if (
+        candidate_metrics.coverage == baseline_metrics.coverage
+        and candidate_metrics.p95_latency_ms == baseline_metrics.p95_latency_ms
     ):
         reasons.append("coverage_or_p95_latency_ms")
     if candidate.catalog_version != baseline.catalog_version:
@@ -234,16 +337,61 @@ def compare_manifests(
         reasons.append("catalog_sha256")
     if candidate.catalog_field_ids != baseline.catalog_field_ids:
         reasons.append("catalog_field_ids")
+    unseen = candidate_report.unseen_field_evidence
+    unseen_rank_valid = (
+        unseen.retrieved_rank is not None
+        and unseen.retrieved_rank <= len(unseen.candidate_ids)
+        and unseen.candidate_ids[unseen.retrieved_rank - 1] == unseen.canonical_field_id
+    )
     if (
-        candidate.unseen_catalog_field_id is None
-        or not candidate.unseen_catalog_retrieved
-        or candidate.unseen_catalog_field_id not in candidate.catalog_field_ids
-        or candidate.unseen_catalog_field_id not in baseline.catalog_field_ids
-        or candidate.unseen_catalog_field_id
-        in candidate.training_canonical_field_ids
+        not unseen_rank_valid
+        or unseen.canonical_field_id not in candidate.catalog_field_ids
+        or unseen.canonical_field_id not in baseline.catalog_field_ids
+        or unseen.canonical_field_id in candidate.training_canonical_field_ids
     ):
         reasons.append("unseen_catalog_retrieval")
     return PromotionDecision(promote=not reasons, reasons=tuple(reasons))
+
+
+def held_out_evaluation_report_bytes(report: HeldOutEvaluationReport) -> bytes:
+    serialized = json.dumps(
+        report.model_dump(mode="json"),
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    )
+    return (serialized + "\n").encode("utf-8")
+
+
+def held_out_evaluation_report_sha256(report: HeldOutEvaluationReport) -> str:
+    return hashlib.sha256(held_out_evaluation_report_bytes(report)).hexdigest()
+
+
+def _manifest_matches_evidence(
+    manifest: ModelManifest,
+    report: HeldOutEvaluationReport,
+    *,
+    artifact_sha256: str | None,
+    report_sha256: str | None,
+) -> bool:
+    metrics = report.metrics
+    return (
+        artifact_sha256 == manifest.model_artifact_sha256
+        and report_sha256 == manifest.evaluation_report_sha256
+        and report.model_artifact_sha256 == manifest.model_artifact_sha256
+        and report.dataset_sha256 == manifest.dataset_sha256
+        and report.catalog_sha256 == manifest.catalog_sha256
+        and report.catalog_version == manifest.catalog_version
+        and report.evaluation_code_version == manifest.evaluation_code_version
+        and report.sample_count == manifest.evaluation_sample_count
+        and report.cohort_count == manifest.evaluation_cohort_count
+        and metrics.auto_precision == manifest.auto_precision
+        and metrics.sensitive_precision == manifest.sensitive_precision
+        and metrics.coverage == manifest.coverage
+        and metrics.expected_calibration_error
+        == manifest.expected_calibration_error
+        and metrics.p95_latency_ms == manifest.p95_latency_ms
+    )
 
 
 def training_dataset_sha256(split: TrainingSplit) -> str:
@@ -279,6 +427,9 @@ def _to_example(record: MappingFeedbackRecord) -> TrainingExample:
     )
     return TrainingExample(
         document_layout_hash=record.layout_hash,
+        document_kind=record.document_kind,
+        document_version=record.document_version,
+        source_institution=record.source_institution,
         field_context_hash=record.field_context_hash,
         field_id=record.field_id,
         repeat_index=record.repeat_index,
@@ -294,6 +445,54 @@ def _example_sort_key(example: TrainingExample) -> tuple[str, str, str, int]:
         example.field_context_hash,
         example.field_id,
         example.repeat_index,
+    )
+
+
+def _group_components(examples: Sequence[TrainingExample]) -> tuple[tuple[int, ...], ...]:
+    """Return connected components sharing any required group identity."""
+    parents = list(range(len(examples)))
+
+    def find(index: int) -> int:
+        while parents[index] != index:
+            parents[index] = parents[parents[index]]
+            index = parents[index]
+        return index
+
+    def union(left: int, right: int) -> None:
+        left_root = find(left)
+        right_root = find(right)
+        if left_root != right_root:
+            parents[max(left_root, right_root)] = min(left_root, right_root)
+
+    seen: dict[tuple[str, str], int] = {}
+    for index, example in enumerate(examples):
+        identities = (
+            ("layout_hash", example.document_layout_hash),
+            ("document_kind", example.document_kind),
+            ("document_version", example.document_version),
+            ("source_institution", example.source_institution),
+        )
+        for identity in identities:
+            previous = seen.setdefault(identity, index)
+            union(index, previous)
+
+    components: dict[int, list[int]] = {}
+    for index in range(len(examples)):
+        components.setdefault(find(index), []).append(index)
+    return tuple(tuple(indices) for _, indices in sorted(components.items()))
+
+
+def _example_group_fingerprint(example: TrainingExample) -> str:
+    return "|".join(
+        (
+            example.document_layout_hash,
+            example.document_kind,
+            example.document_version,
+            example.source_institution,
+            example.field_context_hash,
+            example.field_id,
+            str(example.repeat_index),
+        )
     )
 
 

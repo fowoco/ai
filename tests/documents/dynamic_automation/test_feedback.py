@@ -23,8 +23,11 @@ from app.documents.dynamic_automation.models import (
 
 def feedback_payload(**updates: object) -> dict[str, object]:
     payload: dict[str, object] = {
-        "schema_version": "v1",
+        "schema_version": "v2",
         "layout_hash": "a" * 64,
+        "document_kind": "integrated_application",
+        "document_version": "v34",
+        "source_institution": "immigration_office",
         "field_context_hash": "b" * 64,
         "field_id": "passport-field-1",
         "repeat_index": 0,
@@ -84,6 +87,24 @@ def test_feedback_bounds_structural_text() -> None:
 
 
 @pytest.mark.parametrize(
+    "metadata_field",
+    ("document_kind", "document_version", "source_institution"),
+)
+def test_feedback_requires_bounded_group_metadata(metadata_field: str) -> None:
+    complete = MappingFeedbackRecord.model_validate(feedback_payload())
+    assert getattr(complete, metadata_field)
+    missing = feedback_payload()
+    missing.pop(metadata_field)
+
+    with pytest.raises(ValidationError):
+        MappingFeedbackRecord.model_validate(missing)
+    with pytest.raises(ValidationError):
+        MappingFeedbackRecord.model_validate(
+            feedback_payload(**{metadata_field: "x" * 101})
+        )
+
+
+@pytest.mark.parametrize(
     "updates",
     (
         {"predicted_canonical_field_id": "identity." + "x" * 200},
@@ -115,9 +136,10 @@ def test_feedback_rejects_inconsistent_matched_prediction() -> None:
 def test_feedback_builds_deterministic_record_from_mapping_plan() -> None:
     context = DocumentFieldContext(
         field_id="passport-field-1",
+        container_id="section0.table0",
         label="Passport number",
         normalized_label="passportnumber",
-        field_type="passport_number",
+        field_type="text",
         document_title="Employment application",
         section="Identity",
         row_labels=("Identity", "Passport number"),
@@ -153,12 +175,15 @@ def test_feedback_builds_deterministic_record_from_mapping_plan() -> None:
         plan,
         context,
         layout_hash="a" * 64,
+        document_kind="integrated_application",
+        document_version="v34",
+        source_institution="immigration_office",
         decision=ReviewerDecision.ACCEPTED,
         final_canonical_field_id="identity.passport_number",
     )
 
     assert record.field_context_hash == (
-        "428f0f637ef4c20f9e085ee4b25c30af9f5d2ec6822e7f3bdc4555eba35ddc5a"
+        "92f5f396b872309c1cb71d37dede66b6a04128c0b3f6619b0b6f6f04bf0298b4"
     )
     assert [candidate.model_dump() for candidate in record.candidate_scores] == [
         {

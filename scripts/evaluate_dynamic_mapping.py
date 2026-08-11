@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any
@@ -164,7 +164,12 @@ def evaluate_cases(
     )
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    embedding_backend: Any | None = None,
+    reranker_backend: Any | None = None,
+) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cases", required=True, type=Path)
     parser.add_argument("--catalog", required=True, type=Path)
@@ -172,23 +177,42 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--mode", required=True, choices=("rule", "qwen"))
     args = parser.parse_args(argv)
 
+    execution = _ModelExecutionTracker()
     try:
         fixture_cases = _load_cases(args.cases)
-        catalog, evaluated = _run_cases(fixture_cases, args.catalog, mode=args.mode)
+        catalog, evaluated = _run_cases(
+            fixture_cases,
+            args.catalog,
+            mode=args.mode,
+            execution=execution,
+            embedding_backend=embedding_backend,
+            reranker_backend=reranker_backend,
+        )
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"evaluation failed: {error}", file=sys.stderr)
         return 1
 
     metrics = evaluate_cases(evaluated)
+    model_execution = execution.report(required=args.mode == "qwen")
     passed = (
         metrics.auto_precision >= AUTO_PRECISION_THRESHOLD
         and metrics.sensitive_field_precision >= SENSITIVE_PRECISION_THRESHOLD
+        and (
+            args.mode != "qwen"
+            or (
+                execution.embedding_success_count > 0
+                and execution.reranker_success_count > 0
+                and execution.semantic_case_count > 0
+                and execution.semantic_case_pass_count == execution.semantic_case_count
+            )
+        )
     )
     report = {
         "mode": args.mode,
         "catalog_version": catalog.version,
         "case_count": len(evaluated),
         "metrics": metrics.model_dump(mode="json"),
+        "model_execution": model_execution,
         "gate": {
             "auto_precision_threshold": AUTO_PRECISION_THRESHOLD,
             "sensitive_field_precision_threshold": SENSITIVE_PRECISION_THRESHOLD,
@@ -222,7 +246,13 @@ def _load_cases(path: Path) -> tuple[_FixtureCase, ...]:
 
 
 def _run_cases(
-    fixture_cases: Sequence[_FixtureCase], catalog_path: Path, *, mode: str
+    fixture_cases: Sequence[_FixtureCase],
+    catalog_path: Path,
+    *,
+    mode: str,
+    execution: _ModelExecutionTracker,
+    embedding_backend: Any | None = None,
+    reranker_backend: Any | None = None,
 ) -> tuple[Any, tuple[EvaluationCase, ...]]:
     _ensure_project_root_on_path()
     from app.documents.dynamic_automation.catalog import CanonicalCatalog
@@ -233,7 +263,13 @@ def _run_cases(
         DocumentFieldContext.model_validate(case.context.model_dump(mode="json"))
         for case in fixture_cases
     )
-    mapper = _make_mapper(catalog, mode=mode)
+    mapper = _make_mapper(
+        catalog,
+        mode=mode,
+        execution=execution,
+        embedding_backend=embedding_backend,
+        reranker_backend=reranker_backend,
+    )
     plan = mapper.map(contexts)
     evaluated: list[EvaluationCase] = []
     for fixture, mapping in zip(fixture_cases, plan.mappings, strict=True):
@@ -260,40 +296,122 @@ def _run_cases(
                 ),
             )
         )
+        if (
+            fixture.expected_status is EvaluationStatus.MATCHED
+            and mapping.evidence.rule == "semantic_decision_gate"
+        ):
+            execution.semantic_case_count += 1
+            if (
+                mapping.status.value == fixture.expected_status.value
+                and mapping.canonical_field_id == fixture.expected_canonical_field_id
+            ):
+                execution.semantic_case_pass_count += 1
     return catalog, tuple(evaluated)
 
 
-def _make_mapper(catalog: Any, *, mode: str) -> Any:
+def _make_mapper(
+    catalog: Any,
+    *,
+    mode: str,
+    execution: _ModelExecutionTracker,
+    embedding_backend: Any | None = None,
+    reranker_backend: Any | None = None,
+) -> Any:
     from app.documents.dynamic_automation.mapper import HybridFieldMapper, MappingThresholds
 
     if mode == "rule":
         retriever: Any = _UnavailableRetriever()
         reranker: Any = _UnavailableReranker()
+        min_reranker_score = 0.90
+        min_margin = 0.10
     else:
+        from app.core.config import Settings
         from app.documents.dynamic_automation.qwen import (
             Qwen3CandidateReranker,
             Qwen3EmbeddingRetriever,
         )
 
-        embedding_path = os.environ.get("FOWOCO_QWEN3_EMBEDDING_PATH")
-        reranker_path = os.environ.get("FOWOCO_QWEN3_RERANKER_PATH")
-        if embedding_path is None or reranker_path is None:
+        settings = Settings()
+        if not settings.dynamic_automation_mapping_enabled:
             raise ValueError(
-                "qwen mode requires FOWOCO_QWEN3_EMBEDDING_PATH and "
-                "FOWOCO_QWEN3_RERANKER_PATH"
+                "qwen mode requires FOWOCO_DYNAMIC_AUTOMATION_MAPPING_ENABLED=true"
             )
-        retriever = Qwen3EmbeddingRetriever(embedding_path)
-        reranker = Qwen3CandidateReranker(reranker_path)
+        retriever = _TrackingRetriever(
+            Qwen3EmbeddingRetriever(
+                settings.dynamic_automation_embedding_model_path,
+                backend=embedding_backend,
+            ),
+            execution,
+        )
+        reranker = _TrackingReranker(
+            Qwen3CandidateReranker(
+                settings.dynamic_automation_reranker_model_path,
+                backend=reranker_backend,
+                definition_resolver=catalog.get,
+            ),
+            execution,
+        )
+        min_reranker_score = settings.dynamic_automation_min_reranker_score
+        min_margin = settings.dynamic_automation_min_margin
     return HybridFieldMapper(
         catalog=catalog,
         retriever=retriever,
         reranker=reranker,
         thresholds=MappingThresholds(
-            min_reranker_score=0.90,
-            min_margin=0.10,
+            min_reranker_score=min_reranker_score,
+            min_margin=min_margin,
         ),
         top_k=5,
     )
+
+
+@dataclass
+class _ModelExecutionTracker:
+    embedding_success_count: int = 0
+    reranker_success_count: int = 0
+    semantic_case_count: int = 0
+    semantic_case_pass_count: int = 0
+
+    def report(self, *, required: bool) -> dict[str, int | bool]:
+        return {
+            "embedding_success_count": self.embedding_success_count,
+            "reranker_success_count": self.reranker_success_count,
+            "required": required,
+            "semantic_case_count": self.semantic_case_count,
+            "semantic_case_pass_count": self.semantic_case_pass_count,
+        }
+
+
+@dataclass(frozen=True)
+class _TrackingRetriever:
+    delegate: Any
+    execution: _ModelExecutionTracker
+
+    @property
+    def model_version(self) -> str:
+        return str(self.delegate.model_version)
+
+    def retrieve(self, *args: Any, **kwargs: Any) -> Any:
+        result = self.delegate.retrieve(*args, **kwargs)
+        if isinstance(result, tuple):
+            self.execution.embedding_success_count += 1
+        return result
+
+
+@dataclass(frozen=True)
+class _TrackingReranker:
+    delegate: Any
+    execution: _ModelExecutionTracker
+
+    @property
+    def model_version(self) -> str:
+        return str(self.delegate.model_version)
+
+    def rerank(self, *args: Any, **kwargs: Any) -> Any:
+        result = self.delegate.rerank(*args, **kwargs)
+        if isinstance(result, tuple):
+            self.execution.reranker_success_count += 1
+        return result
 
 
 class _UnavailableRetriever:

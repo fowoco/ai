@@ -1,38 +1,70 @@
 [
   {
     "field_id": "intake",
+    "target_id": "section0.table0.row1.cell0",
     "label": "접수",
     "type": "text",
-    "kind": "text_field",
+    "category": "step1_application",
     "row": 1,
     "column": 0,
-    "required": false
+    "current_text": "",
+    "required": false,
+    "options": null,
+    "kind": "text_field",
+    "xml_segments": ["section0.table0.row1.cell0"],
+    "visual_regions": [],
+    "constraints": {},
+    "disposition": null
   },
   {
     "field_id": "next-page",
+    "target_id": "section0.table0.row1.cell1",
     "label": "→",
     "type": "text",
-    "kind": "text_field",
+    "category": "step1_application",
     "row": 1,
     "column": 1,
-    "required": false
+    "current_text": "",
+    "required": false,
+    "options": null,
+    "kind": "text_field",
+    "xml_segments": ["section0.table0.row1.cell1"],
+    "visual_regions": [],
+    "constraints": {},
+    "disposition": null
   },
   {
     "field_id": "official-use",
+    "target_id": "section0.table0.row2.cell0",
     "label": "For Official Use",
     "type": "text",
-    "kind": "text_field",
+    "category": "step1_application",
     "row": 2,
     "column": 0,
-    "required": false
+    "current_text": "",
+    "required": false,
+    "options": null,
+    "kind": "official_region",
+    "xml_segments": ["section0.table0.row2.cell0"],
+    "visual_regions": [],
+    "constraints": {},
+    "disposition": null
   },
   {
     "field_id": "signature",
+    "target_id": "section0.table0.row3.cell0",
     "label": "서명",
     "type": "signature",
-    "kind": "signable_region",
+    "category": "step1_application",
     "row": 3,
     "column": 0,
-    "required": true
+    "current_text": "",
+    "required": true,
+    "options": null,
+    "kind": "signable_region",
+    "xml_segments": ["section0.table0.row3.cell0"],
+    "visual_regions": [],
+    "constraints": {},
+    "disposition": null
   }
 ]
