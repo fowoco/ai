@@ -85,6 +85,7 @@ class FieldMapping(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     field_id: str = Field(min_length=1, max_length=200)
+    repeat_index: int = Field(ge=0)
     status: MappingStatus
     canonical_field_id: str | None = Field(
         default=None, pattern=r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$"
