@@ -11,6 +11,22 @@ Server가 재갱신 LangGraph를 호출할 때 쓰는 Internal API 요약이다.
 
 AI는 Workflow/Task 행을 만들지 않는다. 판단 신호만 주고 Server가 반영한다.
 
+## Server Task Workflow 재사용
+
+Renewal 실행은 PLAN과 달리 Server에 이미 생성된 Task를 처리한다. 요청의
+`task.workflowId`가 있으면 Language/Intent 단계의 Workflow constraint로 사용하고, 정상
+응답에도 같은 canonical ID를 유지한다.
+
+| Task type | Workflow ID |
+|---|---|
+| `RECONTRACT` | `WF-CON-001` |
+| `EMPLOYMENT_PERIOD_EXTENSION` | `WF-CON-001` |
+| `STAY_PERIOD_EXTENSION` | `WF-STY-001` |
+
+외부 Language Node가 다른 Workflow를 반환해도 Renewal Graph는 Server Task의 Workflow를
+복원한다. `intent=OUT_OF_SCOPE`, `scenario=out_of_scope`인 종료 응답만 `workflowId=""`를
+반환한다.
+
 ## Endpoint
 
 ```text

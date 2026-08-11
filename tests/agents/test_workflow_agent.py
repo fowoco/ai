@@ -50,6 +50,16 @@ def test_resolve_contract_workflow_from_instruction() -> None:
     assert wf.workflow_id == "WF-CON-001"
 
 
+def test_resolve_employment_extension_as_contract_workflow() -> None:
+    agent = WorkflowAgent()
+    wf = agent.resolve_workflow(
+        "EXPIRY_RENEWAL",
+        instruction="취업활동기간 연장 준비해줘",
+    )
+    assert wf is not None
+    assert wf.workflow_id == "WF-CON-001"
+
+
 def test_resolve_document_and_administration_workflows() -> None:
     agent = WorkflowAgent()
 

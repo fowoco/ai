@@ -79,7 +79,7 @@ PLAN에는 `plannedIntent`, `plannedWorkflowId`, Worker context를 보내지 않
 - evidence는 Slot이 아니므로 `extractedSlots`에 `evidence:*` key를 만들지 않는다.
 - A.X가 여러 Intent를 반환해도 MVP 응답은 원문 등장 순서의 첫 Intent만 사용한다.
 - 같은 Intent에 여러 Knowledge Workflow가 있으면 발화/evidence의 업무 신호로 선택한다.
-- `EXPIRY_RENEWAL`의 체류 신호는 `WF-STY-001`, 계약 신호는 `WF-CON-001`이다.
+- `EXPIRY_RENEWAL`의 체류 신호는 `WF-STY-001`, 계약·재계약·취업활동기간 연장·고용허가기간 연장 신호는 `WF-CON-001`이다.
 
 ## OUT_OF_SCOPE 응답
 
