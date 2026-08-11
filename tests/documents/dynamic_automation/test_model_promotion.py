@@ -45,6 +45,7 @@ def manifest(
         "worker.email",
         "worker.phone",
     ),
+    dataset_sha256: str = "b" * 64,
 ) -> ModelManifest:
     unseen_id = unseen_field or "worker.email"
     candidate_ids = (unseen_id,) if unseen_retrieved and unseen_field is not None else ()
@@ -52,7 +53,7 @@ def manifest(
         schema_version="dynamic-mapping-held-out-v2",
         evaluation_code_version=EVALUATION_CODE_VERSION,
         model_artifact_sha256=ARTIFACT_SHA256,
-        dataset_sha256="b" * 64,
+        dataset_sha256=dataset_sha256,
         catalog_sha256="c" * 64,
         catalog_version="v1",
         sample_count=10,
@@ -80,7 +81,7 @@ def manifest(
         model_kind="domain_bi_encoder",
         base_model_repo=QWEN3_EMBEDDING_REPO,
         base_model_revision=QWEN3_EMBEDDING_REVISION,
-        dataset_sha256="b" * 64,
+        dataset_sha256=dataset_sha256,
         catalog_sha256="c" * 64,
         model_artifact_sha256=ARTIFACT_SHA256,
         evaluation_report_sha256=report_sha256,
@@ -273,6 +274,16 @@ def test_model_is_not_promoted_when_catalog_hashes_differ() -> None:
 
     assert decision.promote is False
     assert "catalog_sha256" in decision.reasons
+
+
+def test_model_is_not_promoted_when_held_out_datasets_differ() -> None:
+    decision = compare_for_test(
+        baseline=baseline_manifest(),
+        candidate=manifest(coverage=0.81, dataset_sha256="e" * 64),
+    )
+
+    assert decision.promote is False
+    assert "dataset_sha256" in decision.reasons
 
 
 def test_model_manifest_rejects_disconnected_boolean_unseen_evidence() -> None:

@@ -333,6 +333,8 @@ def compare_manifests(
         reasons.append("coverage_or_p95_latency_ms")
     if candidate.catalog_version != baseline.catalog_version:
         reasons.append("catalog_version")
+    if candidate.dataset_sha256 != baseline.dataset_sha256:
+        reasons.append("dataset_sha256")
     if candidate.catalog_sha256 != baseline.catalog_sha256:
         reasons.append("catalog_sha256")
     if candidate.catalog_field_ids != baseline.catalog_field_ids:
