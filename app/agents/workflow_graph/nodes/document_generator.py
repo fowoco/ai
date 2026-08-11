@@ -46,16 +46,20 @@ class StubDocumentGenerator:
 
     # 템플릿 id 기준 stub 목록 생성
     def __call__(self, state: RenewalState) -> list[dict[str, Any]]:
-        return [
-            {
-                "template_id": tid,
-                "name": template_display_name(tid),
-                "format": "hwp",
-                "status": "stub",
-                "mapped_fields": sorted(values_for_template(tid, state).keys()),
-            }
-            for tid in draft_template_ids(state)
-        ]
+        results: list[dict[str, Any]] = []
+        for tid in draft_template_ids(state):
+            values = values_for_template(tid, state)
+            results.append(
+                {
+                    "template_id": tid,
+                    "name": template_display_name(tid),
+                    "format": "hwp",
+                    "status": "stub",
+                    "mapped_fields": sorted(values.keys()),
+                    "values": values,
+                }
+            )
+        return results
 
 
 # DocumentEditingService로 초안 생성 시도 실패 시 stub 메타
@@ -98,6 +102,7 @@ class EditingServiceDocumentGenerator:
                         "path": str(mutation.destination),
                         "changed_fields": list(mutation.changed_fields),
                         "mapped_fields": sorted(values.keys()),
+                        "values": values,
                     }
                 )
             except Exception as exc:  # noqa: BLE001 — 문서별 실패는 stub로 흡수
@@ -109,6 +114,7 @@ class EditingServiceDocumentGenerator:
                         "status": "stub",
                         "error": str(exc),
                         "mapped_fields": sorted(values.keys()),
+                        "values": values,
                     }
                 )
         return results
