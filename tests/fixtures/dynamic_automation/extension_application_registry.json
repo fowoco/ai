@@ -1,0 +1,38 @@
+[
+  {
+    "field_id": "intake",
+    "label": "접수",
+    "type": "text",
+    "kind": "text_field",
+    "row": 1,
+    "column": 0,
+    "required": false
+  },
+  {
+    "field_id": "next-page",
+    "label": "→",
+    "type": "text",
+    "kind": "text_field",
+    "row": 1,
+    "column": 1,
+    "required": false
+  },
+  {
+    "field_id": "official-use",
+    "label": "For Official Use",
+    "type": "text",
+    "kind": "text_field",
+    "row": 2,
+    "column": 0,
+    "required": false
+  },
+  {
+    "field_id": "signature",
+    "label": "서명",
+    "type": "signature",
+    "kind": "signable_region",
+    "row": 3,
+    "column": 0,
+    "required": true
+  }
+]

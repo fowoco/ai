@@ -1,0 +1,47 @@
+[
+  {
+    "field_id": "workplace-heading",
+    "label": "현재 근무처",
+    "type": "text",
+    "kind": "text_field",
+    "row": 7,
+    "column": 0,
+    "required": false
+  },
+  {
+    "field_id": "business-registration-number",
+    "label": "사업자등록번호",
+    "type": "business_number",
+    "kind": "text_field",
+    "row": 7,
+    "column": 1,
+    "required": true
+  },
+  {
+    "field_id": "workplace-phone",
+    "label": "전화번호:",
+    "type": "phone",
+    "kind": "text_field",
+    "row": 7,
+    "column": 2,
+    "required": true
+  },
+  {
+    "field_id": "worker-heading",
+    "label": "근로자",
+    "type": "text",
+    "kind": "text_field",
+    "row": 12,
+    "column": 0,
+    "required": false
+  },
+  {
+    "field_id": "worker-phone",
+    "label": "전화번호",
+    "type": "phone",
+    "kind": "text_field",
+    "row": 12,
+    "column": 1,
+    "required": true
+  }
+]
