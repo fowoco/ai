@@ -55,6 +55,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise ValueError("seed must be non-negative")
         records = _load_feedback(args.feedback)
         catalog = CanonicalCatalog.load(args.catalog)
+        mismatched_versions = sorted(
+            {
+                record.catalog_version
+                for record in records
+                if record.catalog_version != catalog.version
+            }
+        )
+        if mismatched_versions:
+            raise ValueError(
+                f"feedback catalog_version {', '.join(mismatched_versions)} "
+                f"does not match loaded catalog {catalog.version}"
+            )
         split = build_training_split(records)
         if not split.train:
             raise ValueError("feedback contains no reviewer-approved training labels")
@@ -89,7 +101,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             training_canonical_field_ids=tuple(
                 sorted({example.canonical_field_id for example in split.train})
             ),
+            catalog_field_ids=tuple(sorted(catalog._fields_by_id)),
             unseen_catalog_field_id=None,
+            unseen_catalog_retrieved=False,
         )
     except (
         OSError,

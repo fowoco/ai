@@ -90,9 +90,27 @@ def test_hard_negatives_are_type_compatible_and_prioritize_entity_confusions() -
     assert pairs[0].positive_canonical_field_id == "worker.phone"
     assert pairs[0].negative_canonical_field_id == "company.phone"
     assert all(
-        catalog.get(pair.positive_canonical_field_id).value_type
-        == catalog.get(pair.negative_canonical_field_id).value_type
+        set(catalog.get(pair.positive_canonical_field_id).compatible_field_types)
+        & set(catalog.get(pair.negative_canonical_field_id).compatible_field_types)
         for pair in pairs
+    )
+
+
+def test_passport_and_registration_ids_are_prioritized_hard_negatives() -> None:
+    passport = next(
+        record
+        for record in load_feedback_fixture()
+        if record.field_id == "passport_identifier"
+    )
+    split = build_training_split([passport])
+    catalog = CanonicalCatalog.load(CATALOG_PATH)
+
+    pairs = build_hard_negatives(split, catalog)
+
+    assert pairs[0].positive_canonical_field_id == "identity.passport_number"
+    assert (
+        pairs[0].negative_canonical_field_id
+        == "identity.alien_registration_number"
     )
 
 
@@ -118,6 +136,46 @@ def test_training_cli_refuses_to_download_when_pinned_cache_is_absent(
     )
 
     assert exit_code == 1
+    assert not output_dir.exists()
+
+
+def test_training_cli_rejects_feedback_from_a_different_catalog_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    payloads = [
+        record.model_dump(mode="json") for record in load_feedback_fixture()
+    ]
+    payloads[-1]["catalog_version"] = "v2"
+    feedback_path = tmp_path / "mixed-feedback.jsonl"
+    feedback_path.write_text(
+        "".join(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n"
+            for payload in payloads
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FOWOCO_MODEL_CACHE_DIR", str(tmp_path / "missing-cache"))
+    output_dir = tmp_path / "output"
+
+    exit_code = training_cli.main(
+        [
+            "--feedback",
+            str(feedback_path),
+            "--catalog",
+            str(CATALOG_PATH),
+            "--output-dir",
+            str(output_dir),
+            "--seed",
+            "42",
+            "--model-kind",
+            "bi-encoder",
+        ]
+    )
+
+    assert exit_code == 1
+    assert "feedback catalog_version v2 does not match loaded catalog v1" in capsys.readouterr().err
     assert not output_dir.exists()
 
 

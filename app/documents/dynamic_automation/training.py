@@ -7,7 +7,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .catalog import CanonicalCatalog
 from .feedback import MappingFeedbackRecord, ReviewerDecision
@@ -73,7 +73,7 @@ class ModelManifest(BaseModel):
     base_model_repo: str = Field(min_length=1, max_length=300)
     base_model_revision: str = Field(min_length=1, max_length=200)
     dataset_sha256: str = Field(pattern=_SHA256_PATTERN)
-    catalog_sha256: str = Field(default="0" * 64, pattern=_SHA256_PATTERN)
+    catalog_sha256: str = Field(pattern=_SHA256_PATTERN)
     catalog_version: str = Field(max_length=20, pattern=r"^v[1-9][0-9]*$")
     auto_precision: float = Field(ge=0, le=1)
     sensitive_precision: float = Field(ge=0, le=1)
@@ -84,7 +84,27 @@ class ModelManifest(BaseModel):
     training_canonical_field_ids: tuple[_BoundedCanonicalId, ...] = Field(
         default=(), max_length=10_000
     )
+    catalog_field_ids: tuple[_BoundedCanonicalId, ...] = Field(
+        min_length=1, max_length=10_000
+    )
     unseen_catalog_field_id: _BoundedCanonicalId | None = None
+    unseen_catalog_retrieved: bool
+
+    @field_validator("catalog_sha256")
+    @classmethod
+    def _catalog_hash_is_not_a_placeholder(cls, value: str) -> str:
+        if value == "0" * 64:
+            raise ValueError("catalog_sha256 must not be the zero placeholder")
+        return value
+
+    @field_validator("catalog_field_ids")
+    @classmethod
+    def _catalog_membership_is_unique_and_stable(
+        cls, value: tuple[str, ...]
+    ) -> tuple[str, ...]:
+        if len(set(value)) != len(value):
+            raise ValueError("catalog_field_ids must not contain duplicates")
+        return tuple(sorted(value))
 
 
 class PromotionDecision(BaseModel):
@@ -147,7 +167,8 @@ def build_hard_negatives(
             candidate
             for candidate in definitions
             if candidate.field_id != positive.field_id
-            and candidate.value_type == positive.value_type
+            and set(candidate.compatible_field_types)
+            & set(positive.compatible_field_types)
         ]
         priority = _CONFUSION_PRIORITY.get(positive.field_id, ())
         compatible.sort(
@@ -209,8 +230,15 @@ def compare_manifests(
         reasons.append("coverage_or_p95_latency_ms")
     if candidate.catalog_version != baseline.catalog_version:
         reasons.append("catalog_version")
+    if candidate.catalog_sha256 != baseline.catalog_sha256:
+        reasons.append("catalog_sha256")
+    if candidate.catalog_field_ids != baseline.catalog_field_ids:
+        reasons.append("catalog_field_ids")
     if (
         candidate.unseen_catalog_field_id is None
+        or not candidate.unseen_catalog_retrieved
+        or candidate.unseen_catalog_field_id not in candidate.catalog_field_ids
+        or candidate.unseen_catalog_field_id not in baseline.catalog_field_ids
         or candidate.unseen_catalog_field_id
         in candidate.training_canonical_field_ids
     ):
