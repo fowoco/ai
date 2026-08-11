@@ -1,6 +1,6 @@
 # POST /internal/v1/analyses — Server가 호출하는 핵심 분석 API
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, status
 
 from app.agents.intent import IntentClassifier
 from app.agents.pipeline import AnalysisPipeline
@@ -50,3 +50,23 @@ async def intent_status(
 ) -> IntentRuntimeStatus:
     status = intent_agent.runtime_status()
     return IntentRuntimeStatus.model_validate(status)
+
+
+@router.get(
+    "/intent/readiness",
+    response_model=IntentRuntimeStatus,
+    summary="Intent 모델 readiness",
+    description="활성 Intent 모델의 warmup과 BERT/A.X 가용성이 확인된 경우에만 200 반환.",
+    responses={503: {"description": "Intent 모델이 아직 준비되지 않음"}},
+    dependencies=[Depends(verify_internal_bearer)],
+)
+async def intent_readiness(
+    response: Response,
+    intent_agent: IntentClassifier = Depends(get_intent_agent),  # noqa: B008
+) -> IntentRuntimeStatus:
+    runtime_status = IntentRuntimeStatus.model_validate(
+        intent_agent.runtime_status()
+    )
+    if not runtime_status.ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return runtime_status

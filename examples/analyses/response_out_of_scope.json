@@ -1,25 +1,20 @@
 {
   "requestId": "10000000-0000-0000-0000-000000000001",
-  "outcome": "NEEDS_INFO",
+  "outcome": "OUT_OF_SCOPE",
   "contextRequirement": null,
-  "questions": [
-    {
-      "slotKey": "monthly_wage",
-      "prompt": "월 급여를 입력해 주세요."
-    }
-  ],
+  "questions": [],
   "candidates": [],
   "validationErrors": [],
   "versions": {
     "agentVersion": "0.1.0",
-    "modelProvider": "server",
-    "modelName": "planned-intent",
-    "modelVersion": "reused",
+    "modelProvider": "huggingface",
+    "modelName": "fowoco/klue-roberta-base-intent-classifier",
+    "modelVersion": "BERT",
     "promptVersion": "not-applicable",
     "contextPackVersion": "0.2.0",
     "workflowCatalogVersion": "0.2.0",
     "contractVersion": "1.1.0"
   },
-  "providerAttemptCount": 0,
-  "latencyMs": 180
+  "providerAttemptCount": 1,
+  "latencyMs": 15
 }

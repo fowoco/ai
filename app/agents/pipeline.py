@@ -1,4 +1,4 @@
-# Analyses 파이프라인 — PLAN(CONTEXT_REQUIRED) → ANALYZE(NEEDS_INFO|REVIEW_REQUIRED)
+# Analyses 파이프라인 — PLAN(CONTEXT_REQUIRED|OUT_OF_SCOPE) → ANALYZE
 
 from __future__ import annotations
 
@@ -161,12 +161,22 @@ class AnalysisPipeline:
     def _run_plan(self, request: AnalysisRequest) -> AnalysisResponse:
         instruction = request.analysis_input.instruction
         intent_result = self._intent.classify(instruction)
-        workflow_id = intent_result.workflow_id or ""
         if intent_result.intent == "OUT_OF_SCOPE":
-            field_keys = ["worker_id"]
-        else:
-            required = self._required_slots_for(workflow_id)
-            field_keys = list(required) if required else ["worker_id", "stay_expiry_date"]
+            return AnalysisResponse(
+                request_id=request.request_id,
+                outcome="OUT_OF_SCOPE",
+                context_requirement=None,
+                questions=[],
+                candidates=[],
+                validation_errors=[],
+                versions=_versions(intent_result),
+                provider_attempt_count=1,
+                latency_ms=0,
+            )
+
+        workflow_id = intent_result.workflow_id or ""
+        required = self._required_slots_for(workflow_id)
+        field_keys = list(required) if required else ["worker_id", "stay_expiry_date"]
 
         return AnalysisResponse(
             request_id=request.request_id,

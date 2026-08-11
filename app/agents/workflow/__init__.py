@@ -1,5 +1,5 @@
 # Workflow Agent — Knowledge Catalog 조회
 
-from .service import WorkflowAgent
+from .service import WorkflowAgent, select_workflow_id
 
-__all__ = ["WorkflowAgent"]
+__all__ = ["WorkflowAgent", "select_workflow_id"]

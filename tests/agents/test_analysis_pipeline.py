@@ -99,7 +99,7 @@ def test_plan_returns_single_context_decision_without_fake_evidence_slot() -> No
     assert "arc_status" in ctx.required_field_keys
 
 
-def test_plan_out_of_scope_requests_worker_id_only() -> None:
+def test_plan_out_of_scope_terminates_without_context_lookup() -> None:
     pipe = AnalysisPipeline(intent_agent=_FakeIntent(intent="OUT_OF_SCOPE", confidence=0.7))
     res = pipe.run(
         AnalysisRequest(
@@ -109,8 +109,11 @@ def test_plan_out_of_scope_requests_worker_id_only() -> None:
         )
     )
 
-    assert res.context_requirement is not None
-    assert res.context_requirement.required_field_keys == ["worker_id"]
+    assert res.outcome == "OUT_OF_SCOPE"
+    assert res.context_requirement is None
+    assert res.questions == []
+    assert res.candidates == []
+    assert res.provider_attempt_count == 1
 
 
 def test_analyze_requires_planned_intent_and_workflow() -> None:

@@ -3,9 +3,38 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.agents.intent import IntentResult
+from app.agents.pipeline import AnalysisPipeline
+from app.api.dependencies import get_analysis_pipeline, get_intent_agent
 from app.main import app
 
 ANALYSES_PATH = "/internal/v1/analyses"
+
+
+class _OutOfScopeIntent:
+    def warmup(self) -> None:
+        return None
+
+    def runtime_status(self) -> dict[str, object]:
+        return {}
+
+    def classify(
+        self,
+        instruction: str,
+        *,
+        workflow_constraints: list[str] | None = None,
+    ) -> IntentResult:
+        del instruction, workflow_constraints
+        return IntentResult(
+            intent="OUT_OF_SCOPE",
+            confidence=0.99,
+            workflow_id="",
+            model_provider="test",
+            model_name="out-of-scope",
+            model_version="1",
+            confidence_source="BERT",
+            bert_routing_score=0.99,
+        )
 
 
 def _plan_body(instruction: str = "응웬반안 체류연장 준비해줘") -> dict:
@@ -67,7 +96,7 @@ async def test_plan_returns_context_required() -> None:
     assert ctx["targetDisplayName"] == "응웬반안"
     assert "stay_expiry_date" in ctx["requiredFieldKeys"]
     assert "worker_id" in ctx["requiredFieldKeys"]
-    assert data["versions"]["contractVersion"] == "1.0.0"
+    assert data["versions"]["contractVersion"] == "1.1.0"
     assert data["versions"]["workflowCatalogVersion"] == "0.2.0"
     assert data["versions"]["modelProvider"] != "stub"
     assert data["versions"]["modelName"] != "stub"
@@ -167,6 +196,28 @@ async def test_plan_fixed_intent_even_for_unrelated_instruction() -> None:
 
 
 @pytest.mark.asyncio
+async def test_plan_out_of_scope_terminates_without_workflow_or_context() -> None:
+    app.dependency_overrides[get_analysis_pipeline] = lambda: AnalysisPipeline(
+        intent_agent=_OutOfScopeIntent()
+    )
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.post(ANALYSES_PATH, json=_plan_body("오늘 날씨 어때?"))
+    finally:
+        app.dependency_overrides.pop(get_analysis_pipeline, None)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["outcome"] == "OUT_OF_SCOPE"
+    assert data["contextRequirement"] is None
+    assert data["questions"] == []
+    assert data["candidates"] == []
+    assert data["versions"]["contractVersion"] == "1.1.0"
+
+
+@pytest.mark.asyncio
 async def test_analyses_endpoint_in_openapi() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/openapi.json")
@@ -188,9 +239,51 @@ async def test_intent_status_exposes_runtime_flags_without_loading_models() -> N
         "initialized": True,
         "bertAvailable": False,
         "axAvailable": False,
+        "ready": True,
+        "warmupCompleted": True,
         "degraded": False,
         "promptVersion": "not-applicable",
     }
+
+
+@pytest.mark.asyncio
+async def test_intent_readiness_returns_200_for_fixed_agent() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/internal/v1/intent/readiness")
+
+    assert resp.status_code == 200
+    assert resp.json()["ready"] is True
+
+
+@pytest.mark.asyncio
+async def test_intent_readiness_returns_503_until_hybrid_warmup() -> None:
+    class _NotReadyIntent:
+        def runtime_status(self) -> dict[str, object]:
+            return {
+                "intentModelEnabled": True,
+                "axEnabled": True,
+                "initialized": False,
+                "bertAvailable": False,
+                "axAvailable": False,
+                "ready": False,
+                "warmupCompleted": False,
+                "degraded": False,
+                "promptVersion": "knowledge-test",
+            }
+
+    app.dependency_overrides[get_intent_agent] = _NotReadyIntent
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/internal/v1/intent/readiness")
+    finally:
+        app.dependency_overrides.pop(get_intent_agent, None)
+
+    assert resp.status_code == 503
+    assert resp.json()["ready"] is False
 
 
 @pytest.mark.asyncio

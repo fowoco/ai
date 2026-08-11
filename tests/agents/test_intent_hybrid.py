@@ -1,5 +1,8 @@
 # HF Intent 에이전트·대표 Intent 선택 단위 테스트
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event, Lock
+
 from app.agents.intent.guardrail import HRRoutingGuardrail
 from app.agents.intent.hybrid import HybridIntentPipeline, HybridIntentPrediction
 from app.agents.intent.prompts import AX_INTENT_PROMPT_VERSION
@@ -63,6 +66,23 @@ def test_hybrid_agent_maps_pipeline_prediction() -> None:
     assert result.bert_routing_score == 0.93
 
 
+def test_hybrid_agent_routes_contract_workflow_from_instruction() -> None:
+    class _FakePipe:
+        def predict(self, instruction: str) -> HybridIntentPrediction:
+            del instruction
+            return HybridIntentPrediction(
+                intents=["EXPIRY_RENEWAL"],
+                scores={"EXPIRY_RENEWAL": 0.93},
+                selected_model="BERT",
+            )
+
+    result = HybridHfIntentAgent(pipeline=_FakePipe()).classify(
+        "근로계약 종료 전에 재계약 준비해줘"
+    )
+
+    assert result.workflow_id == "WF-CON-001"
+
+
 # A.X는 Knowledge prompt의 발화문 등장 순서를 대표 Intent에도 유지
 def test_hybrid_agent_preserves_ax_intent_order() -> None:
     class _FakePipe:
@@ -117,11 +137,68 @@ def test_hybrid_runtime_status_reports_loaded_ax_and_prompt(monkeypatch) -> None
             "initialized": True,
             "bertAvailable": True,
             "axAvailable": True,
+            "ready": True,
+            "warmupCompleted": True,
             "degraded": False,
             "promptVersion": AX_INTENT_PROMPT_VERSION,
         }
     finally:
         get_settings.cache_clear()
+
+
+def test_hybrid_warmup_marks_agent_ready() -> None:
+    class _WarmablePipeline:
+        bert = object()
+        ax = object()
+        ax_enabled = True
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def warmup(self) -> None:
+            self.calls += 1
+
+    pipeline = _WarmablePipeline()
+    agent = HybridHfIntentAgent(pipeline=pipeline)
+
+    agent.warmup()
+
+    assert pipeline.calls == 1
+    assert agent.runtime_status()["ready"] is True
+    assert agent.runtime_status()["warmupCompleted"] is True
+
+
+def test_hybrid_loader_is_singleton_under_concurrent_first_requests(
+    monkeypatch,
+) -> None:
+    started = Event()
+    release = Event()
+    counter_lock = Lock()
+    calls = 0
+
+    class _FakeHybridPipeline:
+        def __init__(self, **kwargs: object) -> None:
+            nonlocal calls
+            del kwargs
+            with counter_lock:
+                calls += 1
+            started.set()
+            assert release.wait(timeout=2)
+
+    monkeypatch.setattr(
+        "app.agents.intent.hybrid.HybridIntentPipeline", _FakeHybridPipeline
+    )
+    agent = HybridHfIntentAgent()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(agent._ensure_pipeline)
+        assert started.wait(timeout=2)
+        second = executor.submit(agent._ensure_pipeline)
+        release.set()
+        assert first.result(timeout=2) is not None
+        assert second.result(timeout=2) is not None
+
+    assert calls == 1
 
 
 def test_hybrid_loader_forwards_pinned_model_revisions(monkeypatch) -> None:
@@ -216,6 +293,27 @@ def test_pipeline_calls_ax_when_guardrail_routes() -> None:
     assert prediction.intents == ["DOCUMENT_REQUEST"]
     assert prediction.evidence == {"DOCUMENT_REQUEST": "서류 챙겨줘"}
     assert prediction.prompt_version == AX_INTENT_PROMPT_VERSION
+
+
+def test_pipeline_warmup_runs_bert_and_enabled_ax() -> None:
+    calls: list[tuple[str, str]] = []
+
+    class _Bert:
+        def predict(self, instruction: str) -> None:
+            calls.append(("BERT", instruction))
+
+    class _Ax:
+        def predict(self, instruction: str) -> None:
+            calls.append(("AX", instruction))
+
+    pipeline = HybridIntentPipeline.__new__(HybridIntentPipeline)
+    pipeline.bert = _Bert()
+    pipeline.ax = _Ax()
+    pipeline.ax_enabled = True
+
+    pipeline.warmup()
+
+    assert [model for model, _ in calls] == ["BERT", "AX"]
 
 
 def test_pipeline_marks_fallback_when_ax_enabled_but_unavailable() -> None:

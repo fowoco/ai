@@ -28,6 +28,12 @@ def test_fixed_respects_workflow_constraints() -> None:
     assert result.workflow_id == "WF-CON-001"
 
 
+def test_fixed_routes_contract_renewal_without_catalog_order_fallback() -> None:
+    agent = FixedExpiryRenewalIntentAgent()
+    result = agent.classify("근로계약 종료 전에 재계약 준비해줘")
+    assert result.workflow_id == "WF-CON-001"
+
+
 def test_build_intent_agent_is_fixed() -> None:
     assert isinstance(build_intent_agent(), FixedExpiryRenewalIntentAgent)
 

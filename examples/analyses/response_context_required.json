@@ -28,7 +28,7 @@
     "promptVersion": "knowledge-25e778ad",
     "contextPackVersion": "0.2.0",
     "workflowCatalogVersion": "0.2.0",
-    "contractVersion": "1.0.0"
+    "contractVersion": "1.1.0"
   },
   "providerAttemptCount": 1,
   "latencyMs": 120

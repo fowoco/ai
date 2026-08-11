@@ -72,6 +72,15 @@ class HybridIntentPipeline:
             except Exception:
                 logger.exception("A.X load failed — BERT-only degraded mode")
 
+    # readiness 전에 각 활성 모델의 첫 forward/generate를 완료한다.
+    def warmup(self) -> None:
+        self.bert.predict("체류기간 연장 준비해줘")
+        if not self.ax_enabled:
+            return
+        if self.ax is None:
+            raise RuntimeError("A.X is enabled but unavailable")
+        self.ax.predict("여권 사본을 요청해줘")
+
     # instruction → 정규화 Intent 예측
     def predict(self, instruction: str) -> HybridIntentPrediction:
         probs, margin, bert_intents = self.bert.predict(instruction)

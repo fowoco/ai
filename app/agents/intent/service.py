@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
+from threading import Lock
 from typing import Protocol
+
+from app.agents.workflow import select_workflow_id
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +63,12 @@ def public_workflow_id(
     return internal_workflow_id
 
 
-# 의도 후보 WF에 constraint 적용 (다후보는 catalog 순 첫 id)
+# 의도 후보 WF에 constraint와 발화 업무 신호를 적용
 def resolve_workflow_id(
     intent: str,
     workflow_constraints: list[str] | None,
+    *,
+    instruction: str = "",
 ) -> str:
     candidate_workflows = list(INTENT_TO_WORKFLOWS.get(intent, []))
     if workflow_constraints:
@@ -75,7 +80,14 @@ def resolve_workflow_id(
             is_workflow_catalog_id(c) for c in workflow_constraints
         ):
             candidate_workflows = []
-    return candidate_workflows[0] if candidate_workflows else ""
+    return (
+        select_workflow_id(
+            intent=intent,
+            instruction=instruction,
+            candidate_workflow_ids=candidate_workflows,
+        )
+        or ""
+    )
 
 
 @dataclass
@@ -98,6 +110,9 @@ class IntentResult:
 # 교체 가능한 Intent 분류기 계약
 class IntentClassifier(Protocol):
 
+    # startup 시 모델 로딩·첫 추론을 완료한다.
+    def warmup(self) -> None: ...
+
     # 모델 초기화·A.X 가용성 진단 (조회 시 lazy load 금지)
     def runtime_status(self) -> dict[str, object]: ...
 
@@ -113,6 +128,10 @@ class IntentClassifier(Protocol):
 # 재갱신 Intent 고정 — 슬롯은 Server worker 시드에 맡김 (발화 정규식 추출 없음)
 class FixedExpiryRenewalIntentAgent:
 
+    # 고정 규칙 모드는 외부 모델 초기화가 없다.
+    def warmup(self) -> None:
+        return None
+
     # 운영 상태 — 모델 기능이 꺼진 고정 규칙 모드
     def runtime_status(self) -> dict[str, object]:
         return {
@@ -121,6 +140,8 @@ class FixedExpiryRenewalIntentAgent:
             "initialized": True,
             "bertAvailable": False,
             "axAvailable": False,
+            "ready": True,
+            "warmupCompleted": True,
             "degraded": False,
             "promptVersion": "not-applicable",
         }
@@ -132,12 +153,15 @@ class FixedExpiryRenewalIntentAgent:
         *,
         workflow_constraints: list[str] | None = None,
     ) -> IntentResult:
-        del instruction
         intent = "EXPIRY_RENEWAL"
         return IntentResult(
             intent=intent,
             confidence=1.0,
-            workflow_id=resolve_workflow_id(intent, workflow_constraints),
+            workflow_id=resolve_workflow_id(
+                intent,
+                workflow_constraints,
+                instruction=instruction,
+            ),
             model_provider="internal",
             model_name="fixed-expiry-renewal",
             model_version="rules",
@@ -170,6 +194,9 @@ class HybridHfIntentAgent:
     def __init__(self, pipeline: object | None = None) -> None:
         self._pipeline = pipeline
         self._load_error: str | None = None
+        self._load_lock = Lock()
+        self._warmup_completed = pipeline is not None
+        self._warmup_error: str | None = None
 
     # 설정 기반 HybridIntentPipeline 확보
     def _ensure_pipeline(self) -> object | None:
@@ -177,35 +204,58 @@ class HybridHfIntentAgent:
             return self._pipeline
         if self._load_error is not None:
             return None
-        try:
-            import os
+        with self._load_lock:
+            if self._pipeline is not None:
+                return self._pipeline
+            if self._load_error is not None:
+                return None
+            try:
+                import os
 
-            from app.core.config import get_settings
+                from app.core.config import get_settings
 
-            from .hybrid import HybridIntentPipeline
+                from .hybrid import HybridIntentPipeline
 
-            settings = get_settings()
-            token = settings.hf_token or os.environ.get("HF_TOKEN")
-            self._pipeline = HybridIntentPipeline(
-                bert_model_dir=settings.intent_bert_model_dir,
-                bert_model_revision=settings.intent_bert_model_revision,
-                device=settings.intent_device,
-                label_prob_threshold=settings.intent_label_prob_threshold,
-                margin_threshold=settings.intent_margin_threshold,
-                max_trained_labels=settings.intent_max_trained_labels,
-                hf_token=token,
-                enable_ax=settings.intent_enable_ax,
-                ax_base_model_name=settings.intent_ax_base_model,
-                ax_base_revision=settings.intent_ax_base_revision,
-                ax_adapter_path=settings.intent_ax_adapter_path,
-                ax_adapter_revision=settings.intent_ax_adapter_revision,
-                ax_max_new_tokens=settings.intent_ax_max_new_tokens,
-            )
-        except Exception as exc:
-            self._load_error = str(exc)
-            logger.exception("HF Intent pipeline load failed — fixed EXPIRY fallback")
-            return None
+                settings = get_settings()
+                token = settings.hf_token or os.environ.get("HF_TOKEN")
+                self._pipeline = HybridIntentPipeline(
+                    bert_model_dir=settings.intent_bert_model_dir,
+                    bert_model_revision=settings.intent_bert_model_revision,
+                    device=settings.intent_device,
+                    label_prob_threshold=settings.intent_label_prob_threshold,
+                    margin_threshold=settings.intent_margin_threshold,
+                    max_trained_labels=settings.intent_max_trained_labels,
+                    hf_token=token,
+                    enable_ax=settings.intent_enable_ax,
+                    ax_base_model_name=settings.intent_ax_base_model,
+                    ax_base_revision=settings.intent_ax_base_revision,
+                    ax_adapter_path=settings.intent_ax_adapter_path,
+                    ax_adapter_revision=settings.intent_ax_adapter_revision,
+                    ax_max_new_tokens=settings.intent_ax_max_new_tokens,
+                )
+            except Exception as exc:
+                self._load_error = str(exc)
+                logger.exception("HF Intent pipeline load failed — fixed EXPIRY fallback")
+                return None
         return self._pipeline
+
+    # startup에서 BERT/A.X 로딩과 첫 추론을 끝내 cold start를 요청 경로에서 제거한다.
+    def warmup(self) -> None:
+        pipeline = self._ensure_pipeline()
+        if pipeline is None:
+            self._warmup_error = self._load_error or "Intent pipeline unavailable"
+            raise RuntimeError(self._warmup_error)
+        try:
+            warmup = getattr(pipeline, "warmup", None)
+            if callable(warmup):
+                warmup()
+            else:
+                pipeline.predict("체류기간 연장 준비해줘")  # type: ignore[attr-defined]
+        except Exception as exc:
+            self._warmup_error = str(exc)
+            raise
+        self._warmup_completed = True
+        self._warmup_error = None
 
     # lazy-load 상태를 바꾸지 않고 readiness 진단값을 반환
     def runtime_status(self) -> dict[str, object]:
@@ -229,7 +279,13 @@ class HybridHfIntentAgent:
             "initialized": initialized,
             "bertAvailable": bert_available,
             "axAvailable": ax_available,
+            "ready": self._warmup_completed
+            and bert_available
+            and (not ax_enabled or ax_available)
+            and self._warmup_error is None,
+            "warmupCompleted": self._warmup_completed,
             "degraded": self._load_error is not None
+            or self._warmup_error is not None
             or (initialized and ax_enabled and not ax_available),
             "promptVersion": (
                 AX_INTENT_PROMPT_VERSION
@@ -253,6 +309,10 @@ class HybridHfIntentAgent:
             result.model_version = "fallback"
             return result
         prediction = pipeline.predict(instruction)  # type: ignore[attr-defined]
+        self._warmup_completed = True
+        self._warmup_error = (
+            "Intent inference degraded" if prediction.degraded else None
+        )
         primary_intent, _ = _primary_intent(
             prediction.intents, prediction.scores
         )
@@ -272,10 +332,15 @@ class HybridHfIntentAgent:
             if prediction.selected_model == "AX"
             else settings.intent_bert_model_dir
         )
+        evidence = (prediction.evidence or {}).get(representative)
         return IntentResult(
             intent=representative,
             confidence=None if is_ax else float(bert_score or 0.0),
-            workflow_id=resolve_workflow_id(representative, workflow_constraints),
+            workflow_id=resolve_workflow_id(
+                representative,
+                workflow_constraints,
+                instruction=evidence or instruction,
+            ),
             extracted_slots={},
             model_provider="huggingface",
             model_name=model_name,
@@ -283,7 +348,7 @@ class HybridHfIntentAgent:
             prompt_version=prediction.prompt_version,
             confidence_source="UNAVAILABLE" if is_ax else "BERT",
             bert_routing_score=(float(bert_score) if bert_score is not None else None),
-            evidence=(prediction.evidence or {}).get(representative),
+            evidence=evidence,
         )
 
 

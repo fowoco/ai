@@ -1,6 +1,6 @@
 # Analyses Runtime 계약 (AI 소유)
 
-Server PR #138의 `AiRuntimeHttpRequest`와 맞춘 계약이다. 계약 버전은 **1.0.0**이며,
+Server PR #138의 `AiRuntimeHttpRequest`와 맞춘 계약이다. 계약 버전은 **1.1.0**이며,
 MVP에서는 발화 하나당 대표 Intent와 canonical Workflow 한 쌍만 처리한다.
 
 ## Endpoint와 흐름
@@ -8,8 +8,9 @@ MVP에서는 발화 하나당 대표 Intent와 canonical Workflow 한 쌍만 처
 ```text
 POST /internal/v1/analyses
 
-PLAN    → Intent 모델 1회 → CONTEXT_REQUIRED
-        → Server가 대표 Intent/Workflow 저장 + DB 조회
+PLAN    → Intent 모델 1회 → CONTEXT_REQUIRED | OUT_OF_SCOPE
+        → CONTEXT_REQUIRED: Server가 대표 Intent/Workflow 저장 + DB 조회
+        → OUT_OF_SCOPE: Workflow/DB/ANALYZE 없이 종료
 ANALYZE → PLAN 결정 재사용(모델 0회) → NEEDS_INFO | REVIEW_REQUIRED
 ```
 
@@ -60,7 +61,7 @@ PLAN에는 `plannedIntent`, `plannedWorkflowId`, Worker context를 보내지 않
     "promptVersion": "knowledge-25e778ad",
     "contextPackVersion": "0.2.0",
     "workflowCatalogVersion": "0.2.0",
-    "contractVersion": "1.0.0"
+    "contractVersion": "1.1.0"
   },
   "providerAttemptCount": 1,
   "latencyMs": 120
@@ -77,6 +78,26 @@ PLAN에는 `plannedIntent`, `plannedWorkflowId`, Worker context를 보내지 않
 - `evidence`는 A.X의 원문 substring이다. BERT와 OUT_OF_SCOPE에서는 null일 수 있다.
 - evidence는 Slot이 아니므로 `extractedSlots`에 `evidence:*` key를 만들지 않는다.
 - A.X가 여러 Intent를 반환해도 MVP 응답은 원문 등장 순서의 첫 Intent만 사용한다.
+- 같은 Intent에 여러 Knowledge Workflow가 있으면 발화/evidence의 업무 신호로 선택한다.
+- `EXPIRY_RENEWAL`의 체류 신호는 `WF-STY-001`, 계약 신호는 `WF-CON-001`이다.
+
+## OUT_OF_SCOPE 응답
+
+실행할 Workflow가 없는 발화는 DB context를 요청하지 않고 PLAN에서 즉시 종료한다.
+
+```json
+{
+  "requestId": "10000000-0000-0000-0000-000000000001",
+  "outcome": "OUT_OF_SCOPE",
+  "contextRequirement": null,
+  "questions": [],
+  "candidates": [],
+  "validationErrors": [],
+  "providerAttemptCount": 1
+}
+```
+
+Server는 `OUT_OF_SCOPE`에서 Workflow 검증·DB 조회·ANALYZE 호출을 수행하지 않는다.
 
 ## ANALYZE 요청
 
@@ -159,14 +180,17 @@ Candidate의 `workflowId`는 `plannedWorkflowId`와 반드시 같아야 한다. 
 |---|---|
 | `FOWOCO_INTENT_MODEL_ENABLED=false` | `EXPIRY_RENEWAL` 고정 규칙 |
 | `FOWOCO_INTENT_MODEL_ENABLED=true` | HF BERT와 선택적 A.X 하이브리드 |
+| `FOWOCO_INTENT_WARMUP_ON_START=true` | startup에서 BERT/A.X 로딩·첫 추론 |
+| `FOWOCO_INTENT_WARMUP_REQUIRED=true` | warmup 실패 시 애플리케이션 startup 실패 |
 
 A.X 사용 이미지는 `intent-ax` extra를 설치한다. 운영 장치에 맞춰
 `FOWOCO_INTENT_DEVICE`를 설정하고 private HF Token은 Kubernetes Secret으로 주입한다.
 BERT/Base/Adapter의 `*_REVISION`은 immutable Hugging Face commit SHA로 고정한다.
 
 `GET /internal/v1/intent/status`에서 모델 설정, lazy-load 상태, BERT/A.X 가용성과
-`promptVersion`을 확인한다. 배포 smoke PLAN 후 `axAvailable=true`,
-`promptVersion=knowledge-25e778ad`를 확인한다.
+`promptVersion`을 확인한다. Kubernetes readiness는
+`GET /internal/v1/intent/readiness`의 200 응답을 사용한다. 운영에서는 warmup 후
+`ready=true`, `axAvailable=true`, `promptVersion=knowledge-25e778ad`를 확인한다.
 
 ## Fixtures
 
@@ -177,3 +201,4 @@ BERT/Base/Adapter의 `*_REVISION`은 immutable Hugging Face commit SHA로 고정
 | `examples/analyses/request_analyze.json` | ANALYZE 요청 |
 | `examples/analyses/response_needs_info.json` | NEEDS_INFO |
 | `examples/analyses/response_review_required.json` | REVIEW_REQUIRED |
+| `examples/analyses/response_out_of_scope.json` | OUT_OF_SCOPE |

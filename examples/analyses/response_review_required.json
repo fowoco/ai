@@ -26,7 +26,7 @@
     "promptVersion": "not-applicable",
     "contextPackVersion": "0.2.0",
     "workflowCatalogVersion": "0.2.0",
-    "contractVersion": "1.0.0"
+    "contractVersion": "1.1.0"
   },
   "providerAttemptCount": 0,
   "latencyMs": 245

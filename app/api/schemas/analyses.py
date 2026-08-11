@@ -7,10 +7,15 @@ from typing import Literal, Self
 from pydantic import BaseModel, Field, model_validator
 
 AnalysisPhase = Literal["PLAN", "ANALYZE"]
-AnalysisOutcome = Literal["CONTEXT_REQUIRED", "NEEDS_INFO", "REVIEW_REQUIRED"]
+AnalysisOutcome = Literal[
+    "CONTEXT_REQUIRED",
+    "NEEDS_INFO",
+    "REVIEW_REQUIRED",
+    "OUT_OF_SCOPE",
+]
 ConfidenceSource = Literal["MODEL", "BERT", "UNAVAILABLE"]
 
-DEFAULT_CONTRACT_VERSION = "1.0.0"
+DEFAULT_CONTRACT_VERSION = "1.1.0"
 DEFAULT_KNOWLEDGE_VERSION = "0.2.0"
 
 
@@ -157,6 +162,8 @@ class IntentRuntimeStatus(BaseModel):
     initialized: bool
     bert_available: bool = Field(..., alias="bertAvailable")
     ax_available: bool = Field(..., alias="axAvailable")
+    ready: bool
+    warmup_completed: bool = Field(..., alias="warmupCompleted")
     degraded: bool
     prompt_version: str = Field(..., alias="promptVersion")
 
