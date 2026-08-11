@@ -37,24 +37,54 @@ MODEL_SPECS: list[dict[str, str]] = [
     },
 ]
 
+DOCUMENT_AUTOMATION_MODEL_SPECS: list[dict[str, str]] = [
+    {
+        "name": "qwen3-embedding-0.6b",
+        "repo": "Qwen/Qwen3-Embedding-0.6B",
+        "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+    },
+    {
+        "name": "qwen3-reranker-0.6b",
+        "repo": "Qwen/Qwen3-Reranker-0.6B",
+        "revision": "e61197ed45024b0ed8a2d74b80b4d909f1255473",
+    },
+]
+
 # 캐시 히트 판단 기준 파일
 _SENTINEL_FILE = "config.json"
 
 
-def verify_model_cache(cache_dir: Path) -> list[str]:
+def _selected_model_specs(
+    *, include_document_automation: bool = False
+) -> list[dict[str, str]]:
+    if include_document_automation:
+        return [*MODEL_SPECS, *DOCUMENT_AUTOMATION_MODEL_SPECS]
+    return MODEL_SPECS
+
+
+def verify_model_cache(
+    cache_dir: Path, *, include_document_automation: bool = False
+) -> list[str]:
     """캐시 디렉터리에서 누락된 모델 이름 목록 반환.
 
     네트워크 접근 없음. 파일 존재 여부만 확인.
     """
     missing: list[str] = []
-    for spec in MODEL_SPECS:
+    for spec in _selected_model_specs(
+        include_document_automation=include_document_automation
+    ):
         sentinel = cache_dir / spec["name"] / spec["revision"] / _SENTINEL_FILE
         if not sentinel.exists():
             missing.append(spec["name"])
     return missing
 
 
-def download_models(cache_dir: Path, force: bool = False) -> None:
+def download_models(
+    cache_dir: Path,
+    force: bool = False,
+    *,
+    include_document_automation: bool = False,
+) -> None:
     """각 모델을 고정 리비전으로 캐시 디렉터리에 다운로드.
 
     huggingface_hub 필요. 미설치 시 ImportError 안내 후 종료.
@@ -69,7 +99,9 @@ def download_models(cache_dir: Path, force: bool = False) -> None:
         )
         sys.exit(1)
 
-    for spec in MODEL_SPECS:
+    for spec in _selected_model_specs(
+        include_document_automation=include_document_automation
+    ):
         local_dir = cache_dir / spec["name"] / spec["revision"]
         sentinel = local_dir / _SENTINEL_FILE
         if sentinel.exists() and not force:
@@ -103,9 +135,17 @@ def main() -> None:
         action="store_true",
         help="이미 캐시된 모델도 재다운로드",
     )
+    parser.add_argument(
+        "--include-document-automation",
+        action="store_true",
+        help="Qwen3 document automation models also download/verify",
+    )
     args = parser.parse_args()
 
-    missing = verify_model_cache(args.cache_dir)
+    missing = verify_model_cache(
+        args.cache_dir,
+        include_document_automation=args.include_document_automation,
+    )
     if args.verify_only:
         if missing:
             print(f"[missing] {', '.join(missing)}", file=sys.stderr)
@@ -114,7 +154,11 @@ def main() -> None:
         return
 
     if missing or args.force:
-        download_models(args.cache_dir, force=args.force)
+        download_models(
+            args.cache_dir,
+            force=args.force,
+            include_document_automation=args.include_document_automation,
+        )
     else:
         print("[ok] 모든 모델 캐시 확인 완료 (다운로드 불필요)")
 

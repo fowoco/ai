@@ -76,11 +76,34 @@ class Settings(BaseSettings):
         default_factory=lambda: Path(tempfile.gettempdir()) / "fowoco-model-cache"
     )
 
+    # Dynamic document field mapping — model-backed matching is explicit opt-in.
+    dynamic_automation_mapping_enabled: bool = False
+    dynamic_automation_embedding_model_path: Path | None = None
+    dynamic_automation_reranker_model_path: Path | None = None
+    dynamic_automation_min_reranker_score: float = Field(default=0.90, ge=0, le=1)
+    dynamic_automation_min_margin: float = Field(default=0.10, ge=0, le=1)
+
     clova_ocr_enabled: bool = False
     clova_ocr_invoke_url: str | None = None
     clova_ocr_secret: str | None = None
     clova_ocr_timeout_seconds: float = Field(default=30.0, gt=0)
     clova_ocr_confidence_threshold: float = Field(default=0.80, ge=0, le=1)
+
+    @model_validator(mode="after")
+    def derive_dynamic_automation_model_paths(self) -> Self:
+        if self.dynamic_automation_embedding_model_path is None:
+            self.dynamic_automation_embedding_model_path = (
+                self.model_cache_dir
+                / "qwen3-embedding-0.6b"
+                / "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+            )
+        if self.dynamic_automation_reranker_model_path is None:
+            self.dynamic_automation_reranker_model_path = (
+                self.model_cache_dir
+                / "qwen3-reranker-0.6b"
+                / "e61197ed45024b0ed8a2d74b80b4d909f1255473"
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_enabled_ocr_settings(self) -> Self:
