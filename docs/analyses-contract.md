@@ -143,16 +143,15 @@ PLAN에는 `plannedIntent`, `plannedWorkflowId`, Worker context를 보내지 않
 Candidate의 `workflowId`는 `plannedWorkflowId`와 반드시 같아야 한다. ANALYZE는 모델을
 재호출하지 않고 Server가 confidence를 다시 보내지 않으므로 AI는 새 점수를 만들지 않는다.
 
-## Server #138 확인·대기 항목
+## Server #138 확정 정책
 
-PR #138은 A.X의 nullable confidence, nullable evidence, ANALYZE의
-`providerAttemptCount=0`을 이미 허용한다. 따라서 A.X 대표 Intent 경로는 이 계약과 맞는다.
-
-남은 경계 사례는 BERT 경로다. Server는 ANALYZE Candidate confidence가 PLAN confidence와
-같기를 요구하지만, HTTP 요청에는 `plannedIntent`, `plannedWorkflowId`만 보내므로 AI가 PLAN의
-BERT 점수를 알 수 없다. AI는 재분류하거나 점수를 만들지 않고 Candidate confidence를 null로
-유지한다. Server는 BERT 경로에서 Candidate confidence 비교를 제거하거나, 별도 계약 합의 후
-PLAN confidence를 ANALYZE에 전달해야 한다.
+- PLAN의 confidence는 Intent 분류 결과다.
+- Server는 PLAN의 BERT confidence, confidenceSource, bertRoutingScore를 실행 이력에 보존한다.
+- ANALYZE 요청에는 `plannedIntent`, `plannedWorkflowId`만 전달한다.
+- AI는 Intent 모델을 재호출하지 않고 Candidate confidence를 null로 반환한다.
+- Server는 Candidate confidence와 PLAN confidence를 비교하지 않으며 nullable을 허용한다.
+- Candidate의 workflowId는 plannedWorkflowId와 반드시 같아야 한다.
+- PLAN 결정을 재사용한 ANALYZE의 providerAttemptCount는 0이다.
 
 ## Intent 운영 설정
 
