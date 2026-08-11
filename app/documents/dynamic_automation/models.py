@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -49,9 +49,9 @@ class DocumentFieldContext(BaseModel):
     field_type: str = Field(min_length=1, max_length=100)
     document_title: str = Field(max_length=200)
     section: str = Field(max_length=200)
-    row_labels: tuple[str, ...] = Field(max_length=3)
-    nearby_labels: tuple[str, ...] = Field(max_length=4)
-    options: tuple[str, ...]
+    row_labels: tuple[Annotated[str, Field(max_length=200)], ...] = Field(max_length=3)
+    nearby_labels: tuple[Annotated[str, Field(max_length=200)], ...] = Field(max_length=4)
+    options: tuple[Annotated[str, Field(max_length=200)], ...] = Field(max_length=50)
     repeat_index: int = Field(ge=0)
     required: bool
     kind: str = Field(min_length=1, max_length=100)

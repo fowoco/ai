@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from app.documents.dynamic_automation.catalog import CanonicalCatalog
 from app.documents.dynamic_automation.models import DocumentFieldContext
@@ -100,3 +101,19 @@ def test_compatible_filters_wrong_type_and_non_repeatable_role() -> None:
 
     repeated_ids = {item.field_id for item in catalog.compatible(_context(repeat_index=1))}
     assert "company.phone" not in repeated_ids
+
+
+def test_document_field_context_rejects_oversized_labels_and_options() -> None:
+    with pytest.raises(ValidationError):
+        DocumentFieldContext(**{**_context().model_dump(), "row_labels": ("x" * 201,)})
+
+    with pytest.raises(ValidationError):
+        DocumentFieldContext(**{**_context().model_dump(), "nearby_labels": ("x" * 201,)})
+
+    with pytest.raises(ValidationError):
+        DocumentFieldContext(
+            **{**_context().model_dump(), "options": tuple("option" for _ in range(51))}
+        )
+
+    with pytest.raises(ValidationError):
+        DocumentFieldContext(**{**_context().model_dump(), "options": ("x" * 201,)})
