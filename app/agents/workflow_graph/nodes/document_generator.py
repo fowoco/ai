@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Protocol, Sequence
+from typing import Any, Protocol
 
 from app.documents.common import DocumentFormat
 from app.documents.editing import DocumentEditingService
@@ -97,7 +98,7 @@ class EditingServiceDocumentGenerator:
                     {
                         "template_id": tid,
                         "name": template_display_name(tid),
-                        "format": mutation.document_format.value,
+                        "format": mutation.format.value,
                         "status": "generated",
                         "path": str(mutation.destination),
                         "changed_fields": list(mutation.changed_fields),

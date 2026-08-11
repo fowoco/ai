@@ -189,10 +189,10 @@ def test_stub_document_generator_lists_required_templates() -> None:
     )
 
 
-def test_editing_service_document_generator_writes_or_stubs(
+def test_editing_service_document_generator_writes_files(
     tmp_path: Path,
 ) -> None:
-    """실 생성기가 필수 4종에 대해 generated/stub 상태를 반환한다."""
+    """실 생성기가 필수 4종 파일을 생성하고 generated 상태를 반환한다."""
     gen = EditingServiceDocumentGenerator(output_dir=tmp_path)
     state = empty_renewal_state(
         task_id="t",
@@ -202,7 +202,9 @@ def test_editing_service_document_generator_writes_or_stubs(
     )
     docs = gen(state)
     assert len(docs) == 4
-    assert any(d["status"] in {"generated", "stub"} for d in docs)
+    assert all(d["status"] == "generated" for d in docs)
+    assert all(Path(d["path"]).is_file() for d in docs)
+    assert all(Path(d["path"]).stat().st_size > 0 for d in docs)
     assert all("mapped_fields" in d for d in docs)
     assert all(
         d["values"] == values_for_template(d["template_id"], state) for d in docs
