@@ -1,0 +1,182 @@
+version: v1
+fields:
+  - field_id: worker.legal_name
+    entity: worker
+    value_type: string
+    aliases: [근로자 성명, 신청인 성명, Name of employee]
+    description: Worker's legal name.
+    compatible_field_types: [text, name]
+    source: {view: document_worker_view, column: legal_name, scope_keys: [tenant_id, worker_id]}
+    sensitivity: personal
+    formatter: person_name
+  - field_id: worker.nationality
+    entity: worker
+    value_type: string
+    aliases: [국적, Nationality]
+    description: Worker's nationality.
+    compatible_field_types: [text, nationality, select]
+    source: {view: document_worker_view, column: nationality, scope_keys: [tenant_id, worker_id]}
+    sensitivity: personal
+    formatter: string
+  - field_id: worker.date_of_birth
+    entity: worker
+    value_type: date
+    aliases: [생년월일, Date of birth]
+    description: Worker's date of birth.
+    compatible_field_types: [date, text]
+    source: {view: document_worker_view, column: date_of_birth, scope_keys: [tenant_id, worker_id]}
+    sensitivity: sensitive
+    formatter: iso_date
+  - field_id: worker.phone
+    entity: worker
+    value_type: phone
+    aliases: [근로자 전화번호, Phone number]
+    description: Worker's phone number.
+    compatible_field_types: [phone, text]
+    source: {view: document_worker_view, column: phone, scope_keys: [tenant_id, worker_id]}
+    sensitivity: personal
+    formatter: phone
+  - field_id: worker.email
+    entity: worker
+    value_type: email
+    aliases: [이메일, Email]
+    description: Worker's email address.
+    compatible_field_types: [email, text]
+    source: {view: document_worker_view, column: email, scope_keys: [tenant_id, worker_id]}
+    sensitivity: personal
+    formatter: email
+  - field_id: company.name
+    entity: company
+    value_type: string
+    aliases: [회사명, 사업장명, Company name]
+    description: Company's legal name.
+    compatible_field_types: [text, name]
+    source: {view: document_company_view, column: name, scope_keys: [tenant_id, company_id]}
+    sensitivity: business
+    formatter: string
+  - field_id: company.phone
+    entity: company
+    value_type: phone
+    aliases: [사업장 전화번호, 전화번호, Company phone]
+    description: Company's contact telephone number.
+    compatible_field_types: [phone, text]
+    source: {view: document_company_view, column: phone, scope_keys: [tenant_id, company_id]}
+    sensitivity: business
+    formatter: phone
+  - field_id: company.address
+    entity: company
+    value_type: address
+    aliases: [사업장 주소, Address]
+    description: Company's address.
+    compatible_field_types: [address, text]
+    source: {view: document_company_view, column: address, scope_keys: [tenant_id, company_id]}
+    sensitivity: business
+    formatter: address
+  - field_id: company.representative_name
+    entity: company
+    value_type: string
+    aliases: [대표자 성명, Representative name]
+    description: Company's representative name.
+    compatible_field_types: [text, name]
+    source: {view: document_company_view, column: representative_name, scope_keys: [tenant_id, company_id]}
+    sensitivity: personal
+    formatter: person_name
+  - field_id: company.business_number
+    entity: company
+    value_type: business_number
+    aliases: [사업자등록번호, Business Registration No.]
+    description: Company's business registration number.
+    compatible_field_types: [business_number, text]
+    source: {view: document_company_view, column: business_number, scope_keys: [tenant_id, company_id]}
+    sensitivity: business
+    formatter: business_number
+  - field_id: identity.passport_number
+    entity: identity
+    value_type: passport_number
+    aliases: [여권번호, Passport number]
+    description: Worker's passport number.
+    compatible_field_types: [passport_number, text]
+    source: {view: document_identity_view, column: passport_number, scope_keys: [tenant_id, worker_id]}
+    sensitivity: sensitive
+    formatter: string
+  - field_id: identity.alien_registration_number
+    entity: identity
+    value_type: alien_registration_number
+    aliases: [외국인등록번호, Alien registration number]
+    description: Worker's alien registration number.
+    compatible_field_types: [alien_registration_number, text]
+    source: {view: document_identity_view, column: alien_registration_number, scope_keys: [tenant_id, worker_id]}
+    sensitivity: sensitive
+    formatter: string
+  - field_id: contract.start_date
+    entity: contract
+    value_type: date
+    aliases: [계약 시작일, Contract start date]
+    description: Contract start date.
+    compatible_field_types: [date, text]
+    source: {view: document_task_view, column: contract_start_date, scope_keys: [tenant_id, task_id]}
+    sensitivity: business
+    formatter: iso_date
+  - field_id: contract.end_date
+    entity: contract
+    value_type: date
+    aliases: [계약 종료일, Contract end date]
+    description: Contract end date.
+    compatible_field_types: [date, text]
+    source: {view: document_task_view, column: contract_end_date, scope_keys: [tenant_id, task_id]}
+    sensitivity: business
+    formatter: iso_date
+  - field_id: contract.wage
+    entity: contract
+    value_type: amount
+    aliases: [임금, Wage]
+    description: Contract wage.
+    compatible_field_types: [amount, number, text]
+    source: {view: document_task_view, column: wage, scope_keys: [tenant_id, task_id]}
+    sensitivity: business
+    formatter: amount
+  - field_id: contract.working_hours
+    entity: contract
+    value_type: string
+    aliases: [근로시간, Working hours]
+    description: Contract working hours.
+    compatible_field_types: [text, hours]
+    source: {view: document_task_view, column: working_hours, scope_keys: [tenant_id, task_id]}
+    sensitivity: business
+    formatter: string
+  - field_id: contract.job_description
+    entity: contract
+    value_type: string
+    aliases: [업무내용, Job description]
+    description: Contract job description.
+    compatible_field_types: [text, textarea]
+    source: {view: document_task_view, column: job_description, scope_keys: [tenant_id, task_id]}
+    sensitivity: business
+    formatter: string
+  - field_id: contract.work_location
+    entity: contract
+    value_type: address
+    aliases: [근무장소, Work location]
+    description: Contract work location.
+    compatible_field_types: [address, text]
+    source: {view: document_task_view, column: work_location, scope_keys: [tenant_id, task_id]}
+    sensitivity: business
+    formatter: address
+  - field_id: contract.lodging
+    entity: contract
+    value_type: string
+    aliases: [숙식, Lodging]
+    description: Contract lodging arrangement.
+    compatible_field_types: [text, textarea]
+    source: {view: document_task_view, column: lodging, scope_keys: [tenant_id, task_id]}
+    sensitivity: business
+    formatter: string
+  - field_id: application.date
+    entity: application
+    value_type: date
+    aliases: [신청일, Application date]
+    description: Application submission date.
+    compatible_field_types: [date, text]
+    source: {view: document_task_view, column: application_date, scope_keys: [tenant_id, task_id]}
+    sensitivity: business
+    formatter: iso_date
