@@ -28,7 +28,11 @@ def validate_global_mapping(
             reasons[index] = "catalog_version_mismatch"
         elif not _has_complete_match_evidence(mapping):
             reasons[index] = "incomplete_mapping_evidence"
-        definition = catalog.get(canonical_field_id)
+        try:
+            definition = catalog.get(canonical_field_id)
+        except KeyError:
+            reasons[index] = "unknown_canonical_field"
+            continue
         if (
             mapping.evidence.entity_hint is not None
             and mapping.evidence.entity_hint != definition.entity

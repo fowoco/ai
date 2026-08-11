@@ -60,8 +60,8 @@ def make_context(
 def make_mapper(
     catalog: CanonicalCatalog,
     *,
-    retrieved: tuple[ScoredCandidate, ...] = (),
-    reranked: tuple[ScoredCandidate, ...] = (),
+    retrieved: tuple[ScoredCandidate, ...] | None = (),
+    reranked: tuple[ScoredCandidate, ...] | None = (),
     retriever_error: Exception | None = None,
     reranker_error: Exception | None = None,
     min_score: float = 0.90,
@@ -161,6 +161,20 @@ def test_reranker_failure_does_not_accept_embedding_top_one(
     assert result.candidates[0].canonical_field_id == "company.phone"
 
 
+def test_none_reranker_result_is_ambiguous(catalog: CanonicalCatalog) -> None:
+    mapper = make_mapper(
+        catalog,
+        retrieved=scored(("company.phone", 0.95), ("worker.phone", 0.80)),
+        reranked=None,
+    )
+
+    result = mapper.map((make_context(),)).mappings[0]
+
+    assert result.status is MappingStatus.AMBIGUOUS
+    assert result.evidence.reason == "invalid_reranker_evidence"
+    assert result.candidates == ()
+
+
 def test_retriever_failure_reduces_coverage_without_lowering_thresholds(
     catalog: CanonicalCatalog,
 ) -> None:
@@ -170,6 +184,16 @@ def test_retriever_failure_reduces_coverage_without_lowering_thresholds(
 
     assert result.status is MappingStatus.AMBIGUOUS
     assert result.evidence.reason == "retriever_unavailable"
+
+
+def test_none_retriever_result_is_ambiguous(catalog: CanonicalCatalog) -> None:
+    mapper = make_mapper(catalog, retrieved=None)
+
+    result = mapper.map((make_context(),)).mappings[0]
+
+    assert result.status is MappingStatus.AMBIGUOUS
+    assert result.evidence.reason == "invalid_retrieval_evidence"
+    assert result.candidates == ()
 
 
 def test_unique_exact_alias_is_safe_without_model_services(
@@ -248,6 +272,22 @@ def test_mapper_rejects_candidates_outside_the_compatible_allowlist(
     assert result.status is MappingStatus.AMBIGUOUS
     assert result.evidence.reason == "invalid_retrieval_evidence"
     assert result.evidence.type_compatible is False
+
+
+def test_retriever_result_exceeding_top_k_is_ambiguous(catalog: CanonicalCatalog) -> None:
+    retrieved = scored(("company.phone", 0.95), ("worker.phone", 0.80))
+    mapper = HybridFieldMapper(
+        catalog=catalog,
+        retriever=FakeCandidateRetriever(results=retrieved, enforce_top_k=False),
+        reranker=FakeCandidateReranker(results=retrieved),
+        thresholds=MappingThresholds(min_reranker_score=0.90, min_margin=0.10),
+        top_k=1,
+    )
+
+    result = mapper.map((make_context(),)).mappings[0]
+
+    assert result.status is MappingStatus.AMBIGUOUS
+    assert result.evidence.reason == "invalid_retrieval_evidence"
 
 
 def test_malformed_ranking_preserves_truthful_type_compatibility(

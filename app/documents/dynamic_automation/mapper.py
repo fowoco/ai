@@ -121,8 +121,20 @@ class HybridFieldMapper:
                 model_version=self.retriever.model_version,
             )
 
+        if not isinstance(retrieved, tuple):
+            return self._mapping(
+                context,
+                status=MappingStatus.AMBIGUOUS,
+                reason="invalid_retrieval_evidence",
+                rule="semantic_decision_gate",
+                entity_hint=entity_hint,
+                model_version=self.retriever.model_version,
+            )
+
         allowed_ids = {candidate.field_id for candidate in compatible}
-        if not _valid_ranking(retrieved, allowed_ids=allowed_ids, require_all_ids=False):
+        if len(retrieved) > self.top_k or not _valid_ranking(
+            retrieved, allowed_ids=allowed_ids, require_all_ids=False
+        ):
             return self._mapping(
                 context,
                 status=MappingStatus.AMBIGUOUS,
@@ -157,6 +169,16 @@ class HybridFieldMapper:
                 rule="semantic_decision_gate",
                 embedding_rank=retrieved[0].rank,
                 type_compatible=True,
+                entity_hint=entity_hint,
+                model_version=self.reranker.model_version,
+            )
+
+        if not isinstance(reranked, tuple):
+            return self._mapping(
+                context,
+                status=MappingStatus.AMBIGUOUS,
+                reason="invalid_reranker_evidence",
+                rule="semantic_decision_gate",
                 entity_hint=entity_hint,
                 model_version=self.reranker.model_version,
             )

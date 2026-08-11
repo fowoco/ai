@@ -172,6 +172,18 @@ def test_catalog_version_mismatch_is_downgraded(tmp_path: Path) -> None:
     assert result.mappings[0].evidence.reason == "catalog_version_mismatch"
 
 
+def test_unknown_canonical_id_is_downgraded(tmp_path: Path) -> None:
+    catalog = make_catalog(tmp_path)
+    mapping = matched("rogue", "rogue.value")
+
+    result = validate_global_mapping(
+        CanonicalMappingPlan(catalog_version="v1", mappings=(mapping,)), catalog
+    )
+
+    assert result.mappings[0].status is MappingStatus.AMBIGUOUS
+    assert result.mappings[0].evidence.reason == "unknown_canonical_field"
+
+
 def test_non_data_and_unmapped_fields_remain_unchanged(tmp_path: Path) -> None:
     catalog = make_catalog(tmp_path)
     mappings = (

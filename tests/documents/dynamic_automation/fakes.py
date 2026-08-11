@@ -12,25 +12,28 @@ from app.documents.dynamic_automation.models import (
 
 @dataclass
 class FakeCandidateRetriever:
-    results: tuple[ScoredCandidate, ...] = ()
+    results: tuple[ScoredCandidate, ...] | None = ()
     model_version: str = "fake-embedding-v1"
     error: Exception | None = None
+    enforce_top_k: bool = True
 
     def retrieve(
         self,
         context: DocumentFieldContext,
         candidates: Sequence[CanonicalFieldDefinition],
         top_k: int,
-    ) -> tuple[ScoredCandidate, ...]:
+    ) -> tuple[ScoredCandidate, ...] | None:
         del context, candidates
         if self.error is not None:
             raise self.error
-        return self.results[:top_k]
+        if self.results is None:
+            return None
+        return self.results[:top_k] if self.enforce_top_k else self.results
 
 
 @dataclass
 class FakeCandidateReranker:
-    results: tuple[ScoredCandidate, ...] = ()
+    results: tuple[ScoredCandidate, ...] | None = ()
     model_version: str = "fake-reranker-v1"
     error: Exception | None = None
 
@@ -38,7 +41,7 @@ class FakeCandidateReranker:
         self,
         context: DocumentFieldContext,
         candidates: Sequence[ScoredCandidate],
-    ) -> tuple[ScoredCandidate, ...]:
+    ) -> tuple[ScoredCandidate, ...] | None:
         del context, candidates
         if self.error is not None:
             raise self.error
