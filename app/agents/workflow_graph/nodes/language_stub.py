@@ -35,7 +35,11 @@ class StubLanguageNode:
 
     # intent·slots·missing·가이드 문구 채움
     def __call__(self, state: RenewalState) -> dict[str, Any]:
-        result = self._intent.classify(state["instruction"])
+        task_workflow_id = str(state.get("workflow_id") or "").strip()
+        result = self._intent.classify(
+            state["instruction"],
+            workflow_constraints=[task_workflow_id] if task_workflow_id else None,
+        )
         slots = {**state.get("slots", {}), **result.extracted_slots}
 
         if result.intent == "OUT_OF_SCOPE":

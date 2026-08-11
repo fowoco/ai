@@ -10,7 +10,7 @@ from app.api.routes.ocr import router as ocr_router
 from app.api.routes.workflows import router as workflows_router
 from app.core.config import get_settings
 from app.documents.conversion import ConversionEngineUnavailableError
-from app.ocr.runtime import create_ocr_lifespan
+from app.runtime import create_app_lifespan
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -26,7 +26,7 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         default_response_class=UTF8JSONResponse,
         openapi_tags=OPENAPI_TAGS_METADATA,
-        lifespan=create_ocr_lifespan(settings),
+        lifespan=create_app_lifespan(settings),
     )
 
     @app.exception_handler(ConversionEngineUnavailableError)

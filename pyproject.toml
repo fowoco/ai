@@ -56,6 +56,7 @@ include = ["app*"]
 [tool.setuptools.package-data]
 "app.documents.hwp5.templates" = ["*.json", "*.hwp"]
 "app.documents.hwpx.templates" = ["*.hwpx"]
+"app.agents.intent" = ["prompts/*.txt"]
 "app.agents.language.resources" = ["*.json", "*.sha256", "prompts/*.md"]
 
 [tool.pytest.ini_options]

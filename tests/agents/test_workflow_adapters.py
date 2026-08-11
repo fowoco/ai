@@ -64,6 +64,25 @@ def test_language_adapter_wraps_external_engine() -> None:
     assert update["guide_message"]
 
 
+def test_renewal_overrides_language_workflow_with_server_task_workflow() -> None:
+    """외부 Language Node도 이미 확정된 Server Task Workflow를 바꾸지 못한다."""
+    orch = RenewalOrchestrator(language_node=LanguageNodeAdapter(_FakeLanguage()))
+    state = orch.run(
+        request_id="r-task-workflow",
+        instruction="체류기간 연장 준비해줘",
+        task_id="task-contract",
+        worker_id="worker-001",
+        task={
+            "task_id": "task-contract",
+            "workflow_id": "WF-CON-001",
+            "task_type": "RECONTRACT",
+        },
+    )
+
+    assert state["intent"] == "EXPIRY_RENEWAL"
+    assert state["workflow_id"] == "WF-CON-001"
+
+
 def test_ocr_adapter_wraps_external_engine() -> None:
     """OcrNodeAdapter가 동료 엔진을 OcrNode로 노출한다."""
     adapter = OcrNodeAdapter(_FakeOcr())

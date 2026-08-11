@@ -47,14 +47,19 @@ class Settings(BaseSettings):
     # Intent HF — true면 BERT(+선택 A.X) 분류, false면 EXPIRY_RENEWAL 고정
     intent_model_enabled: bool = False
     intent_bert_model_dir: str = "fowoco/klue-roberta-base-intent-classifier"
+    intent_bert_model_revision: str | None = None
     intent_ax_base_model: str = "skt/A.X-4.0-Light"
+    intent_ax_base_revision: str | None = None
     intent_ax_adapter_path: str = "fowoco/ax-intent-qlora"
+    intent_ax_adapter_revision: str | None = None
     intent_enable_ax: bool = False
     intent_device: str = "cpu"
     intent_margin_threshold: float = 0.76
     intent_max_trained_labels: int = 3
     intent_label_prob_threshold: float = 0.55
     intent_ax_max_new_tokens: int = 96
+    intent_warmup_on_start: bool = True
+    intent_warmup_required: bool = False
     # private HF 모델용. 미설정 시 환경변수 HF_TOKEN도 허용(코드에서 조회)
     hf_token: str | None = None
 
@@ -94,6 +99,18 @@ class Settings(BaseSettings):
         missing = [name for name, value in required.items() if not value]
         if missing:
             raise ValueError(f"enabled OCR requires settings: {', '.join(missing)}")
+        return self
+
+    @model_validator(mode="after")
+    def validate_intent_warmup_settings(self) -> Self:
+        if self.intent_warmup_required and not self.intent_warmup_on_start:
+            raise ValueError(
+                "intent_warmup_required requires intent_warmup_on_start=true"
+            )
+        if self.intent_warmup_required and not self.intent_model_enabled:
+            raise ValueError(
+                "intent_warmup_required requires intent_model_enabled=true"
+            )
         return self
 
 

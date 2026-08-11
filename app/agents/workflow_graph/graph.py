@@ -13,10 +13,10 @@ from app.db.protocols import IdentityStore, WorkerCompanyLookup
 from .nodes.actions import (
     apply_supervisor,
     load_context,
-    mark_out_of_scope,
     mark_ask_hr,
     mark_ask_worker,
     mark_guide_placeholder,
+    mark_out_of_scope,
     route_from_supervisor,
 )
 from .nodes.document_generator import DocumentGenerator
@@ -50,6 +50,12 @@ def build_renewal_graph(
         ctx = load_context(state, lookup=db_lookup)
         merged: RenewalState = {**state, **ctx}  # type: ignore[typeddict-item]
         analysis = language_sg.invoke(merged)
+        task_workflow_id = str(state.get("workflow_id") or "").strip()
+        if analysis.get("intent") == "OUT_OF_SCOPE":
+            analysis["workflow_id"] = ""
+        elif task_workflow_id:
+            # Renewal 실행은 이미 생성된 Server Task의 canonical Workflow를 따른다.
+            analysis["workflow_id"] = task_workflow_id
         return {**ctx, **analysis}
 
     def node_supervisor(state: RenewalState) -> dict[str, Any]:

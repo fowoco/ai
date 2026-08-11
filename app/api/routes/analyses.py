@@ -1,11 +1,16 @@
 # POST /internal/v1/analyses — Server가 호출하는 핵심 분석 API
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, status
 
+from app.agents.intent import IntentClassifier
 from app.agents.pipeline import AnalysisPipeline
-from app.api.dependencies import get_analysis_pipeline
+from app.api.dependencies import get_analysis_pipeline, get_intent_agent
 from app.api.openapi import ANALYSES_TAG
-from app.api.schemas.analyses import AnalysisRequest, AnalysisResponse
+from app.api.schemas.analyses import (
+    AnalysisRequest,
+    AnalysisResponse,
+    IntentRuntimeStatus,
+)
 from app.api.security import verify_internal_bearer
 
 router = APIRouter(prefix="/internal/v1", tags=[ANALYSES_TAG])
@@ -28,3 +33,40 @@ async def analyze(
     pipeline: AnalysisPipeline = Depends(get_analysis_pipeline),  # noqa: B008
 ) -> AnalysisResponse:
     return pipeline.run(request)
+
+
+@router.get(
+    "/intent/status",
+    response_model=IntentRuntimeStatus,
+    summary="Intent 모델 운영 상태",
+    description=(
+        "설정 활성화 여부와 lazy-load 이후 BERT/A.X 가용성, Knowledge prompt 버전을 반환. "
+        "상태 조회만으로 모델을 강제 로드하지 않음."
+    ),
+    dependencies=[Depends(verify_internal_bearer)],
+)
+async def intent_status(
+    intent_agent: IntentClassifier = Depends(get_intent_agent),  # noqa: B008
+) -> IntentRuntimeStatus:
+    status = intent_agent.runtime_status()
+    return IntentRuntimeStatus.model_validate(status)
+
+
+@router.get(
+    "/intent/readiness",
+    response_model=IntentRuntimeStatus,
+    summary="Intent 모델 readiness",
+    description="활성 Intent 모델의 warmup과 BERT/A.X 가용성이 확인된 경우에만 200 반환.",
+    responses={503: {"description": "Intent 모델이 아직 준비되지 않음"}},
+    dependencies=[Depends(verify_internal_bearer)],
+)
+async def intent_readiness(
+    response: Response,
+    intent_agent: IntentClassifier = Depends(get_intent_agent),  # noqa: B008
+) -> IntentRuntimeStatus:
+    runtime_status = IntentRuntimeStatus.model_validate(
+        intent_agent.runtime_status()
+    )
+    if not runtime_status.ready:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return runtime_status

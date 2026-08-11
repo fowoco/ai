@@ -1,28 +1,20 @@
 # Analyses Runtime 계약 (AI 소유)
 
-Server `docs/ai-runtime-contract.md` + `AiRuntimeHttpRequest` (fowoco/server main)과 맞춘다.  
-**HTTP 와이어**는 최소 페이로드다. `attemptId` / version / deadline / `extractedSlots` /
-`workflowConstraints` 는 Server 내부 `AiAnalysisRequest`에만 있고 **요청 JSON에 실리지 않는다**.
+Server PR #138의 `AiRuntimeHttpRequest`와 맞춘 계약이다. 계약 버전은 **1.1.0**이며,
+MVP에서는 발화 하나당 대표 Intent와 canonical Workflow 한 쌍만 처리한다.
 
-## Endpoint
+## Endpoint와 흐름
 
 ```text
 POST /internal/v1/analyses
+
+PLAN    → Intent 모델 1회 → CONTEXT_REQUIRED | OUT_OF_SCOPE
+        → CONTEXT_REQUIRED: Server가 대표 Intent/Workflow 저장 + DB 조회
+        → OUT_OF_SCOPE: Workflow/DB/ANALYZE 없이 종료
+ANALYZE → PLAN 결정 재사용(모델 0회) → NEEDS_INFO | REVIEW_REQUIRED
 ```
 
-## 흐름
-
-```text
-PLAN  → CONTEXT_REQUIRED (requiredFieldKeys)
-      → Server DB 조회
-ANALYZE → NEEDS_INFO (questions) | REVIEW_REQUIRED (candidates)
-```
-
-`CONTEXT_REQUIRED` / `NEEDS_INFO` / `REVIEW_REQUIRED` 는 모두 **성공 outcome** 이다 (`FAILED` 아님).
-
----
-
-## 1) PLAN 요청 (Server → AI)
+## PLAN 요청
 
 ```json
 {
@@ -34,16 +26,9 @@ ANALYZE → NEEDS_INFO (questions) | REVIEW_REQUIRED (candidates)
 }
 ```
 
-| 필드 | 규칙 |
-|---|---|
-| `requestId` | 필수. 응답에 그대로 에코 |
-| `phase` | `"PLAN"` |
-| `analysisInput.instruction` | HR 발화 **원문만** (Intent 태그·코드 미부착, Issue #6) |
-| workers / requestedFieldKeys | **보내지 않음** (PLAN) |
-| `intentHint` | **없음** (폐기) |
-| attemptId / contractVersion / deadlineMs 등 | HTTP에 **없음** (Server 내부) |
+PLAN에는 `plannedIntent`, `plannedWorkflowId`, Worker context를 보내지 않는다.
 
-## 2) CONTEXT_REQUIRED 응답 (AI → Server)
+## CONTEXT_REQUIRED 응답
 
 ```json
 {
@@ -51,27 +36,70 @@ ANALYZE → NEEDS_INFO (questions) | REVIEW_REQUIRED (candidates)
   "outcome": "CONTEXT_REQUIRED",
   "contextRequirement": {
     "detectedIntent": "EXPIRY_RENEWAL",
-    "confidence": 0.94,
+    "workflowId": "WF-STY-001",
+    "evidence": "체류연장 준비해줘",
+    "confidence": null,
+    "confidenceSource": "UNAVAILABLE",
+    "bertRoutingScore": 0.3088,
     "targetDisplayName": "응웬반안",
     "extractedSlots": {},
-    "requiredFieldKeys": ["worker_id", "stay_expiry_date"]
+    "requiredFieldKeys": [
+      "worker_id",
+      "stay_expiry_date",
+      "passport_status",
+      "arc_status"
+    ]
   },
   "questions": [],
   "candidates": [],
   "validationErrors": [],
-  "versions": { "...": "..." },
+  "versions": {
+    "agentVersion": "0.1.0",
+    "modelProvider": "huggingface",
+    "modelName": "skt/A.X-4.0-Light",
+    "modelVersion": "AX",
+    "promptVersion": "knowledge-25e778ad",
+    "contextPackVersion": "0.2.0",
+    "workflowCatalogVersion": "0.2.0",
+    "contractVersion": "1.1.0"
+  },
   "providerAttemptCount": 1,
   "latencyMs": 120
 }
 ```
 
-| 규칙 | 내용 |
-|---|---|
-| `requiredFieldKeys` | 비어 있으면 Server 거부. Knowledge canonical key만 (`worker_id` 포함) |
-| `questions` / `candidates` | 비움 |
-| `confidence` | 0.0 ~ 1.0 |
+규칙:
 
-## 3) ANALYZE 요청 (Server → AI)
+- `workflowId`는 `WF-STY-001` 같은 Knowledge canonical ID다.
+- A.X는 확률을 제공하지 않으므로 `confidence=null`, `confidenceSource=UNAVAILABLE`이다.
+- BERT가 최종 분류기이면 `confidenceSource=BERT`이고 confidence를 반환한다.
+- 고정 규칙 fallback은 `confidenceSource=MODEL`을 사용한다.
+- `bertRoutingScore`는 A.X 선택 전 참고값이며 A.X confidence가 아니다.
+- `evidence`는 A.X의 원문 substring이다. BERT와 OUT_OF_SCOPE에서는 null일 수 있다.
+- evidence는 Slot이 아니므로 `extractedSlots`에 `evidence:*` key를 만들지 않는다.
+- A.X가 여러 Intent를 반환해도 MVP 응답은 원문 등장 순서의 첫 Intent만 사용한다.
+- 같은 Intent에 여러 Knowledge Workflow가 있으면 발화/evidence의 업무 신호로 선택한다.
+- `EXPIRY_RENEWAL`의 체류 신호는 `WF-STY-001`, 계약·재계약·취업활동기간 연장·고용허가기간 연장 신호는 `WF-CON-001`이다.
+
+## OUT_OF_SCOPE 응답
+
+실행할 Workflow가 없는 발화는 DB context를 요청하지 않고 PLAN에서 즉시 종료한다.
+
+```json
+{
+  "requestId": "10000000-0000-0000-0000-000000000001",
+  "outcome": "OUT_OF_SCOPE",
+  "contextRequirement": null,
+  "questions": [],
+  "candidates": [],
+  "validationErrors": [],
+  "providerAttemptCount": 1
+}
+```
+
+Server는 `OUT_OF_SCOPE`에서 Workflow 검증·DB 조회·ANALYZE 호출을 수행하지 않는다.
+
+## ANALYZE 요청
 
 ```json
 {
@@ -79,7 +107,14 @@ ANALYZE → NEEDS_INFO (questions) | REVIEW_REQUIRED (candidates)
   "phase": "ANALYZE",
   "analysisInput": {
     "instruction": "응웬반안 체류연장 준비해줘",
-    "requestedFieldKeys": ["worker_id", "stay_expiry_date"],
+    "plannedIntent": "EXPIRY_RENEWAL",
+    "plannedWorkflowId": "WF-STY-001",
+    "requestedFieldKeys": [
+      "worker_id",
+      "stay_expiry_date",
+      "passport_status",
+      "arc_status"
+    ],
     "workers": [
       {
         "workerRef": "30000000-0000-0000-0000-000000000001",
@@ -93,32 +128,24 @@ ANALYZE → NEEDS_INFO (questions) | REVIEW_REQUIRED (candidates)
 }
 ```
 
-| 필드 | 규칙 |
-|---|---|
-| `requestedFieldKeys` | PLAN에서 Agent가 요청한 **전체** key (DB 미조회여도 목록 유지) |
-| `workers[].requestedFields` | Server가 **실제로 찾은 값만** |
-| DB 미조회 키 | `requestedFieldKeys − requestedFields.keys` → HR 질문 후보 |
-| MVP | Worker **1명** |
-| HTTP에 안 실림 | `extractedSlots`, `workflowConstraints`, attemptId, versions, deadline |
+규칙:
 
-> 이슈 댓글의 ANALYZE `extractedSlots` 와이어 추가는 **최종 HTTP 계약에서 제외**됨  
-> (`AiRuntimeHttpRequest` 주석·직렬화 기준).
+- `plannedIntent`, `plannedWorkflowId`는 모두 필수다. 하나라도 없으면 422로 거부한다.
+- AI는 이 값을 신뢰하여 Intent 모델을 다시 호출하지 않고 Slot/Context만 검사한다.
+- `providerAttemptCount=0`은 ANALYZE에서 모델 호출이 없었음을 뜻한다.
+- `requestedFieldKeys`는 PLAN에서 요청한 전체 key다.
+- `workers[].requestedFields`에는 Server DB에서 실제로 찾은 값만 담는다.
+- MVP는 Worker 한 명과 대표 Intent/Workflow 한 쌍만 처리한다.
 
-## 4) ANALYZE 응답
+## ANALYZE 응답
 
 ### NEEDS_INFO
 
-- `contextRequirement`: null  
-- `candidates`: []  
-- `questions`: **1개 이상** `{ "slotKey", "prompt" }`
+- `contextRequirement`: null
+- `candidates`: []
+- `questions`: 한 개 이상
 
 ### REVIEW_REQUIRED
-
-- `contextRequirement`: null  
-- `questions`: []  
-- `candidates`: **1개 이상** (기존 AiCandidate 필드)
-- `detectedIntent`는 `EXPIRY_RENEWAL` 같은 업무 종류이며, 후보의 `workflowId`는 `WF-STY-001` 같은 구체적인 Workflow Catalog ID다.
-- `workflowId`에 Intent 코드를 다시 넣지 않는다.
 
 ```json
 {
@@ -127,52 +154,43 @@ ANALYZE → NEEDS_INFO (questions) | REVIEW_REQUIRED (candidates)
   "workflowId": "WF-STY-001",
   "extractedSlots": {
     "worker_id": "30000000-0000-0000-0000-000000000001",
-    "stay_expiry_date": "2026-12-31",
-    "full_name": "NGUYEN VAN AN"
+    "stay_expiry_date": "2026-12-31"
   },
   "missingSlots": [],
-  "confidence": 0.92
+  "confidence": null
 }
 ```
 
-`missingSlots`는 REVIEW 직전 필수 슬롯이 모두 채워졌을 때 **빈 배열**이다.  
-남은 HR 입력은 `NEEDS_INFO.questions`로 보낸다.
+Candidate의 `workflowId`는 `plannedWorkflowId`와 반드시 같아야 한다. ANALYZE는 모델을
+재호출하지 않고 Server가 confidence를 다시 보내지 않으므로 AI는 새 점수를 만들지 않는다.
 
-공통 응답 필드: `validationErrors`, `versions`, `providerAttemptCount`, `latencyMs`.
+## Server #138 확정 정책
 
-### versions (응답 필수)
+- PLAN의 confidence는 Intent 분류 결과다.
+- Server는 PLAN의 BERT confidence, confidenceSource, bertRoutingScore를 실행 이력에 보존한다.
+- ANALYZE 요청에는 `plannedIntent`, `plannedWorkflowId`만 전달한다.
+- AI는 Intent 모델을 재호출하지 않고 Candidate confidence를 null로 반환한다.
+- Server는 Candidate confidence와 PLAN confidence를 비교하지 않으며 nullable을 허용한다.
+- Candidate의 workflowId는 plannedWorkflowId와 반드시 같아야 한다.
+- PLAN 결정을 재사용한 ANALYZE의 providerAttemptCount는 0이다.
 
-Server가 내부 요청의 `contractVersion` / `requiredKnowledgeVersion` 과  
-응답 `versions.contractVersion` / `versions.workflowCatalogVersion` 을 대조한다.  
-HTTP 요청에 version이 없어도 AI는 기본값 **`1.0.0` / `0.2.0`** 을 맞춰야 한다.
-
----
-
-## 우리(AI) 구현 상태
-
-| 항목 | Server HTTP | AI (`schemas` / `pipeline`) |
-|---|---|---|
-| `phase` PLAN/ANALYZE | 필수 | **반영** |
-| `CONTEXT_REQUIRED` | 있음 | **반영** |
-| `questions` | NEEDS_INFO | **반영** |
-| ANALYZE `requestedFieldKeys` | 있음 | **반영** |
-| workers 최소 필드 | workerRef + requestedFields | **반영** (추가 필드는 선택) |
-| attemptId 등 | HTTP 미전송 | **요청에서 제거** |
-| 슬롯 기준 | Knowledge | Ambiguity/Workflow catalog |
-| versions | 응답 필수 | `1.0.0` / `0.2.0` 고정 |
-
-## Intent 분류기
+## Intent 운영 설정
 
 | 설정 | 동작 |
 |---|---|
-| `FOWOCO_INTENT_MODEL_ENABLED=false` (기본) | `EXPIRY_RENEWAL` 고정 stub |
-| `FOWOCO_INTENT_MODEL_ENABLED=true` | HF BERT(+선택 A.X) 하이브리드 |
+| `FOWOCO_INTENT_MODEL_ENABLED=false` | `EXPIRY_RENEWAL` 고정 규칙 |
+| `FOWOCO_INTENT_MODEL_ENABLED=true` | HF BERT와 선택적 A.X 하이브리드 |
+| `FOWOCO_INTENT_WARMUP_ON_START=true` | startup에서 BERT/A.X 로딩·첫 추론 |
+| `FOWOCO_INTENT_WARMUP_REQUIRED=true` | warmup 실패 시 애플리케이션 startup 실패 |
 
-필요 시 BERT만: `pip install -e ".[intent]"` (Windows CPU 권장).  
-A.X까지: `pip install -e ".[intent-ax]"` (Linux/CUDA; Windows에선 `bitsandbytes` 실패 흔함).  
-`.env`에 `FOWOCO_HF_TOKEN` 또는 `HF_TOKEN`,  
-`FOWOCO_INTENT_BERT_MODEL_DIR=fowoco/klue-roberta-base-intent-classifier`.  
-로컬 CPU는 `FOWOCO_INTENT_ENABLE_AX=false` 권장. `.env.example`은 두지 않음(로컬 `.env`만).
+A.X 사용 이미지는 `intent-ax` extra를 설치한다. 운영 장치에 맞춰
+`FOWOCO_INTENT_DEVICE`를 설정하고 private HF Token은 Kubernetes Secret으로 주입한다.
+BERT/Base/Adapter의 `*_REVISION`은 immutable Hugging Face commit SHA로 고정한다.
+
+`GET /internal/v1/intent/status`에서 모델 설정, lazy-load 상태, BERT/A.X 가용성과
+`promptVersion`을 확인한다. Kubernetes readiness는
+`GET /internal/v1/intent/readiness`의 200 응답을 사용한다. 운영에서는 warmup 후
+`ready=true`, `axAvailable=true`, `promptVersion=knowledge-25e778ad`를 확인한다.
 
 ## Fixtures
 
@@ -183,7 +201,4 @@ A.X까지: `pip install -e ".[intent-ax]"` (Linux/CUDA; Windows에선 `bitsandby
 | `examples/analyses/request_analyze.json` | ANALYZE 요청 |
 | `examples/analyses/response_needs_info.json` | NEEDS_INFO |
 | `examples/analyses/response_review_required.json` | REVIEW_REQUIRED |
-
-## 핸드셰이크 (#8)
-
-[ai-runtime-handshake.md](ai-runtime-handshake.md) — Bearer, `X-Request-Id` = requestId.
+| `examples/analyses/response_out_of_scope.json` | OUT_OF_SCOPE |

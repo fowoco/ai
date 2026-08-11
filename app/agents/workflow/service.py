@@ -4,6 +4,59 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+_DEFAULT_WORKFLOW_BY_INTENT: dict[str, str] = {
+    "WORKER_ONBOARDING": "WF-WRK-001",
+    "EXPIRY_RENEWAL": "WF-STY-001",
+    "DOCUMENT_REQUEST": "WF-DOC-001",
+    "PAYROLL_EXPLANATION": "WF-PAY-001",
+    "WORK_INSTRUCTION": "WF-INS-001",
+    "EMPLOYMENT_CHANGE": "WF-CHG-001",
+}
+
+# 하나의 대표 Intent 아래 여러 Knowledge Workflow가 있을 때 사용하는 업무 신호다.
+# Intent 모델을 다시 호출하지 않고 발화/evidence만으로 canonical Workflow를 고른다.
+_WORKFLOW_ROUTING_TERMS: dict[str, tuple[str, ...]] = {
+    "WF-STY-001": (
+        "체류기간 연장",
+        "체류 연장",
+        "체류기간",
+        "비자 연장",
+        "외국인등록증",
+        "체류",
+        "비자",
+    ),
+    "WF-CON-001": (
+        "근로계약 갱신",
+        "근로계약",
+        "재계약",
+        "취업활동기간 연장",
+        "취업 활동 기간 연장",
+        "고용허가기간 연장",
+        "고용 허가 기간 연장",
+        "계약 종료",
+        "계약 만료",
+        "계약 갱신",
+    ),
+    "WF-DOC-001": (
+        "여권 사본",
+        "등록증 사본",
+        "사본 요청",
+        "서류 요청",
+        "제출 요청",
+        "업로드",
+        "사본",
+    ),
+    "WF-ADM-001": (
+        "재직증명서",
+        "경력증명서",
+        "증명서 발급",
+        "행정 서류",
+        "기관 제출",
+        "신고서",
+        "발급",
+    ),
+}
+
 _BUILTIN_CATALOG: dict[str, dict[str, object]] = {
     "WF-WRK-001": {
         "name": "근로자 등록·정보변경",
@@ -69,6 +122,46 @@ _BUILTIN_CATALOG: dict[str, dict[str, object]] = {
 }
 
 
+def _normalized_text(value: str) -> str:
+    return "".join(value.casefold().split())
+
+
+# Intent 후보 안에서 발화 근거가 가장 강한 Workflow를 고른다.
+# 매칭 신호가 없으면 catalog 순서가 아니라 명시된 MVP 기본 Workflow를 사용한다.
+def select_workflow_id(
+    *,
+    intent: str,
+    instruction: str,
+    candidate_workflow_ids: list[str],
+) -> str | None:
+    if not candidate_workflow_ids:
+        return None
+    if len(candidate_workflow_ids) == 1:
+        return candidate_workflow_ids[0]
+
+    normalized = _normalized_text(instruction)
+    ranked: list[tuple[int, int, str]] = []
+    for workflow_id in candidate_workflow_ids:
+        matches: list[tuple[str, int]] = []
+        for term in _WORKFLOW_ROUTING_TERMS.get(workflow_id, ()):
+            normalized_term = _normalized_text(term)
+            position = normalized.find(normalized_term)
+            if position >= 0:
+                matches.append((normalized_term, position))
+        if matches:
+            score = sum(len(term) for term, _ in matches)
+            first_position = min(position for _, position in matches)
+            ranked.append((score, -first_position, workflow_id))
+
+    if ranked:
+        return max(ranked)[2]
+
+    default_workflow = _DEFAULT_WORKFLOW_BY_INTENT.get(intent)
+    if default_workflow in candidate_workflow_ids:
+        return default_workflow
+    return None
+
+
 @dataclass
 # 워크플로 카탈로그 한 건의 스냅샷
 class WorkflowInfo:
@@ -108,7 +201,11 @@ class WorkflowAgent:
 
     # Intent와 선택적 constraint로 최적 워크플로 선택
     def resolve_workflow(
-        self, intent: str, constraints: list[str] | None = None
+        self,
+        intent: str,
+        constraints: list[str] | None = None,
+        *,
+        instruction: str = "",
     ) -> WorkflowInfo | None:
         candidates = [
             self.get_workflow(wid)
@@ -122,4 +219,9 @@ class WorkflowAgent:
             if constrained:
                 candidates = constrained
 
-        return candidates[0] if candidates else None
+        selected_id = select_workflow_id(
+            intent=intent,
+            instruction=instruction,
+            candidate_workflow_ids=[candidate.workflow_id for candidate in candidates],
+        )
+        return self.get_workflow(selected_id) if selected_id else None

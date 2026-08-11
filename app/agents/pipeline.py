@@ -1,4 +1,4 @@
-# Analyses 파이프라인 — PLAN(CONTEXT_REQUIRED) → ANALYZE(NEEDS_INFO|REVIEW_REQUIRED)
+# Analyses 파이프라인 — PLAN(CONTEXT_REQUIRED|OUT_OF_SCOPE) → ANALYZE
 
 from __future__ import annotations
 
@@ -109,9 +109,25 @@ def _versions(intent_result: IntentResult) -> AnalysisVersions:
         model_provider=intent_result.model_provider,
         model_name=intent_result.model_name,
         model_version=intent_result.model_version,
+        prompt_version=intent_result.prompt_version,
         contract_version=DEFAULT_CONTRACT_VERSION,
         workflow_catalog_version=DEFAULT_KNOWLEDGE_VERSION,
         context_pack_version=DEFAULT_KNOWLEDGE_VERSION,
+    )
+
+
+# PLAN에서 확정한 결정을 재구성해 ANALYZE 모델 재호출을 피한다.
+def _planned_intent_result(request: AnalysisRequest) -> IntentResult:
+    ai = request.analysis_input
+    # AnalysisRequest 검증이 두 값을 필수로 보장한다.
+    return IntentResult(
+        intent=ai.planned_intent or "UNKNOWN",
+        workflow_id=ai.planned_workflow_id or "",
+        confidence=None,
+        confidence_source="UNAVAILABLE",
+        model_provider="server",
+        model_name="planned-intent",
+        model_version="reused",
     )
 
 
@@ -145,20 +161,33 @@ class AnalysisPipeline:
     def _run_plan(self, request: AnalysisRequest) -> AnalysisResponse:
         instruction = request.analysis_input.instruction
         intent_result = self._intent.classify(instruction)
-        workflow_id = intent_result.workflow_id or ""
-        # Issue #6: Knowledge canonical key 전체 (worker_id 포함)
         if intent_result.intent == "OUT_OF_SCOPE":
-            field_keys = ["worker_id"]
-        else:
-            required = self._required_slots_for(workflow_id)
-            field_keys = list(required) if required else ["worker_id", "stay_expiry_date"]
+            return AnalysisResponse(
+                request_id=request.request_id,
+                outcome="OUT_OF_SCOPE",
+                context_requirement=None,
+                questions=[],
+                candidates=[],
+                validation_errors=[],
+                versions=_versions(intent_result),
+                provider_attempt_count=1,
+                latency_ms=0,
+            )
+
+        workflow_id = intent_result.workflow_id or ""
+        required = self._required_slots_for(workflow_id)
+        field_keys = list(required) if required else ["worker_id", "stay_expiry_date"]
 
         return AnalysisResponse(
             request_id=request.request_id,
             outcome="CONTEXT_REQUIRED",
             context_requirement=ContextRequirement(
                 detected_intent=intent_result.intent or "UNKNOWN",
+                workflow_id=workflow_id,
+                evidence=intent_result.evidence,
                 confidence=intent_result.confidence,
+                confidence_source=intent_result.confidence_source,
+                bert_routing_score=intent_result.bert_routing_score,
                 target_display_name=_guess_target_display_name(instruction),
                 extracted_slots=dict(intent_result.extracted_slots),
                 required_field_keys=field_keys,
@@ -175,8 +204,8 @@ class AnalysisPipeline:
     def _run_analyze(self, request: AnalysisRequest) -> AnalysisResponse:
         ai = request.analysis_input
         instruction = ai.instruction
-        intent_result = self._intent.classify(instruction)
-        workflow_id = intent_result.workflow_id or ""
+        intent_result = _planned_intent_result(request)
+        workflow_id = intent_result.workflow_id
 
         if not ai.workers:
             return AnalysisResponse(
@@ -187,13 +216,14 @@ class AnalysisPipeline:
                 candidates=[],
                 validation_errors=[],
                 versions=_versions(intent_result),
-                provider_attempt_count=1,
+                provider_attempt_count=0,
                 latency_ms=0,
             )
 
         # MVP: 근로자 1명만
         worker = ai.workers[0]
         slots = _seed_slots_from_worker(worker)
+        slots.update(intent_result.extracted_slots)
 
         # Server가 못 채운 PLAN 요청 키 → HR 질문 후보
         hr_keys: list[str] = []
@@ -219,18 +249,17 @@ class AnalysisPipeline:
                 candidates=[],
                 validation_errors=[],
                 versions=_versions(intent_result),
-                provider_attempt_count=1,
+                provider_attempt_count=0,
                 latency_ms=0,
             )
 
-        # Intent와 구분되는 Knowledge canonical Workflow ID를 반환
         candidate = AnalysisCandidate(
             candidate_ref=f"candidate-{uuid4().hex[:8]}",
             worker_ref=worker.worker_ref,
             workflow_id=workflow_id,
             extracted_slots=slots,
             missing_slots=[],
-            confidence=intent_result.confidence,
+            confidence=None,
         )
         return AnalysisResponse(
             request_id=request.request_id,
@@ -240,7 +269,7 @@ class AnalysisPipeline:
             candidates=[candidate],
             validation_errors=[],
             versions=_versions(intent_result),
-            provider_attempt_count=1,
+            provider_attempt_count=0,
             latency_ms=0,
         )
 

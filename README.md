@@ -90,7 +90,7 @@ POST /internal/v1/workflows/renewal/run
 POST /internal/v1/language-assistant
 ```
 
-- Analyses: 재갱신 고정 Intent + Catalog 필수슬롯·Knowledge 모호표현 ([docs/analyses-contract.md](docs/analyses-contract.md))
+- Analyses: BERT/A.X Intent + PLAN 결정 재사용 + Catalog 필수슬롯·Knowledge 모호표현 ([docs/analyses-contract.md](docs/analyses-contract.md))
 - Workflows: 재갱신 LangGraph — 슈퍼바이저 → 안내문(태정) / OCR(주현) / 초안 4종 — [docs/workflows-contract.md](docs/workflows-contract.md)
 - Language Assistant: 외국인근로자 15개 언어 번역, 쉬운 한국어 변환 및 표준 한국어 생성 — [docs/contracts/language-assistant-http-request.schema.json](docs/contracts/language-assistant-http-request.schema.json)
 - 최종 흐름도: [app/agents/workflow_graph/README.md](app/agents/workflow_graph/README.md)

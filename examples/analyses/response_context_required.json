@@ -3,12 +3,18 @@
   "outcome": "CONTEXT_REQUIRED",
   "contextRequirement": {
     "detectedIntent": "EXPIRY_RENEWAL",
-    "confidence": 0.94,
+    "workflowId": "WF-STY-001",
+    "evidence": "체류연장 준비해줘",
+    "confidence": null,
+    "confidenceSource": "UNAVAILABLE",
+    "bertRoutingScore": 0.3088,
     "targetDisplayName": "응웬반안",
     "extractedSlots": {},
     "requiredFieldKeys": [
       "worker_id",
-      "stay_expiry_date"
+      "stay_expiry_date",
+      "passport_status",
+      "arc_status"
     ]
   },
   "questions": [],
@@ -16,13 +22,13 @@
   "validationErrors": [],
   "versions": {
     "agentVersion": "0.1.0",
-    "modelProvider": "stub",
-    "modelName": "stub",
-    "modelVersion": "stub",
-    "promptVersion": "prompt-1",
+    "modelProvider": "huggingface",
+    "modelName": "skt/A.X-4.0-Light",
+    "modelVersion": "AX",
+    "promptVersion": "knowledge-25e778ad",
     "contextPackVersion": "0.2.0",
     "workflowCatalogVersion": "0.2.0",
-    "contractVersion": "1.0.0"
+    "contractVersion": "1.1.0"
   },
   "providerAttemptCount": 1,
   "latencyMs": 120

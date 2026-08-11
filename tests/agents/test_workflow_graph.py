@@ -35,6 +35,55 @@ def test_expiry_renewal_routes_to_waiting_worker() -> None:
     assert "passport_number" in state["missing_slots"]
 
 
+def test_renewal_preserves_server_task_workflow() -> None:
+    """Renewal 실행은 발화 재분류보다 Server Task Workflow를 우선한다."""
+    orch = RenewalOrchestrator(lookup=InMemoryDb(), store=InMemoryDb())
+    state = orch.run(
+        request_id="req-contract-task",
+        instruction="체류기간 연장 준비해줘",
+        task_id="task-contract",
+        worker_id="worker-001",
+        task={
+            "task_id": "task-contract",
+            "workflow_id": "WF-CON-001",
+            "task_type": "RECONTRACT",
+        },
+    )
+
+    assert state["intent"] == "EXPIRY_RENEWAL"
+    assert state["workflow_id"] == "WF-CON-001"
+
+
+def test_out_of_scope_clears_server_task_workflow() -> None:
+    """OUT_OF_SCOPE에는 Server Task가 있어도 실행 Workflow를 반환하지 않는다."""
+
+    def out_of_scope_language(state: dict) -> dict:
+        return {
+            "intent": "OUT_OF_SCOPE",
+            "workflow_id": state.get("workflow_id"),
+            "confidence": 0.9,
+            "slots": state.get("slots", {}),
+            "missing_slots": [],
+        }
+
+    orch = RenewalOrchestrator(language_node=out_of_scope_language)
+    state = orch.run(
+        request_id="req-out-of-scope-task",
+        instruction="오늘 날씨 어때?",
+        task_id="task-contract",
+        worker_id="worker-001",
+        task={
+            "task_id": "task-contract",
+            "workflow_id": "WF-CON-001",
+            "task_type": "RECONTRACT",
+        },
+    )
+
+    assert state["intent"] == "OUT_OF_SCOPE"
+    assert state["workflow_id"] == ""
+    assert state["outcome"] == "OUT_OF_SCOPE"
+
+
 def test_ask_hr_when_identity_filled_but_contract_missing() -> None:
     """신분은 있고 계약 슬롯만 비면 담당자 입력(NEEDS_INFO)로 간다."""
     orch = RenewalOrchestrator()
@@ -131,4 +180,3 @@ def test_supervisor_document_combo_on_waiting_worker() -> None:
         "partial_unknown",
     }
     assert state.get("case_signals")
-
