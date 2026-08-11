@@ -1,7 +1,8 @@
 # HF Intent 에이전트·대표 Intent 선택 단위 테스트
 
 from app.agents.intent.guardrail import HRRoutingGuardrail
-from app.agents.intent.hybrid import HybridIntentPrediction
+from app.agents.intent.hybrid import HybridIntentPipeline, HybridIntentPrediction
+from app.agents.intent.prompts import AX_INTENT_PROMPT_VERSION
 from app.agents.intent.service import (
     FixedExpiryRenewalIntentAgent,
     HybridHfIntentAgent,
@@ -56,6 +57,38 @@ def test_hybrid_agent_maps_pipeline_prediction() -> None:
     assert result.model_provider == "huggingface"
     assert result.model_name == get_settings().intent_bert_model_dir
     assert result.model_version == "BERT"
+    assert result.prompt_version == "not-applicable"
+    assert result.confidence_source == "BERT"
+    assert result.bert_routing_score == 0.93
+
+
+# A.X는 Knowledge prompt의 발화문 등장 순서를 대표 Intent에도 유지
+def test_hybrid_agent_preserves_ax_intent_order() -> None:
+    class _FakePipe:
+        def predict(self, instruction: str) -> HybridIntentPrediction:
+            del instruction
+            return HybridIntentPrediction(
+                intents=["DOCUMENT_REQUEST", "EXPIRY_RENEWAL"],
+                scores={"DOCUMENT_REQUEST": 0.2, "EXPIRY_RENEWAL": 0.95},
+                evidence={"DOCUMENT_REQUEST": "서류를 요청해"},
+                selected_model="AX",
+                prompt_version=AX_INTENT_PROMPT_VERSION,
+            )
+
+    agent = HybridHfIntentAgent(pipeline=_FakePipe())
+    result = agent.classify("서류를 요청해. 체류연장도 준비해줘")
+
+    assert result.intent == "DOCUMENT_REQUEST"
+    assert result.workflow_id == "WF-DOC-001"
+    assert result.confidence is None
+    assert result.confidence_source == "UNAVAILABLE"
+    assert result.bert_routing_score == 0.2
+    assert [decision.intent for decision in result.decisions] == [
+        "DOCUMENT_REQUEST",
+        "EXPIRY_RENEWAL",
+    ]
+    assert all(decision.confidence is None for decision in result.decisions)
+    assert result.prompt_version == AX_INTENT_PROMPT_VERSION
 
 
 # INTENT_MODEL_ENABLED=true → HybridHfIntentAgent
@@ -65,6 +98,54 @@ def test_build_intent_agent_enabled_returns_hybrid(monkeypatch) -> None:
     try:
         agent = build_intent_agent()
         assert isinstance(agent, HybridHfIntentAgent)
+    finally:
+        get_settings.cache_clear()
+
+
+def test_hybrid_runtime_status_reports_loaded_ax_and_prompt(monkeypatch) -> None:
+    monkeypatch.setenv("FOWOCO_INTENT_ENABLE_AX", "true")
+    get_settings.cache_clear()
+    try:
+        pipeline = type(
+            "LoadedPipeline",
+            (),
+            {"bert": object(), "ax": object(), "ax_enabled": True},
+        )()
+        status = HybridHfIntentAgent(pipeline=pipeline).runtime_status()
+
+        assert status == {
+            "intentModelEnabled": True,
+            "axEnabled": True,
+            "initialized": True,
+            "bertAvailable": True,
+            "axAvailable": True,
+            "degraded": False,
+            "promptVersion": AX_INTENT_PROMPT_VERSION,
+        }
+    finally:
+        get_settings.cache_clear()
+
+
+def test_hybrid_loader_forwards_pinned_model_revisions(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class _FakeHybridPipeline:
+        def __init__(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setenv("FOWOCO_INTENT_BERT_MODEL_REVISION", "bert-commit")
+    monkeypatch.setenv("FOWOCO_INTENT_AX_BASE_REVISION", "base-commit")
+    monkeypatch.setenv("FOWOCO_INTENT_AX_ADAPTER_REVISION", "adapter-commit")
+    monkeypatch.setattr(
+        "app.agents.intent.hybrid.HybridIntentPipeline", _FakeHybridPipeline
+    )
+    get_settings.cache_clear()
+    try:
+        agent = HybridHfIntentAgent()
+        assert agent._ensure_pipeline() is not None
+        assert captured["bert_model_revision"] == "bert-commit"
+        assert captured["ax_base_revision"] == "base-commit"
+        assert captured["ax_adapter_revision"] == "adapter-commit"
     finally:
         get_settings.cache_clear()
 
@@ -106,3 +187,58 @@ def test_guardrail_routes_on_document_keyword() -> None:
     )
     assert out.should_route is True
     assert out.category == "Rule_Document"
+
+
+def test_pipeline_calls_ax_when_guardrail_routes() -> None:
+    class _Bert:
+        device = "cpu"
+
+        def predict(self, _instruction: str) -> tuple[dict[str, float], float, list[str]]:
+            return {"DOCUMENT_REQUEST": 0.8}, 0.9, ["DOCUMENT_REQUEST"]
+
+    class _Guardrail:
+        def should_route_to_ax(self, *_args: object) -> object:
+            return type("Route", (), {"should_route": True})()
+
+    class _Ax:
+        prompt_version = AX_INTENT_PROMPT_VERSION
+
+        def predict(self, _instruction: str) -> list[dict[str, str]]:
+            return [{"intent": "DOCUMENT_REQUEST", "evidence": "서류 챙겨줘"}]
+
+    pipeline = HybridIntentPipeline.__new__(HybridIntentPipeline)
+    pipeline.bert = _Bert()
+    pipeline.guardrail = _Guardrail()
+    pipeline.ax = _Ax()
+    pipeline.ax_enabled = True
+
+    prediction = pipeline.predict("서류 챙겨줘")
+
+    assert prediction.selected_model == "AX"
+    assert prediction.intents == ["DOCUMENT_REQUEST"]
+    assert prediction.evidence == {"DOCUMENT_REQUEST": "서류 챙겨줘"}
+    assert prediction.prompt_version == AX_INTENT_PROMPT_VERSION
+
+
+def test_pipeline_marks_fallback_when_ax_enabled_but_unavailable() -> None:
+    class _Bert:
+        device = "cpu"
+
+        def predict(self, _instruction: str) -> tuple[dict[str, float], float, list[str]]:
+            return {"DOCUMENT_REQUEST": 0.8}, 0.9, ["DOCUMENT_REQUEST"]
+
+    class _Guardrail:
+        def should_route_to_ax(self, *_args: object) -> object:
+            return type("Route", (), {"should_route": True})()
+
+    pipeline = HybridIntentPipeline.__new__(HybridIntentPipeline)
+    pipeline.bert = _Bert()
+    pipeline.guardrail = _Guardrail()
+    pipeline.ax = None
+    pipeline.ax_enabled = True
+
+    prediction = pipeline.predict("서류 챙겨줘")
+
+    assert prediction.selected_model == "BERT_FALLBACK"
+    assert prediction.degraded is True
+    assert prediction.prompt_version == AX_INTENT_PROMPT_VERSION

@@ -79,20 +79,39 @@ def resolve_workflow_id(
 
 
 @dataclass
+# Intent 1개와 Knowledge Workflow 1개의 결정
+class IntentDecision:
+
+    intent: str
+    workflow_id: str
+    confidence: float | None
+    confidence_source: str
+    bert_routing_score: float | None = None
+    evidence: str | None = None
+
+
+@dataclass
 # Intent 분류와 Slot 추출 결과
 class IntentResult:
 
     intent: str
-    confidence: float
+    confidence: float | None
     workflow_id: str
     model_provider: str
     model_name: str
     model_version: str
     extracted_slots: dict[str, str] = field(default_factory=dict)
+    prompt_version: str = "not-applicable"
+    confidence_source: str = "UNAVAILABLE"
+    bert_routing_score: float | None = None
+    decisions: list[IntentDecision] = field(default_factory=list)
 
 
 # 교체 가능한 Intent 분류기 계약
 class IntentClassifier(Protocol):
+
+    # 모델 초기화·A.X 가용성 진단 (조회 시 lazy load 금지)
+    def runtime_status(self) -> dict[str, object]: ...
 
     # 지시문 Intent 분류·관련 Slot 추출
     def classify(
@@ -105,6 +124,18 @@ class IntentClassifier(Protocol):
 
 # 재갱신 Intent 고정 — 슬롯은 Server worker 시드에 맡김 (발화 정규식 추출 없음)
 class FixedExpiryRenewalIntentAgent:
+
+    # 운영 상태 — 모델 기능이 꺼진 고정 규칙 모드
+    def runtime_status(self) -> dict[str, object]:
+        return {
+            "intentModelEnabled": False,
+            "axEnabled": False,
+            "initialized": True,
+            "bertAvailable": False,
+            "axAvailable": False,
+            "degraded": False,
+            "promptVersion": "not-applicable",
+        }
 
     # 항상 EXPIRY_RENEWAL로 두고 workflowId만 채움
     def classify(
@@ -123,6 +154,15 @@ class FixedExpiryRenewalIntentAgent:
             model_name="fixed-expiry-renewal",
             model_version="rules",
             extracted_slots={},
+            confidence_source="RULES",
+            decisions=[
+                IntentDecision(
+                    intent=intent,
+                    workflow_id=resolve_workflow_id(intent, workflow_constraints),
+                    confidence=1.0,
+                    confidence_source="RULES",
+                )
+            ],
         )
 
 
@@ -168,6 +208,7 @@ class HybridHfIntentAgent:
             token = settings.hf_token or os.environ.get("HF_TOKEN")
             self._pipeline = HybridIntentPipeline(
                 bert_model_dir=settings.intent_bert_model_dir,
+                bert_model_revision=settings.intent_bert_model_revision,
                 device=settings.intent_device,
                 label_prob_threshold=settings.intent_label_prob_threshold,
                 margin_threshold=settings.intent_margin_threshold,
@@ -175,7 +216,9 @@ class HybridHfIntentAgent:
                 hf_token=token,
                 enable_ax=settings.intent_enable_ax,
                 ax_base_model_name=settings.intent_ax_base_model,
+                ax_base_revision=settings.intent_ax_base_revision,
                 ax_adapter_path=settings.intent_ax_adapter_path,
+                ax_adapter_revision=settings.intent_ax_adapter_revision,
                 ax_max_new_tokens=settings.intent_ax_max_new_tokens,
             )
         except Exception as exc:
@@ -183,6 +226,37 @@ class HybridHfIntentAgent:
             logger.exception("HF Intent pipeline load failed — fixed EXPIRY fallback")
             return None
         return self._pipeline
+
+    # lazy-load 상태를 바꾸지 않고 readiness 진단값을 반환
+    def runtime_status(self) -> dict[str, object]:
+        from app.core.config import get_settings
+
+        from .prompts import AX_INTENT_PROMPT_VERSION
+
+        settings = get_settings()
+        pipeline = self._pipeline
+        initialized = pipeline is not None
+        ax_enabled = bool(
+            getattr(pipeline, "ax_enabled", settings.intent_enable_ax)
+            if initialized
+            else settings.intent_enable_ax
+        )
+        bert_available = initialized and getattr(pipeline, "bert", None) is not None
+        ax_available = initialized and getattr(pipeline, "ax", None) is not None
+        return {
+            "intentModelEnabled": True,
+            "axEnabled": ax_enabled,
+            "initialized": initialized,
+            "bertAvailable": bert_available,
+            "axAvailable": ax_available,
+            "degraded": self._load_error is not None
+            or (initialized and ax_enabled and not ax_available),
+            "promptVersion": (
+                AX_INTENT_PROMPT_VERSION
+                if ax_enabled
+                else "not-applicable"
+            ),
+        }
 
     # HF 분류 결과를 IntentResult로 변환
     def classify(
@@ -199,7 +273,49 @@ class HybridHfIntentAgent:
             result.model_version = "fallback"
             return result
         prediction = pipeline.predict(instruction)  # type: ignore[attr-defined]
-        intent, confidence = _primary_intent(prediction.intents, prediction.scores)
+        primary_intent, _ = _primary_intent(
+            prediction.intents, prediction.scores
+        )
+        if prediction.selected_model == "AX":
+            ordered_intents = list(prediction.intents)
+        else:
+            ordered_intents = [primary_intent, *prediction.intents]
+            ordered_intents = list(
+                dict.fromkeys(
+                    name
+                    for name in ordered_intents
+                    if name != "OUT_OF_SCOPE" or name == primary_intent
+                )
+            )
+
+        is_ax = prediction.selected_model == "AX"
+        decisions: list[IntentDecision] = []
+        for name in ordered_intents:
+            bert_score = prediction.scores.get(name)
+            decisions.append(
+                IntentDecision(
+                    intent=name,
+                    workflow_id=resolve_workflow_id(name, workflow_constraints),
+                    confidence=None if is_ax else float(bert_score or 0.0),
+                    confidence_source="UNAVAILABLE" if is_ax else "BERT",
+                    bert_routing_score=(
+                        float(bert_score) if bert_score is not None else None
+                    ),
+                    evidence=(prediction.evidence or {}).get(name),
+                )
+            )
+        if not decisions:
+            decisions = [
+                IntentDecision(
+                    intent="OUT_OF_SCOPE",
+                    workflow_id="",
+                    confidence=0.0,
+                    confidence_source="BERT",
+                    bert_routing_score=0.0,
+                )
+            ]
+
+        primary = decisions[0]
         from app.core.config import get_settings
 
         settings = get_settings()
@@ -213,13 +329,17 @@ class HybridHfIntentAgent:
             if evidence:
                 slots[f"evidence:{name}"] = str(evidence)
         return IntentResult(
-            intent=intent,
-            confidence=max(0.0, min(1.0, confidence)),
-            workflow_id=resolve_workflow_id(intent, workflow_constraints),
+            intent=primary.intent,
+            confidence=primary.confidence,
+            workflow_id=primary.workflow_id,
             extracted_slots=slots,
             model_provider="huggingface",
             model_name=model_name,
             model_version=prediction.selected_model,
+            prompt_version=prediction.prompt_version,
+            confidence_source=primary.confidence_source,
+            bert_routing_score=primary.bert_routing_score,
+            decisions=decisions,
         )
 
 

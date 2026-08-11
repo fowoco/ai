@@ -16,11 +16,12 @@ from app.api.schemas.analyses import (
     AnalysisResponse,
     AnalysisVersions,
     ContextRequirement,
+    IntentDecisionItem,
     WorkerContext,
 )
 
 from .ambiguity import AmbiguityAgent
-from .intent import IntentClassifier, IntentResult, build_intent_agent
+from .intent import IntentClassifier, IntentDecision, IntentResult, build_intent_agent
 from .workflow import WorkflowAgent
 from .workflow_graph.state import HR_EXCLUDED_SLOTS
 
@@ -109,10 +110,101 @@ def _versions(intent_result: IntentResult) -> AnalysisVersions:
         model_provider=intent_result.model_provider,
         model_name=intent_result.model_name,
         model_version=intent_result.model_version,
+        prompt_version=intent_result.prompt_version,
         contract_version=DEFAULT_CONTRACT_VERSION,
         workflow_catalog_version=DEFAULT_KNOWLEDGE_VERSION,
         context_pack_version=DEFAULT_KNOWLEDGE_VERSION,
     )
+
+
+# 구형 단일 IntentResult도 새 결정 목록 계약으로 정규화
+def _intent_decisions(intent_result: IntentResult) -> list[IntentDecision]:
+    if intent_result.decisions:
+        return list(intent_result.decisions)
+    return [
+        IntentDecision(
+            intent=intent_result.intent or "UNKNOWN",
+            workflow_id=intent_result.workflow_id or "",
+            confidence=intent_result.confidence,
+            confidence_source=intent_result.confidence_source,
+            bert_routing_score=intent_result.bert_routing_score,
+        )
+    ]
+
+
+# 내부 결정을 Server가 ANALYZE에서 재사용할 수 있는 와이어 모델로 변환
+def _wire_intent_decisions(intent_result: IntentResult) -> list[IntentDecisionItem]:
+    return [
+        IntentDecisionItem(
+            detected_intent=decision.intent,
+            workflow_id=decision.workflow_id,
+            evidence=decision.evidence,
+            confidence=decision.confidence,
+            confidence_source=decision.confidence_source,
+            bert_routing_score=decision.bert_routing_score,
+            model_provider=intent_result.model_provider,
+            model_name=intent_result.model_name,
+            model_version=intent_result.model_version,
+            prompt_version=intent_result.prompt_version,
+        )
+        for decision in _intent_decisions(intent_result)
+    ]
+
+
+# PLAN에서 확정한 결정을 재구성해 ANALYZE 모델 재호출을 피한다.
+def _planned_intent_result(request: AnalysisRequest) -> IntentResult | None:
+    ai = request.analysis_input
+    if ai.planned_intent_decisions:
+        items = ai.planned_intent_decisions
+        decisions = [
+            IntentDecision(
+                intent=item.detected_intent,
+                workflow_id=item.workflow_id,
+                confidence=item.confidence,
+                confidence_source=item.confidence_source,
+                bert_routing_score=item.bert_routing_score,
+                evidence=item.evidence,
+            )
+            for item in items
+        ]
+        primary = decisions[0]
+        first = items[0]
+        slots = {
+            f"evidence:{item.detected_intent}": item.evidence
+            for item in items
+            if item.evidence
+        }
+        return IntentResult(
+            intent=primary.intent,
+            workflow_id=primary.workflow_id,
+            confidence=primary.confidence,
+            confidence_source=primary.confidence_source,
+            bert_routing_score=primary.bert_routing_score,
+            decisions=decisions,
+            extracted_slots=slots,
+            model_provider=first.model_provider,
+            model_name=first.model_name,
+            model_version=first.model_version,
+            prompt_version=first.prompt_version,
+        )
+    if ai.planned_intent is not None and ai.planned_workflow_id is not None:
+        decision = IntentDecision(
+            intent=ai.planned_intent,
+            workflow_id=ai.planned_workflow_id,
+            confidence=None,
+            confidence_source="UNAVAILABLE",
+        )
+        return IntentResult(
+            intent=decision.intent,
+            workflow_id=decision.workflow_id,
+            confidence=None,
+            confidence_source="UNAVAILABLE",
+            decisions=[decision],
+            model_provider="server",
+            model_name="planned-intent",
+            model_version="reused",
+        )
+    return None
 
 
 # Intent → requiredFieldKeys / questions·candidates
@@ -145,20 +237,32 @@ class AnalysisPipeline:
     def _run_plan(self, request: AnalysisRequest) -> AnalysisResponse:
         instruction = request.analysis_input.instruction
         intent_result = self._intent.classify(instruction)
-        workflow_id = intent_result.workflow_id or ""
-        # Issue #6: Knowledge canonical key 전체 (worker_id 포함)
-        if intent_result.intent == "OUT_OF_SCOPE":
-            field_keys = ["worker_id"]
-        else:
-            required = self._required_slots_for(workflow_id)
-            field_keys = list(required) if required else ["worker_id", "stay_expiry_date"]
+        decisions = _intent_decisions(intent_result)
+        primary = decisions[0]
+
+        # 복합 Intent이면 각 Workflow의 canonical key를 원문 순서대로 합친다.
+        field_keys: list[str] = []
+        for decision in decisions:
+            if decision.intent == "OUT_OF_SCOPE":
+                required = ["worker_id"]
+            else:
+                required = self._required_slots_for(decision.workflow_id)
+                if not required:
+                    required = ["worker_id", "stay_expiry_date"]
+            for key in required:
+                if key not in field_keys:
+                    field_keys.append(key)
 
         return AnalysisResponse(
             request_id=request.request_id,
             outcome="CONTEXT_REQUIRED",
             context_requirement=ContextRequirement(
-                detected_intent=intent_result.intent or "UNKNOWN",
-                confidence=intent_result.confidence,
+                detected_intent=primary.intent,
+                workflow_id=primary.workflow_id,
+                confidence=primary.confidence,
+                confidence_source=primary.confidence_source,
+                bert_routing_score=primary.bert_routing_score,
+                intent_decisions=_wire_intent_decisions(intent_result),
                 target_display_name=_guess_target_display_name(instruction),
                 extracted_slots=dict(intent_result.extracted_slots),
                 required_field_keys=field_keys,
@@ -175,8 +279,13 @@ class AnalysisPipeline:
     def _run_analyze(self, request: AnalysisRequest) -> AnalysisResponse:
         ai = request.analysis_input
         instruction = ai.instruction
-        intent_result = self._intent.classify(instruction)
-        workflow_id = intent_result.workflow_id or ""
+        intent_result = _planned_intent_result(request)
+        provider_attempt_count = 0
+        if intent_result is None:
+            # 1.0 호출자 하위호환: 계획 결정을 보내지 않으면 기존처럼 분류한다.
+            intent_result = self._intent.classify(instruction)
+            provider_attempt_count = 1
+        decisions = _intent_decisions(intent_result)
 
         if not ai.workers:
             return AnalysisResponse(
@@ -187,13 +296,14 @@ class AnalysisPipeline:
                 candidates=[],
                 validation_errors=[],
                 versions=_versions(intent_result),
-                provider_attempt_count=1,
+                provider_attempt_count=provider_attempt_count,
                 latency_ms=0,
             )
 
         # MVP: 근로자 1명만
         worker = ai.workers[0]
         slots = _seed_slots_from_worker(worker)
+        slots.update(intent_result.extracted_slots)
 
         # Server가 못 채운 PLAN 요청 키 → HR 질문 후보
         hr_keys: list[str] = []
@@ -205,10 +315,13 @@ class AnalysisPipeline:
             ):
                 hr_keys.append(key)
 
-        amb = self._ambiguity.check(workflow_id, slots, instruction)
-        for key in amb.missing_slots:
-            if key not in HR_EXCLUDED_SLOTS and key not in slots and key not in hr_keys:
-                hr_keys.append(key)
+        for decision in decisions:
+            if not decision.workflow_id:
+                continue
+            amb = self._ambiguity.check(decision.workflow_id, slots, instruction)
+            for key in amb.missing_slots:
+                if key not in HR_EXCLUDED_SLOTS and key not in slots and key not in hr_keys:
+                    hr_keys.append(key)
 
         if hr_keys:
             return AnalysisResponse(
@@ -219,28 +332,34 @@ class AnalysisPipeline:
                 candidates=[],
                 validation_errors=[],
                 versions=_versions(intent_result),
-                provider_attempt_count=1,
+                provider_attempt_count=provider_attempt_count,
                 latency_ms=0,
             )
 
-        # Intent와 구분되는 Knowledge canonical Workflow ID를 반환
-        candidate = AnalysisCandidate(
-            candidate_ref=f"candidate-{uuid4().hex[:8]}",
-            worker_ref=worker.worker_ref,
-            workflow_id=workflow_id,
-            extracted_slots=slots,
-            missing_slots=[],
-            confidence=intent_result.confidence,
-        )
+        # 복합 Intent 각각에 canonical Knowledge Workflow 후보를 만든다.
+        candidates = [
+            AnalysisCandidate(
+                candidate_ref=f"candidate-{uuid4().hex[:8]}",
+                worker_ref=worker.worker_ref,
+                detected_intent=decision.intent,
+                workflow_id=decision.workflow_id,
+                extracted_slots=slots,
+                missing_slots=[],
+                confidence=decision.confidence,
+                confidence_source=decision.confidence_source,
+                bert_routing_score=decision.bert_routing_score,
+            )
+            for decision in decisions
+        ]
         return AnalysisResponse(
             request_id=request.request_id,
             outcome="REVIEW_REQUIRED",
             context_requirement=None,
             questions=[],
-            candidates=[candidate],
+            candidates=candidates,
             validation_errors=[],
             versions=_versions(intent_result),
-            provider_attempt_count=1,
+            provider_attempt_count=provider_attempt_count,
             latency_ms=0,
         )
 

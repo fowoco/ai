@@ -26,7 +26,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     FOWOCO_HWPX_TO_HWP_ENABLED=true \
     FOWOCO_HWPX_PDF_ENABLED=true \
     FOWOCO_DOCUMENT_SNAPSHOT_DIR=/data/document-snapshots \
-    FOWOCO_MODEL_CACHE_DIR=/opt/fowoco/language-models
+    FOWOCO_MODEL_CACHE_DIR=/opt/fowoco/language-models \
+    HF_HOME=/opt/fowoco/hf-cache
 
 COPY --from=uv /uv /usr/local/bin/uv
 COPY --from=rhwp /opt/rhwp/rhwp /usr/local/bin/rhwp
@@ -44,8 +45,8 @@ RUN apt-get update \
 # 의존성 정의 파일만 먼저 복사해 캐시를 활용
 COPY pyproject.toml uv.lock README.md ./
 
-# uv.lock 기반 재현 가능 설치 — Language Assistant retrieval 포함
-RUN uv sync --frozen --no-dev --extra language-retrieval
+# uv.lock 기반 재현 가능 설치 — Language retrieval + Intent A.X runtime 포함
+RUN uv sync --frozen --no-dev --extra language-retrieval --extra intent-ax
 
 # 앱 패키지 복사
 COPY app ./app
@@ -57,7 +58,7 @@ RUN /app/.venv/bin/python -m scripts.download_language_models \
 
 # uvicorn 기본 포트
 EXPOSE 8000
-VOLUME ["/data"]
+VOLUME ["/data", "/opt/fowoco/hf-cache"]
 
 # FastAPI 앱 기동
 CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

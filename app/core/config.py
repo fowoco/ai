@@ -47,8 +47,11 @@ class Settings(BaseSettings):
     # Intent HF — true면 BERT(+선택 A.X) 분류, false면 EXPIRY_RENEWAL 고정
     intent_model_enabled: bool = False
     intent_bert_model_dir: str = "fowoco/klue-roberta-base-intent-classifier"
+    intent_bert_model_revision: str | None = None
     intent_ax_base_model: str = "skt/A.X-4.0-Light"
+    intent_ax_base_revision: str | None = None
     intent_ax_adapter_path: str = "fowoco/ax-intent-qlora"
+    intent_ax_adapter_revision: str | None = None
     intent_enable_ax: bool = False
     intent_device: str = "cpu"
     intent_margin_threshold: float = 0.76

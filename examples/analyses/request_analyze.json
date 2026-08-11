@@ -3,6 +3,22 @@
   "phase": "ANALYZE",
   "analysisInput": {
     "instruction": "응웬반안 체류연장 준비해줘",
+    "plannedIntent": "EXPIRY_RENEWAL",
+    "plannedWorkflowId": "WF-STY-001",
+    "plannedIntentDecisions": [
+      {
+        "detectedIntent": "EXPIRY_RENEWAL",
+        "workflowId": "WF-STY-001",
+        "evidence": "체류연장 준비해줘",
+        "confidence": null,
+        "confidenceSource": "UNAVAILABLE",
+        "bertRoutingScore": 0.3088,
+        "modelProvider": "huggingface",
+        "modelName": "skt/A.X-4.0-Light",
+        "modelVersion": "AX",
+        "promptVersion": "knowledge-25e778ad"
+      }
+    ],
     "requestedFieldKeys": [
       "worker_id",
       "stay_expiry_date"

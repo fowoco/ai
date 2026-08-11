@@ -20,6 +20,7 @@ class HybridIntentPrediction:
     evidence: dict[str, str | None] = field(default_factory=dict)
     selected_model: str = "BERT"
     degraded: bool = False
+    prompt_version: str = "not-applicable"
 
 
 # BERT 우선·필요 시 A.X 보조 파이프라인
@@ -30,6 +31,7 @@ class HybridIntentPipeline:
         self,
         *,
         bert_model_dir: str,
+        bert_model_revision: str | None = None,
         device: str = "cpu",
         label_prob_threshold: float = 0.55,
         margin_threshold: float = 0.76,
@@ -37,7 +39,9 @@ class HybridIntentPipeline:
         hf_token: str | None = None,
         enable_ax: bool = False,
         ax_base_model_name: str = "skt/A.X-4.0-Light",
+        ax_base_revision: str | None = None,
         ax_adapter_path: str = "fowoco/ax-intent-qlora",
+        ax_adapter_revision: str | None = None,
         ax_max_new_tokens: int = 96,
     ) -> None:
         self.bert = BertIntentModel(
@@ -45,6 +49,7 @@ class HybridIntentPipeline:
             device=device,
             label_prob_threshold=label_prob_threshold,
             hf_token=hf_token,
+            revision=bert_model_revision,
         )
         self.guardrail = HRRoutingGuardrail(
             margin_threshold=margin_threshold,
@@ -52,6 +57,7 @@ class HybridIntentPipeline:
             label_prob_threshold=label_prob_threshold,
         )
         self.ax: AxIntentModel | None = None
+        self.ax_enabled = enable_ax
         if enable_ax:
             try:
                 self.ax = AxIntentModel(
@@ -60,6 +66,8 @@ class HybridIntentPipeline:
                     device=self.bert.device,
                     max_new_tokens=ax_max_new_tokens,
                     hf_token=hf_token,
+                    base_revision=ax_base_revision,
+                    adapter_revision=ax_adapter_revision,
                 )
             except Exception:
                 logger.exception("A.X load failed — BERT-only degraded mode")
@@ -83,6 +91,7 @@ class HybridIntentPipeline:
                     evidence=evidence,
                     selected_model="AX",
                     degraded=False,
+                    prompt_version=self.ax.prompt_version,
                 )
             except Exception:
                 logger.exception("A.X inference failed — BERT fallback")
@@ -91,7 +100,16 @@ class HybridIntentPipeline:
                     scores=probs,
                     selected_model="BERT_FALLBACK",
                     degraded=True,
+                    prompt_version=AxIntentModel.prompt_version,
                 )
+        if route.should_route and self.ax_enabled:
+            return HybridIntentPrediction(
+                intents=bert_intents,
+                scores=probs,
+                selected_model="BERT_FALLBACK",
+                degraded=True,
+                prompt_version=AxIntentModel.prompt_version,
+            )
         return HybridIntentPrediction(
             intents=bert_intents,
             scores=probs,

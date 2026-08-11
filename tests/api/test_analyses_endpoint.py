@@ -28,6 +28,8 @@ def _analyze_body(
         "phase": "ANALYZE",
         "analysisInput": {
             "instruction": instruction,
+            "plannedIntent": "EXPIRY_RENEWAL",
+            "plannedWorkflowId": "WF-STY-001",
             "requestedFieldKeys": requested_field_keys
             or ["worker_id", "stay_expiry_date"],
             "workers": [
@@ -57,14 +59,19 @@ async def test_plan_returns_context_required() -> None:
     assert data["questions"] == []
     ctx = data["contextRequirement"]
     assert ctx["detectedIntent"] == "EXPIRY_RENEWAL"
+    assert ctx["workflowId"] == "WF-STY-001"
+    assert ctx["confidenceSource"] == "RULES"
+    assert ctx["bertRoutingScore"] is None
+    assert ctx["intentDecisions"][0]["workflowId"] == "WF-STY-001"
     assert ctx["targetDisplayName"] == "응웬반안"
     assert "stay_expiry_date" in ctx["requiredFieldKeys"]
     assert "worker_id" in ctx["requiredFieldKeys"]
-    assert data["versions"]["contractVersion"] == "1.0.0"
+    assert data["versions"]["contractVersion"] == "1.1.0"
     assert data["versions"]["workflowCatalogVersion"] == "0.2.0"
     assert data["versions"]["modelProvider"] != "stub"
     assert data["versions"]["modelName"] != "stub"
     assert data["versions"]["modelVersion"] != "stub"
+    assert data["versions"]["promptVersion"] == "not-applicable"
     assert "attemptId" not in data
 
 
@@ -81,11 +88,46 @@ async def test_analyze_returns_review_required_when_slots_filled() -> None:
     assert len(data["candidates"]) == 1
     candidate = data["candidates"][0]
     assert candidate["workerRef"] == "30000000-0000-0000-0000-000000000001"
+    assert candidate["detectedIntent"] == "EXPIRY_RENEWAL"
     assert candidate["workflowId"] == "WF-STY-001"
+    assert candidate["confidence"] is None
+    assert candidate["confidenceSource"] == "UNAVAILABLE"
     assert candidate["extractedSlots"]["stay_expiry_date"] == "2026-12-31"
     assert candidate["extractedSlots"]["worker_id"] == (
         "30000000-0000-0000-0000-000000000001"
     )
+    assert data["providerAttemptCount"] == 0
+
+
+@pytest.mark.asyncio
+async def test_analyze_reuses_full_ax_plan_contract() -> None:
+    body = _analyze_body()
+    body["analysisInput"].pop("plannedIntent")
+    body["analysisInput"].pop("plannedWorkflowId")
+    body["analysisInput"]["plannedIntentDecisions"] = [
+        {
+            "detectedIntent": "EXPIRY_RENEWAL",
+            "workflowId": "WF-STY-001",
+            "evidence": "체류연장 준비해줘",
+            "confidence": None,
+            "confidenceSource": "UNAVAILABLE",
+            "bertRoutingScore": 0.3088,
+            "modelProvider": "huggingface",
+            "modelName": "skt/A.X-4.0-Light",
+            "modelVersion": "AX",
+            "promptVersion": "knowledge-25e778ad",
+        }
+    ]
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(ANALYSES_PATH, json=body)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["providerAttemptCount"] == 0
+    assert data["versions"]["modelVersion"] == "AX"
+    assert data["versions"]["promptVersion"] == "knowledge-25e778ad"
+    assert data["candidates"][0]["confidence"] is None
+    assert data["candidates"][0]["bertRoutingScore"] == 0.3088
 
 
 @pytest.mark.asyncio
@@ -150,6 +192,23 @@ async def test_analyses_endpoint_in_openapi() -> None:
     paths = resp.json()["paths"]
     assert ANALYSES_PATH in paths
     assert "/api/v1/internal/v1/analyses" not in paths
+
+
+@pytest.mark.asyncio
+async def test_intent_status_exposes_runtime_flags_without_loading_models() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/internal/v1/intent/status")
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "intentModelEnabled": False,
+        "axEnabled": False,
+        "initialized": True,
+        "bertAvailable": False,
+        "axAvailable": False,
+        "degraded": False,
+        "promptVersion": "not-applicable",
+    }
 
 
 @pytest.mark.asyncio
