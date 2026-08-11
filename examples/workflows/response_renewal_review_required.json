@@ -60,7 +60,19 @@
         "enterprise_phone",
         "industry",
         "job_description"
-      ]
+      ],
+      "values": {
+        "job_description": "제조",
+        "employer_name": "김담당",
+        "business_number": "123-45-67890",
+        "enterprise_name": "포워코 제조",
+        "enterprise_phone": "031-123-4567",
+        "industry": "제조업",
+        "employee_name": "NGUYEN VAN AN",
+        "employee_birthdate": "1990-03-15",
+        "enterprise_address": "경기도 안산시 단원구",
+        "contract_months": "12"
+      }
     },
     {
       "template_id": "employment_extension_application_v12_3",
@@ -79,7 +91,19 @@
         "workplace_address",
         "workplace_name",
         "workplace_phone"
-      ]
+      ],
+      "values": {
+        "business_number": "123-45-67890",
+        "workplace_address": "경기도 안산시 단원구",
+        "representative": "김담당",
+        "business_type": "제조업",
+        "employee_1_name": "NGUYEN VAN AN",
+        "employee_1_resident_number": "900315-5123456",
+        "employee_1_nationality": "VN",
+        "employee_1_passport_number": "M12345678",
+        "employee_1_expiry_date": "2026-12-31",
+        "applicant_name": "김담당"
+      }
     },
     {
       "template_id": "immigration_integrated_application_v34",
@@ -101,7 +125,21 @@
         "nationality",
         "occupation",
         "passport_number"
-      ]
+      ],
+      "values": {
+        "nationality": "VN",
+        "passport_number": "M12345678",
+        "email": "worker@example.com",
+        "family_name": "NGUYEN",
+        "given_names": "VAN AN",
+        "birth_year": "1990",
+        "birth_month": "03",
+        "birth_day": "15",
+        "address_in_korea": "기숙사",
+        "occupation": "제조",
+        "annual_income": "2500000",
+        "application_stay_extension": true
+      }
     },
     {
       "template_id": "identity_guaranty_v129",
@@ -121,7 +159,19 @@
         "stay_purpose",
         "workplace",
         "workplace_address"
-      ]
+      ],
+      "values": {
+        "foreign_name": "NGUYEN VAN AN",
+        "foreign_birthdate": "1990-03-15",
+        "foreign_nationality": "VN",
+        "foreign_passport": "M12345678",
+        "foreign_korea_address": "기숙사",
+        "foreign_phone": "010-1234-5678",
+        "stay_purpose": "취업",
+        "guarantor_name": "김담당",
+        "workplace_address": "경기도 안산시 단원구",
+        "relationship": "고용주"
+      }
     }
   ],
   "evidence": [

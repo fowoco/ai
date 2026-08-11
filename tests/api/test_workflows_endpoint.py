@@ -53,6 +53,13 @@ async def test_renewal_run_with_ocr_upload(client: AsyncClient) -> None:
     data = res.json()
     assert data["ocrResult"]
     assert "passport_number" in data["ocrResult"]
+    assert all("values" in document for document in data["generatedDocuments"])
+    immigration = next(
+        document
+        for document in data["generatedDocuments"]
+        if document["template_id"] == "immigration_integrated_application_v34"
+    )
+    assert immigration["values"]["passport_number"] == data["ocrResult"]["passport_number"]
 
 
 @pytest.mark.asyncio
