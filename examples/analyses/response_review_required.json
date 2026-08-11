@@ -7,7 +7,6 @@
     {
       "candidateRef": "candidate-1",
       "workerRef": "30000000-0000-0000-0000-000000000001",
-      "detectedIntent": "EXPIRY_RENEWAL",
       "workflowId": "WF-STY-001",
       "extractedSlots": {
         "worker_id": "30000000-0000-0000-0000-000000000001",
@@ -15,21 +14,19 @@
         "full_name": "NGUYEN VAN AN"
       },
       "missingSlots": [],
-      "confidence": null,
-      "confidenceSource": "UNAVAILABLE",
-      "bertRoutingScore": 0.3088
+      "confidence": null
     }
   ],
   "validationErrors": [],
   "versions": {
     "agentVersion": "0.1.0",
-    "modelProvider": "huggingface",
-    "modelName": "skt/A.X-4.0-Light",
-    "modelVersion": "AX",
-    "promptVersion": "knowledge-25e778ad",
+    "modelProvider": "server",
+    "modelName": "planned-intent",
+    "modelVersion": "reused",
+    "promptVersion": "not-applicable",
     "contextPackVersion": "0.2.0",
     "workflowCatalogVersion": "0.2.0",
-    "contractVersion": "1.1.0"
+    "contractVersion": "1.0.0"
   },
   "providerAttemptCount": 0,
   "latencyMs": 245

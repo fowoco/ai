@@ -79,18 +79,6 @@ def resolve_workflow_id(
 
 
 @dataclass
-# Intent 1개와 Knowledge Workflow 1개의 결정
-class IntentDecision:
-
-    intent: str
-    workflow_id: str
-    confidence: float | None
-    confidence_source: str
-    bert_routing_score: float | None = None
-    evidence: str | None = None
-
-
-@dataclass
 # Intent 분류와 Slot 추출 결과
 class IntentResult:
 
@@ -104,7 +92,7 @@ class IntentResult:
     prompt_version: str = "not-applicable"
     confidence_source: str = "UNAVAILABLE"
     bert_routing_score: float | None = None
-    decisions: list[IntentDecision] = field(default_factory=list)
+    evidence: str | None = None
 
 
 # 교체 가능한 Intent 분류기 계약
@@ -154,15 +142,7 @@ class FixedExpiryRenewalIntentAgent:
             model_name="fixed-expiry-renewal",
             model_version="rules",
             extracted_slots={},
-            confidence_source="RULES",
-            decisions=[
-                IntentDecision(
-                    intent=intent,
-                    workflow_id=resolve_workflow_id(intent, workflow_constraints),
-                    confidence=1.0,
-                    confidence_source="RULES",
-                )
-            ],
+            confidence_source="MODEL",
         )
 
 
@@ -276,46 +256,14 @@ class HybridHfIntentAgent:
         primary_intent, _ = _primary_intent(
             prediction.intents, prediction.scores
         )
-        if prediction.selected_model == "AX":
-            ordered_intents = list(prediction.intents)
-        else:
-            ordered_intents = [primary_intent, *prediction.intents]
-            ordered_intents = list(
-                dict.fromkeys(
-                    name
-                    for name in ordered_intents
-                    if name != "OUT_OF_SCOPE" or name == primary_intent
-                )
-            )
-
         is_ax = prediction.selected_model == "AX"
-        decisions: list[IntentDecision] = []
-        for name in ordered_intents:
-            bert_score = prediction.scores.get(name)
-            decisions.append(
-                IntentDecision(
-                    intent=name,
-                    workflow_id=resolve_workflow_id(name, workflow_constraints),
-                    confidence=None if is_ax else float(bert_score or 0.0),
-                    confidence_source="UNAVAILABLE" if is_ax else "BERT",
-                    bert_routing_score=(
-                        float(bert_score) if bert_score is not None else None
-                    ),
-                    evidence=(prediction.evidence or {}).get(name),
-                )
-            )
-        if not decisions:
-            decisions = [
-                IntentDecision(
-                    intent="OUT_OF_SCOPE",
-                    workflow_id="",
-                    confidence=0.0,
-                    confidence_source="BERT",
-                    bert_routing_score=0.0,
-                )
-            ]
-
-        primary = decisions[0]
+        # MVP는 대표 Intent 한 개만 공개한다. A.X는 원문 등장 순서의 첫 항목을 사용한다.
+        representative = (
+            prediction.intents[0]
+            if is_ax and prediction.intents
+            else primary_intent
+        )
+        bert_score = prediction.scores.get(representative)
         from app.core.config import get_settings
 
         settings = get_settings()
@@ -324,22 +272,18 @@ class HybridHfIntentAgent:
             if prediction.selected_model == "AX"
             else settings.intent_bert_model_dir
         )
-        slots: dict[str, str] = {}
-        for name, evidence in (prediction.evidence or {}).items():
-            if evidence:
-                slots[f"evidence:{name}"] = str(evidence)
         return IntentResult(
-            intent=primary.intent,
-            confidence=primary.confidence,
-            workflow_id=primary.workflow_id,
-            extracted_slots=slots,
+            intent=representative,
+            confidence=None if is_ax else float(bert_score or 0.0),
+            workflow_id=resolve_workflow_id(representative, workflow_constraints),
+            extracted_slots={},
             model_provider="huggingface",
             model_name=model_name,
             model_version=prediction.selected_model,
             prompt_version=prediction.prompt_version,
-            confidence_source=primary.confidence_source,
-            bert_routing_score=primary.bert_routing_score,
-            decisions=decisions,
+            confidence_source="UNAVAILABLE" if is_ax else "BERT",
+            bert_routing_score=(float(bert_score) if bert_score is not None else None),
+            evidence=(prediction.evidence or {}).get(representative),
         )
 
 

@@ -36,6 +36,7 @@ def test_build_intent_agent_defaults_to_fixed() -> None:
     result = agent.classify("아무 말")
     assert result.intent == "EXPIRY_RENEWAL"
     assert result.workflow_id in {"WF-STY-001", "WF-CON-001", ""}
+    assert result.confidence_source == "MODEL"
 
 
 # 주입된 파이프라인으로 Hybrid 에이전트 분류
@@ -83,11 +84,8 @@ def test_hybrid_agent_preserves_ax_intent_order() -> None:
     assert result.confidence is None
     assert result.confidence_source == "UNAVAILABLE"
     assert result.bert_routing_score == 0.2
-    assert [decision.intent for decision in result.decisions] == [
-        "DOCUMENT_REQUEST",
-        "EXPIRY_RENEWAL",
-    ]
-    assert all(decision.confidence is None for decision in result.decisions)
+    assert result.evidence == "서류를 요청해"
+    assert result.extracted_slots == {}
     assert result.prompt_version == AX_INTENT_PROMPT_VERSION
 
 

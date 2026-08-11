@@ -5,30 +5,20 @@
     "instruction": "응웬반안 체류연장 준비해줘",
     "plannedIntent": "EXPIRY_RENEWAL",
     "plannedWorkflowId": "WF-STY-001",
-    "plannedIntentDecisions": [
-      {
-        "detectedIntent": "EXPIRY_RENEWAL",
-        "workflowId": "WF-STY-001",
-        "evidence": "체류연장 준비해줘",
-        "confidence": null,
-        "confidenceSource": "UNAVAILABLE",
-        "bertRoutingScore": 0.3088,
-        "modelProvider": "huggingface",
-        "modelName": "skt/A.X-4.0-Light",
-        "modelVersion": "AX",
-        "promptVersion": "knowledge-25e778ad"
-      }
-    ],
     "requestedFieldKeys": [
       "worker_id",
-      "stay_expiry_date"
+      "stay_expiry_date",
+      "passport_status",
+      "arc_status"
     ],
     "workers": [
       {
         "workerRef": "30000000-0000-0000-0000-000000000001",
         "requestedFields": {
           "worker_id": "30000000-0000-0000-0000-000000000001",
-          "stay_expiry_date": "2026-12-31"
+          "stay_expiry_date": "2026-12-31",
+          "passport_status": "VALID",
+          "arc_status": "VALID"
         }
       }
     ]

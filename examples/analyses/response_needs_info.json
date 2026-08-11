@@ -12,13 +12,13 @@
   "validationErrors": [],
   "versions": {
     "agentVersion": "0.1.0",
-    "modelProvider": "huggingface",
-    "modelName": "skt/A.X-4.0-Light",
-    "modelVersion": "AX",
-    "promptVersion": "knowledge-25e778ad",
+    "modelProvider": "server",
+    "modelName": "planned-intent",
+    "modelVersion": "reused",
+    "promptVersion": "not-applicable",
     "contextPackVersion": "0.2.0",
     "workflowCatalogVersion": "0.2.0",
-    "contractVersion": "1.1.0"
+    "contractVersion": "1.0.0"
   },
   "providerAttemptCount": 0,
   "latencyMs": 180

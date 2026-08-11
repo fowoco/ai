@@ -60,13 +60,14 @@ async def test_plan_returns_context_required() -> None:
     ctx = data["contextRequirement"]
     assert ctx["detectedIntent"] == "EXPIRY_RENEWAL"
     assert ctx["workflowId"] == "WF-STY-001"
-    assert ctx["confidenceSource"] == "RULES"
+    assert ctx["evidence"] is None
+    assert ctx["confidenceSource"] == "MODEL"
     assert ctx["bertRoutingScore"] is None
-    assert ctx["intentDecisions"][0]["workflowId"] == "WF-STY-001"
+    assert "intentDecisions" not in ctx
     assert ctx["targetDisplayName"] == "응웬반안"
     assert "stay_expiry_date" in ctx["requiredFieldKeys"]
     assert "worker_id" in ctx["requiredFieldKeys"]
-    assert data["versions"]["contractVersion"] == "1.1.0"
+    assert data["versions"]["contractVersion"] == "1.0.0"
     assert data["versions"]["workflowCatalogVersion"] == "0.2.0"
     assert data["versions"]["modelProvider"] != "stub"
     assert data["versions"]["modelName"] != "stub"
@@ -88,10 +89,11 @@ async def test_analyze_returns_review_required_when_slots_filled() -> None:
     assert len(data["candidates"]) == 1
     candidate = data["candidates"][0]
     assert candidate["workerRef"] == "30000000-0000-0000-0000-000000000001"
-    assert candidate["detectedIntent"] == "EXPIRY_RENEWAL"
     assert candidate["workflowId"] == "WF-STY-001"
     assert candidate["confidence"] is None
-    assert candidate["confidenceSource"] == "UNAVAILABLE"
+    assert "detectedIntent" not in candidate
+    assert "confidenceSource" not in candidate
+    assert "bertRoutingScore" not in candidate
     assert candidate["extractedSlots"]["stay_expiry_date"] == "2026-12-31"
     assert candidate["extractedSlots"]["worker_id"] == (
         "30000000-0000-0000-0000-000000000001"
@@ -100,34 +102,14 @@ async def test_analyze_returns_review_required_when_slots_filled() -> None:
 
 
 @pytest.mark.asyncio
-async def test_analyze_reuses_full_ax_plan_contract() -> None:
+async def test_analyze_rejects_request_without_planned_decision() -> None:
     body = _analyze_body()
     body["analysisInput"].pop("plannedIntent")
     body["analysisInput"].pop("plannedWorkflowId")
-    body["analysisInput"]["plannedIntentDecisions"] = [
-        {
-            "detectedIntent": "EXPIRY_RENEWAL",
-            "workflowId": "WF-STY-001",
-            "evidence": "체류연장 준비해줘",
-            "confidence": None,
-            "confidenceSource": "UNAVAILABLE",
-            "bertRoutingScore": 0.3088,
-            "modelProvider": "huggingface",
-            "modelName": "skt/A.X-4.0-Light",
-            "modelVersion": "AX",
-            "promptVersion": "knowledge-25e778ad",
-        }
-    ]
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(ANALYSES_PATH, json=body)
 
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["providerAttemptCount"] == 0
-    assert data["versions"]["modelVersion"] == "AX"
-    assert data["versions"]["promptVersion"] == "knowledge-25e778ad"
-    assert data["candidates"][0]["confidence"] is None
-    assert data["candidates"][0]["bertRoutingScore"] == 0.3088
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
