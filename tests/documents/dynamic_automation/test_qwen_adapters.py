@@ -195,6 +195,44 @@ def test_adapters_report_pinned_model_versions() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("adapter_type", "cache_name", "revision"),
+    [
+        (
+            Qwen3EmbeddingRetriever,
+            "qwen3-embedding-0.6b",
+            QWEN3_EMBEDDING_REVISION,
+        ),
+        (
+            Qwen3CandidateReranker,
+            "qwen3-reranker-0.6b",
+            QWEN3_RERANKER_REVISION,
+        ),
+    ],
+)
+def test_real_adapters_require_an_explicit_pinned_cache_path(
+    adapter_type: type[Qwen3EmbeddingRetriever] | type[Qwen3CandidateReranker],
+    cache_name: str,
+    revision: str,
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="pinned model cache path is required"):
+        adapter_type()
+
+    with pytest.raises(ValueError, match="absolute local path"):
+        adapter_type("Qwen/repository-id")
+
+    with pytest.raises(ValueError, match="pinned revision directory"):
+        adapter_type(tmp_path / "wrong-model" / "unversioned")
+
+    adapter_type(tmp_path / cache_name / revision)
+
+
+def test_fake_backends_do_not_require_a_model_path() -> None:
+    Qwen3EmbeddingRetriever(backend=RecordingEmbeddingBackend())
+    Qwen3CandidateReranker(backend=FakeLogitBackend(()))
+
+
 def test_sentence_transformer_backend_is_lazy_and_local_only(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

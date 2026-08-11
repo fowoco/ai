@@ -73,8 +73,20 @@ def test_dynamic_mapping_is_disabled_and_uses_pinned_cache_paths_by_default(
 def test_dynamic_mapping_settings_read_explicit_environment(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    embedding_path = tmp_path / "custom-embedding"
-    reranker_path = tmp_path / "custom-reranker"
+    model_cache_dir = tmp_path / "model-cache"
+    embedding_path = (
+        model_cache_dir
+        / "custom"
+        / "qwen3-embedding-0.6b"
+        / "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+    )
+    reranker_path = (
+        model_cache_dir
+        / "custom"
+        / "qwen3-reranker-0.6b"
+        / "e61197ed45024b0ed8a2d74b80b4d909f1255473"
+    )
+    monkeypatch.setenv("FOWOCO_MODEL_CACHE_DIR", str(model_cache_dir))
     monkeypatch.setenv("FOWOCO_DYNAMIC_AUTOMATION_MAPPING_ENABLED", "true")
     monkeypatch.setenv(
         "FOWOCO_DYNAMIC_AUTOMATION_EMBEDDING_MODEL_PATH", str(embedding_path)
@@ -90,6 +102,41 @@ def test_dynamic_mapping_settings_read_explicit_environment(
     assert settings.dynamic_automation_reranker_model_path == reranker_path
     assert settings.dynamic_automation_min_reranker_score == pytest.approx(0.93)
     assert settings.dynamic_automation_min_margin == pytest.approx(0.12)
+
+
+def test_dynamic_mapping_rejects_model_path_outside_managed_cache(
+    tmp_path: Path,
+) -> None:
+    model_cache_dir = tmp_path / "managed-cache"
+    outside_path = (
+        tmp_path
+        / "outside-cache"
+        / "qwen3-embedding-0.6b"
+        / "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+    )
+
+    with pytest.raises(ValidationError, match="must be below model_cache_dir"):
+        Settings(
+            _env_file=None,
+            model_cache_dir=model_cache_dir,
+            dynamic_automation_embedding_model_path=outside_path,
+        )
+
+
+def test_dynamic_mapping_rejects_unpinned_revision_inside_managed_cache(
+    tmp_path: Path,
+) -> None:
+    model_cache_dir = tmp_path / "managed-cache"
+    unpinned_path = (
+        model_cache_dir / "qwen3-reranker-0.6b" / "not-the-pinned-revision"
+    )
+
+    with pytest.raises(ValidationError, match="must end in the pinned revision directory"):
+        Settings(
+            _env_file=None,
+            model_cache_dir=model_cache_dir,
+            dynamic_automation_reranker_model_path=unpinned_path,
+        )
 
 
 @pytest.mark.parametrize(

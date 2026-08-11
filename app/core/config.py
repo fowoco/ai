@@ -6,6 +6,15 @@ from typing import Self
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_DYNAMIC_AUTOMATION_EMBEDDING_PATH = (
+    Path("qwen3-embedding-0.6b")
+    / "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
+)
+_DYNAMIC_AUTOMATION_RERANKER_PATH = (
+    Path("qwen3-reranker-0.6b")
+    / "e61197ed45024b0ed8a2d74b80b4d909f1255473"
+)
+
 
 # 환경변수·.env에서 앱 설정을 읽어 오는 모델
 class Settings(BaseSettings):
@@ -91,18 +100,24 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def derive_dynamic_automation_model_paths(self) -> Self:
-        if self.dynamic_automation_embedding_model_path is None:
-            self.dynamic_automation_embedding_model_path = (
-                self.model_cache_dir
-                / "qwen3-embedding-0.6b"
-                / "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3"
-            )
-        if self.dynamic_automation_reranker_model_path is None:
-            self.dynamic_automation_reranker_model_path = (
-                self.model_cache_dir
-                / "qwen3-reranker-0.6b"
-                / "e61197ed45024b0ed8a2d74b80b4d909f1255473"
-            )
+        embedding_path = self.dynamic_automation_embedding_model_path or (
+            self.model_cache_dir / _DYNAMIC_AUTOMATION_EMBEDDING_PATH
+        )
+        reranker_path = self.dynamic_automation_reranker_model_path or (
+            self.model_cache_dir / _DYNAMIC_AUTOMATION_RERANKER_PATH
+        )
+        self.dynamic_automation_embedding_model_path = _managed_model_path(
+            embedding_path,
+            model_cache_dir=self.model_cache_dir,
+            pinned_suffix=_DYNAMIC_AUTOMATION_EMBEDDING_PATH,
+            setting_name="dynamic_automation_embedding_model_path",
+        )
+        self.dynamic_automation_reranker_model_path = _managed_model_path(
+            reranker_path,
+            model_cache_dir=self.model_cache_dir,
+            pinned_suffix=_DYNAMIC_AUTOMATION_RERANKER_PATH,
+            setting_name="dynamic_automation_reranker_model_path",
+        )
         return self
 
     @model_validator(mode="after")
@@ -118,6 +133,27 @@ class Settings(BaseSettings):
         if missing:
             raise ValueError(f"enabled OCR requires settings: {', '.join(missing)}")
         return self
+
+
+def _managed_model_path(
+    path: Path,
+    *,
+    model_cache_dir: Path,
+    pinned_suffix: Path,
+    setting_name: str,
+) -> Path:
+    resolved_cache = model_cache_dir.resolve(strict=False)
+    resolved_path = path.resolve(strict=False)
+    try:
+        relative_path = resolved_path.relative_to(resolved_cache)
+    except ValueError as err:
+        raise ValueError(f"{setting_name} must be below model_cache_dir") from err
+    if relative_path.parts[-2:] != pinned_suffix.parts:
+        raise ValueError(
+            f"{setting_name} must end in the pinned revision directory "
+            f"{pinned_suffix.as_posix()}"
+        )
+    return resolved_path
 
 
 # Settings 싱글톤을 반환

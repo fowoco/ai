@@ -213,7 +213,12 @@ class Qwen3EmbeddingRetriever:
         if batch_size < 1:
             raise ValueError("batch_size must be positive")
         if backend is None:
-            backend = LocalSentenceTransformerBackend(model_path or QWEN3_EMBEDDING_REPO)
+            local_path = _require_pinned_model_path(
+                model_path,
+                cache_name=QWEN3_EMBEDDING_CACHE_NAME,
+                revision=QWEN3_EMBEDDING_REVISION,
+            )
+            backend = LocalSentenceTransformerBackend(local_path)
         self.backend = backend
         self.max_length = max_length
         self.batch_size = batch_size
@@ -273,7 +278,12 @@ class Qwen3CandidateReranker:
         if batch_size < 1:
             raise ValueError("batch_size must be positive")
         if backend is None:
-            backend = LocalQwen3RerankerBackend(model_path or QWEN3_RERANKER_REPO)
+            local_path = _require_pinned_model_path(
+                model_path,
+                cache_name=QWEN3_RERANKER_CACHE_NAME,
+                revision=QWEN3_RERANKER_REVISION,
+            )
+            backend = LocalQwen3RerankerBackend(local_path)
         self.backend = backend
         self.max_length = max_length
         self.batch_size = batch_size
@@ -355,6 +365,22 @@ def _normalized_cosine(left: Sequence[float], right: Sequence[float]) -> float:
         left_norm * right_norm
     )
     return min(1.0, max(0.0, (cosine + 1.0) / 2.0))
+
+
+def _require_pinned_model_path(
+    model_path: str | Path | None,
+    *,
+    cache_name: str,
+    revision: str,
+) -> Path:
+    if model_path is None:
+        raise ValueError("pinned model cache path is required for a real Qwen3 backend")
+    path = Path(model_path)
+    if not path.is_absolute():
+        raise ValueError("Qwen3 model_path must be an absolute local path")
+    if tuple(path.parts[-2:]) != (cache_name, revision):
+        raise ValueError("Qwen3 model_path must identify the pinned revision directory")
+    return path.resolve(strict=False)
 
 
 def _yes_probability(yes_logit: float, no_logit: float) -> float:
