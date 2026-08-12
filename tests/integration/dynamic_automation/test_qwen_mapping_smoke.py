@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from app.core.config import Settings
 from app.documents.dynamic_automation.catalog import CanonicalCatalog
+from app.documents.dynamic_automation.config import DynamicAutomationSettings
 from app.documents.dynamic_automation.models import DocumentFieldContext
 from app.documents.dynamic_automation.qwen import (
     Qwen3CandidateReranker,
@@ -18,7 +18,7 @@ from app.documents.dynamic_automation.qwen import (
 def test_qwen_mapping_models_run_from_pinned_local_cache_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    settings = Settings(_env_file=None)
+    settings = DynamicAutomationSettings(_env_file=None)
     embedding_path = settings.dynamic_automation_embedding_model_path
     reranker_path = settings.dynamic_automation_reranker_model_path
     assert embedding_path is not None

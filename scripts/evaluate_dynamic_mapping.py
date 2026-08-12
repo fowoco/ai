@@ -325,13 +325,13 @@ def _make_mapper(
         min_reranker_score = 0.90
         min_margin = 0.10
     else:
-        from app.core.config import Settings
+        from app.documents.dynamic_automation.config import DynamicAutomationSettings
         from app.documents.dynamic_automation.qwen import (
             Qwen3CandidateReranker,
             Qwen3EmbeddingRetriever,
         )
 
-        settings = Settings()
+        settings = DynamicAutomationSettings()
         if not settings.dynamic_automation_mapping_enabled:
             raise ValueError(
                 "qwen mode requires FOWOCO_DYNAMIC_AUTOMATION_MAPPING_ENABLED=true"

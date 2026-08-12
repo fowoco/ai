@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tomllib
@@ -9,6 +10,34 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings
+from app.documents.dynamic_automation.config import DynamicAutomationSettings
+
+
+def test_invalid_dynamic_environment_cannot_break_server_startup() -> None:
+    project_root = Path(__file__).parents[3]
+    environment = {
+        **os.environ,
+        "FOWOCO_DYNAMIC_AUTOMATION_MIN_MARGIN": "not-a-number",
+        "FOWOCO_DYNAMIC_AUTOMATION_EMBEDDING_MODEL_PATH": "outside-cache/model",
+    }
+
+    completed = subprocess.run(
+        [sys.executable, "-c", "from app.main import create_app; create_app()"],
+        cwd=project_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_shared_settings_do_not_expose_dynamic_automation_fields() -> None:
+    settings = Settings(_env_file=None)
+
+    assert not hasattr(settings, "dynamic_automation_mapping_enabled")
+    assert not hasattr(settings, "dynamic_automation_embedding_model_path")
 
 
 def test_core_config_import_does_not_require_document_automation_extras() -> None:
@@ -55,7 +84,7 @@ def test_dynamic_mapping_is_disabled_and_uses_pinned_cache_paths_by_default(
     monkeypatch.delenv("FOWOCO_DYNAMIC_AUTOMATION_EMBEDDING_MODEL_PATH", raising=False)
     monkeypatch.delenv("FOWOCO_DYNAMIC_AUTOMATION_RERANKER_MODEL_PATH", raising=False)
 
-    settings = Settings(_env_file=None)
+    settings = DynamicAutomationSettings(_env_file=None)
 
     assert settings.dynamic_automation_mapping_enabled is False
     assert settings.dynamic_automation_embedding_model_path == (
@@ -95,7 +124,7 @@ def test_dynamic_mapping_settings_read_explicit_environment(
     monkeypatch.setenv("FOWOCO_DYNAMIC_AUTOMATION_MIN_RERANKER_SCORE", "0.93")
     monkeypatch.setenv("FOWOCO_DYNAMIC_AUTOMATION_MIN_MARGIN", "0.12")
 
-    settings = Settings(_env_file=None)
+    settings = DynamicAutomationSettings(_env_file=None)
 
     assert settings.dynamic_automation_mapping_enabled is True
     assert settings.dynamic_automation_embedding_model_path == embedding_path
@@ -116,7 +145,7 @@ def test_dynamic_mapping_rejects_model_path_outside_managed_cache(
     )
 
     with pytest.raises(ValidationError, match="must be below model_cache_dir"):
-        Settings(
+        DynamicAutomationSettings(
             _env_file=None,
             model_cache_dir=model_cache_dir,
             dynamic_automation_embedding_model_path=outside_path,
@@ -132,7 +161,7 @@ def test_dynamic_mapping_rejects_unpinned_revision_inside_managed_cache(
     )
 
     with pytest.raises(ValidationError, match="must end in the pinned revision directory"):
-        Settings(
+        DynamicAutomationSettings(
             _env_file=None,
             model_cache_dir=model_cache_dir,
             dynamic_automation_reranker_model_path=unpinned_path,
@@ -150,7 +179,7 @@ def test_dynamic_mapping_thresholds_must_be_probabilities(
     setting: str, value: float
 ) -> None:
     with pytest.raises(ValidationError):
-        Settings(_env_file=None, **{setting: value})
+        DynamicAutomationSettings(_env_file=None, **{setting: value})
 
 
 def test_qwen_download_specs_are_opt_in_and_pinned(tmp_path: Path) -> None:
