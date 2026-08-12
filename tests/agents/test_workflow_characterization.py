@@ -3,6 +3,7 @@
 from typing import Any
 
 from app.agents.workflow_graph import RenewalOrchestrator
+from app.agents.workflow_graph.nodes.document_generator import StubDocumentGenerator
 from app.agents.workflow_graph.nodes.language_stub import CONTRACT_SLOTS
 from app.agents.workflow_graph.state import IDENTITY_SLOTS, RenewalState
 from app.db.memory import InMemoryDb
@@ -67,7 +68,9 @@ def test_ask_worker_preserves_guide_fallback_document_evidence_and_route_order()
     assert result["outcome"] == "WAITING_WORKER"
     assert result["scenario"] == "ask_worker"
     assert result["language_assistant"] is None
-    assert "필요한 정보가 부족합니다" in str(result["guide_message"])
+    assert str(result["guide_message"]).startswith(
+        "재갱신에 필요한 정보가 부족합니다. 다음 항목을 입력해 주세요: "
+    )
     assert "(조합:both_missing)" in str(result["worker_request_message"])
     assert result["document_validation"] is not None
     assert result["document_validation"]["combo"] == "both_missing"
@@ -104,8 +107,17 @@ def test_ask_hr_preserves_needs_info_without_generated_documents() -> None:
 
 def test_ocr_persists_identity_then_generates_four_review_drafts() -> None:
     db = InMemoryDb()
+
+    def document_generator(state: RenewalState) -> list[dict[str, Any]]:
+        assert db.identity_saves
+        return StubDocumentGenerator()(state)
+
     result = public_result(
-        RenewalOrchestrator(lookup=db, store=db).run(
+        RenewalOrchestrator(
+            lookup=db,
+            store=db,
+            document_generator=document_generator,
+        ).run(
             request_id="character-ocr",
             instruction="체류기간 연장 갱신",
             worker_id="worker-001",
