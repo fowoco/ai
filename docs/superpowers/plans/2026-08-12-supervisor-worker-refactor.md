@@ -81,15 +81,15 @@ Keep assertions on public values and event order. Do not assert object identitie
 
 - [ ] **Step 2: Run the characterization tests against current code**
 
-Run: `/opt/homebrew/bin/uv run pytest tests/agents/test_workflow_characterization.py -q`
+Run: `/opt/homebrew/bin/uv run python -m pytest tests/agents/test_workflow_characterization.py -q`
 
 Expected: PASS on the unrefactored implementation. If a proposed assertion does not match current behavior, change the assertion to repository truth; do not change production code in this Task.
 
 - [ ] **Step 3: Run focused existing regression tests**
 
-Run: `/opt/homebrew/bin/uv run pytest tests/agents/test_workflow_graph.py tests/agents/test_supervisor.py tests/api/test_workflows_endpoint.py -q`
+Run: `/opt/homebrew/bin/uv run python -m pytest tests/agents/test_workflow_graph.py tests/agents/test_supervisor.py tests/api/test_workflows_endpoint.py -q`
 
-Expected: PASS with pristine output.
+Expected: PASS with no warnings beyond the baseline deprecation warnings.
 
 - [ ] **Step 4: Commit Task 1**
 
@@ -158,7 +158,7 @@ Use existing test helpers or minimal local helpers; do not add a generic Agent b
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `/opt/homebrew/bin/uv run pytest tests/agents/test_workflow_workers.py -q`
+Run: `/opt/homebrew/bin/uv run python -m pytest tests/agents/test_workflow_workers.py -q`
 
 Expected: FAIL because `workflow_graph.workers` does not exist.
 
@@ -211,9 +211,9 @@ Add `document_field_values: NotRequired[dict[str, dict[str, object]]]` to `Renew
 
 - [ ] **Step 4: Run focused tests**
 
-Run: `/opt/homebrew/bin/uv run pytest tests/agents/test_workflow_workers.py tests/agents/test_init_state.py -q`
+Run: `/opt/homebrew/bin/uv run python -m pytest tests/agents/test_workflow_workers.py tests/agents/test_init_state.py -q`
 
-Expected: PASS with pristine output.
+Expected: PASS with no warnings beyond the baseline deprecation warnings.
 
 - [ ] **Step 5: Commit Task 2**
 
@@ -253,7 +253,7 @@ Also assert the existing no-plan path still derives values through `values_for_t
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `/opt/homebrew/bin/uv run pytest tests/agents/test_document_field_map.py -q`
+Run: `/opt/homebrew/bin/uv run python -m pytest tests/agents/test_document_field_map.py -q`
 
 Expected: FAIL because the generator ignores `document_field_values`.
 
@@ -270,9 +270,9 @@ Keep destination, editing call, result fields, exception handling, and document-
 
 - [ ] **Step 4: Run focused document tests**
 
-Run: `/opt/homebrew/bin/uv run pytest tests/agents/test_document_field_map.py tests/documents/test_editing_service.py -q`
+Run: `/opt/homebrew/bin/uv run python -m pytest tests/agents/test_document_field_map.py tests/documents/test_editing_service.py -q`
 
-Expected: PASS with pristine output.
+Expected: PASS with no warnings beyond the baseline deprecation warnings.
 
 - [ ] **Step 5: Commit Task 3**
 
@@ -314,7 +314,7 @@ Add an injected generator spy test proving document automation receives a state 
 
 - [ ] **Step 2: Run tests and verify RED**
 
-Run: `/opt/homebrew/bin/uv run pytest tests/agents/test_workflow_graph.py tests/agents/test_workflow_characterization.py -q`
+Run: `/opt/homebrew/bin/uv run python -m pytest tests/agents/test_workflow_graph.py tests/agents/test_workflow_characterization.py -q`
 
 Expected: the new generator-spy assertion FAILS because mapping and execution are not separated.
 
@@ -335,7 +335,7 @@ Make `generate_docs()` a compatibility wrapper that invokes `DocumentAutomationA
 
 - [ ] **Step 4: Run characterization and workflow tests**
 
-Run: `/opt/homebrew/bin/uv run pytest tests/agents/test_workflow_workers.py tests/agents/test_workflow_graph.py tests/agents/test_workflow_characterization.py tests/agents/test_workflow_adapters.py tests/api/test_workflows_endpoint.py -q`
+Run: `/opt/homebrew/bin/uv run python -m pytest tests/agents/test_workflow_workers.py tests/agents/test_workflow_graph.py tests/agents/test_workflow_characterization.py tests/agents/test_workflow_adapters.py tests/api/test_workflows_endpoint.py -q`
 
 Expected: PASS; all public characterization values remain unchanged.
 
@@ -371,10 +371,10 @@ Expected: no production diff under `app/api`, `app/ocr`, `app/agents/language`, 
 Run:
 
 ```bash
-/opt/homebrew/bin/uv run pytest tests/agents tests/api/test_workflows_endpoint.py tests/api/test_analyses_endpoint.py tests/api/test_ocr_endpoint.py tests/api/test_language_endpoint.py tests/documents -q
+/opt/homebrew/bin/uv run python -m pytest tests/agents tests/api/test_workflows_endpoint.py tests/api/test_analyses_endpoint.py tests/api/test_ocr_endpoint.py tests/api/test_language_endpoint.py tests/documents -q
 ```
 
-Expected: PASS with pristine output.
+Expected: PASS with no warnings beyond the baseline deprecation warnings.
 
 - [ ] **Step 3: Run lint and diff checks**
 
