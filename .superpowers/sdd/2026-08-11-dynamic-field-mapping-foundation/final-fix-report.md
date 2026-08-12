@@ -1,7 +1,9 @@
 # Dynamic Field Mapping Foundation — final fix report
 
-Date: 2026-08-11  
-Base commit: `d788f6e`  
+Date: 2026-08-11
+
+Base commit: `d788f6e`
+
 Scope: the single user-authorized final fix wave. Existing registered-template/editing/HWP/HWPX/workflow behavior was left unchanged. The repository-wide baseline's 57 unrelated Language/Qdrant/Compose failures were not changed.
 
 All model-backed tests below used protocol-complete deterministic fakes. No Qwen weights were downloaded or executed.
