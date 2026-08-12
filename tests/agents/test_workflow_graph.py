@@ -131,6 +131,31 @@ def test_document_automation_receives_all_template_field_values() -> None:
     assert len(state["generated_documents"]) == 4
 
 
+def test_document_field_values_are_not_saved_or_returned() -> None:
+    class CapturingTaskStore:
+        def __init__(self) -> None:
+            self.saved: dict[str, object] | None = None
+
+        def load(self, task_id: str) -> None:
+            del task_id
+            return None
+
+        def save(self, state: RenewalState) -> None:
+            self.saved = dict(state)
+
+    store = CapturingTaskStore()
+    result = RenewalOrchestrator(task_store=store).run(
+        request_id="req-internal-plan",
+        instruction="체류기간 연장 갱신",
+        worker_id="worker-001",
+        slots=_filled_renewal_slots(),
+    )
+
+    assert store.saved is not None
+    assert "document_field_values" not in store.saved
+    assert "document_field_values" not in result
+
+
 def test_document_subgraph_runs_worker_boundaries_in_order() -> None:
     graph = build_document_subgraph().get_graph()
     assert {
