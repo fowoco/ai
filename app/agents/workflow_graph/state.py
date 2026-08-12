@@ -45,6 +45,7 @@ class RenewalState(TypedDict):
     documents: list[dict[str, Any]]
     ocr_result: NotRequired[dict[str, Any] | None]
     generated_documents: list[dict[str, Any]]
+    document_field_values: NotRequired[dict[str, dict[str, object]]]
     worker_record: NotRequired[dict[str, Any] | None]
     company_record: NotRequired[dict[str, Any] | None]
     scenario: NotRequired[str | None]
@@ -95,6 +96,7 @@ def empty_renewal_state(
         documents=list(documents or []),
         ocr_result=None,
         generated_documents=[],
+        document_field_values={},
         worker_record=None,
         company_record=None,
         scenario=None,
