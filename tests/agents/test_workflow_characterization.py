@@ -163,6 +163,12 @@ def test_generate_preserves_registered_template_ids_and_review_required() -> Non
     assert result["status"] == "READY_FOR_REVIEW"
     assert result["outcome"] == "REVIEW_REQUIRED"
     assert result["scenario"] == "generate"
+    assert result["case_signals"] == ["GENERATE_DRAFTS", "READY_FOR_REVIEW"]
+    assert [
+        event["message"]
+        for event in result["progress_events"]
+        if event.get("subgraph") == "document"
+    ] == ["Document 서브그래프: 초안 생성"]
 
 
 def test_out_of_scope_cancels_without_executing_ocr_or_document_tools() -> None:

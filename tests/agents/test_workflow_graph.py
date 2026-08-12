@@ -1,8 +1,13 @@
 ﻿"""재갱신 LangGraph 오케스트레이터 유닛 테스트."""
 
 from app.agents.workflow_graph import RenewalOrchestrator
+from app.agents.workflow_graph.nodes.document_generator import (
+    RENEWAL_DRAFT_TEMPLATE_IDS,
+    StubDocumentGenerator,
+)
 from app.agents.workflow_graph.nodes.language_stub import CONTRACT_SLOTS
-from app.agents.workflow_graph.state import IDENTITY_SLOTS
+from app.agents.workflow_graph.state import IDENTITY_SLOTS, RenewalState
+from app.agents.workflow_graph.subgraphs import build_document_subgraph
 from app.db.memory import InMemoryDb
 
 
@@ -100,6 +105,45 @@ def test_filled_slots_generates_docs() -> None:
     assert "GENERATE_DRAFTS" in (state.get("case_signals") or [])
 
 
+def test_document_automation_receives_all_template_field_values() -> None:
+    """생성기는 문서 매핑 완료 후에만 실행되고 공개 결과는 유지한다."""
+    seen: list[RenewalState] = []
+
+    def generator(state: RenewalState) -> list[dict[str, object]]:
+        seen.append(state)
+        return StubDocumentGenerator()(state)
+
+    state = RenewalOrchestrator(document_generator=generator).run(
+        request_id="req-document-fields",
+        instruction="체류기간 연장 갱신",
+        worker_id="worker-001",
+        slots=_filled_renewal_slots(),
+    )
+
+    assert seen
+    assert tuple(seen[0]["document_field_values"]) == RENEWAL_DRAFT_TEMPLATE_IDS
+    assert [
+        event["message"]
+        for event in state["progress_events"]
+        if event.get("subgraph") == "document"
+    ] == ["Document 서브그래프: 초안 생성"]
+    assert state["outcome"] == "REVIEW_REQUIRED"
+    assert len(state["generated_documents"]) == 4
+
+
+def test_document_subgraph_runs_worker_boundaries_in_order() -> None:
+    graph = build_document_subgraph().get_graph()
+    assert {
+        (edge.source, edge.target)
+        for edge in graph.edges
+    } == {
+        ("__start__", "document_intelligence"),
+        ("document_intelligence", "document_automation"),
+        ("document_automation", "validation_review"),
+        ("validation_review", "__end__"),
+    }
+
+
 def test_ask_worker_passes_through_guide_placeholder() -> None:
     """서류 부족 시 안내문(태정) 자리를 거쳐 근로자 서류 요청으로 간다."""
     orch = RenewalOrchestrator()
@@ -131,4 +175,3 @@ def test_supervisor_document_combo_on_waiting_worker() -> None:
         "partial_unknown",
     }
     assert state.get("case_signals")
-
