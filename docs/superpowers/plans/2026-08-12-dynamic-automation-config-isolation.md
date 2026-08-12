@@ -263,7 +263,7 @@ The commit must contain only these six files.
 - Consumes: branch `feat/dynamic-field-mapping-foundation` and its verified commit history.
 - Produces: a Draft GitHub pull request against the confirmed fork base `feat/mcp_mapping`.
 
-- [ ] **Step 1: Confirm branch provenance and remote base**
+- [x] **Step 1: Confirm branch provenance and remote base**
 
 Run:
 
@@ -277,7 +277,7 @@ Expected: the local feature contains `feat/mcp_mapping`, the worktree is clean,
 and the remote base exists. If the remote base does not exist, stop and ask for
 the intended GitHub base rather than targeting `develop` or `main` by guess.
 
-- [ ] **Step 2: Push without force**
+- [x] **Step 2: Push without force**
 
 ```text
 git push -u origin feat/dynamic-field-mapping-foundation
@@ -285,7 +285,7 @@ git push -u origin feat/dynamic-field-mapping-foundation
 
 Expected: push succeeds without rewriting any remote history.
 
-- [ ] **Step 3: Create the Draft PR**
+- [x] **Step 3: Create the Draft PR**
 
 Use GitHub CLI against `fowoco/ai` with base `feat/mcp_mapping`. The PR body must
 state:
