@@ -63,6 +63,8 @@ async def run_renewal(
         requested_fields=requested_fields_for_api(list(missing)),
         guide_message=state.get("guide_message"),
         worker_request_message=state.get("worker_request_message"),
+        guide_review_required=bool(state.get("guide_review_required")),
+        guide_failure_code=state.get("guide_failure_code"),
         language_assistant=state.get("language_assistant"),
         ocr_result=state.get("ocr_result"),
         generated_documents=state.get("generated_documents") or [],

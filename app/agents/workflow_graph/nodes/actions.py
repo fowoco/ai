@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from ..document_validation import validate_identity_documents
 from ..phases import WorkflowPhase, WorkflowStep, append_progress, progress_event
-from ..state import IDENTITY_SLOTS, RenewalState
+from ..state import RenewalState
 from ..status import TaskStatus
 from ..supervisor import decide_route
 
@@ -154,13 +154,17 @@ def mark_guide_placeholder(state: RenewalState) -> dict[str, Any]:
         "active_subgraph": "language",
         "phase": WorkflowPhase.VALIDATION_COMMUNICATION.value,
         "step": WorkflowStep.STEP_7_LANGUAGE_GUIDE.value,
+        "guide_review_required": True,
+        "guide_failure_code": "LANGUAGE_ASSISTANT_NOT_CONFIGURED",
+        "guide_message": None,
+        "worker_request_message": None,
     }
 
 
 # 근로자 서류 — 여권·등록증 요청 문구 (Language Assistant 결과 우선)
 def mark_ask_worker(state: RenewalState) -> dict[str, Any]:
     existing = state.get("worker_request_message")
-    if existing:
+    if existing and not state.get("guide_review_required"):
         events = append_progress(
             state,
             progress_event(
@@ -184,37 +188,29 @@ def mark_ask_worker(state: RenewalState) -> dict[str, Any]:
             "active_subgraph": "main",
         }
 
-    missing = [m for m in state.get("missing_slots", []) if m in IDENTITY_SLOTS]
-    validation = state.get("document_validation") or {}
-    combo = validation.get("combo") if isinstance(validation, dict) else None
-    detail = f" (조합:{combo})" if combo else ""
-    ko = (
-        "인사담당자에게 여권 또는 외국인등록증을 전달해 주세요. "
-        f"필요한 정보: {', '.join(missing) or '신분서류'}{detail}."
-    )
-    eps = (
-        "[EPS] Please deliver your passport or alien registration card "
-        "to the HR manager."
-    )
+    # 안내가 없거나 검토가 필요하면 내부 Slot/검증 키로 임시 문장을 만들지 않는다.
+    # Server는 REVIEW_WORKER_GUIDE 신호를 HR 검토 화면으로 연결해야 한다.
     events = append_progress(
         state,
         progress_event(
             phase=WorkflowPhase.VALIDATION_COMMUNICATION,
             step=WorkflowStep.STEP_5_CASE_SIGNAL,
-            message="근로자 서류 요청: 여권·등록증 (ask_worker)",
+            message="근로자 안내 검토 필요: 자동 발송 차단",
             subgraph="main",
         ),
     )
     return {
         "scenario": "ask_worker",
-        "status": TaskStatus.WAITING_WORKER.value,
-        "outcome": "WAITING_WORKER",
-        "worker_request_message": f"{ko}\n{eps}",
+        "status": TaskStatus.READY_FOR_REVIEW.value,
+        "outcome": "REVIEW_REQUIRED",
+        "worker_request_message": None,
+        "guide_review_required": True,
+        "guide_failure_code": (
+            state.get("guide_failure_code") or "WORKER_GUIDE_UNAVAILABLE"
+        ),
         "phase": WorkflowPhase.VALIDATION_COMMUNICATION.value,
         "step": WorkflowStep.STEP_5_CASE_SIGNAL.value,
-        "case_signals": list(
-            state.get("case_signals") or ["REQUEST_IDENTITY_DOCUMENT"]
-        ),
+        "case_signals": ["REVIEW_WORKER_GUIDE"],
         "progress_events": events,
         "active_subgraph": "main",
     }

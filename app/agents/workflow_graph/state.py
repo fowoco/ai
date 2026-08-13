@@ -37,6 +37,9 @@ class RenewalState(TypedDict):
     outcome: str
     guide_message: NotRequired[str | None]
     worker_request_message: NotRequired[str | None]
+    # 근로자 안내를 바로 발송할 수 없는 경우 HR 검토로 닫는 안전 신호
+    guide_review_required: NotRequired[bool]
+    guide_failure_code: NotRequired[str | None]
     # Language Assistant (태정) — projection/결과 보관
     preferred_language: NotRequired[str | None]
     nationality_code: NotRequired[str | None]
@@ -89,6 +92,8 @@ def empty_renewal_state(
         outcome="",
         guide_message=None,
         worker_request_message=None,
+        guide_review_required=False,
+        guide_failure_code=None,
         preferred_language=None,
         nationality_code=None,
         request_context=None,
