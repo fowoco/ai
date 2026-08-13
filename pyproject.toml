@@ -42,7 +42,7 @@ intent = [
 intent-ax = [
   "fowoco-ai[intent]",
   "peft>=0.13,<1",
-  "bitsandbytes>=0.44,<1",
+  "bitsandbytes>=0.50,<1",
 ]
 language-retrieval = [
   "qdrant-client>=1.19,<2",

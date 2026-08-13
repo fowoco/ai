@@ -68,6 +68,8 @@ class Settings(BaseSettings):
 
     # Server ↔ AI Internal 호출용 Bearer (#8). 비우면 로컬에서 인증 생략
     internal_api_token: str | None = None
+    # 외부에 공개되는 Mac/Kubernetes Agent는 token 누락 상태로 시작하지 않는다.
+    internal_api_auth_required: bool = False
 
     # Qdrant — 미설정 시 language assistant degraded 동작
     qdrant_url: str | None = None
@@ -110,6 +112,14 @@ class Settings(BaseSettings):
         if self.intent_warmup_required and not self.intent_model_enabled:
             raise ValueError(
                 "intent_warmup_required requires intent_model_enabled=true"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_required_internal_auth(self) -> Self:
+        if self.internal_api_auth_required and not self.internal_api_token:
+            raise ValueError(
+                "internal_api_auth_required requires internal_api_token"
             )
         return self
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 from typing import Annotated
 
 from fastapi import Header, HTTPException, status
@@ -22,7 +23,7 @@ async def verify_internal_bearer(
             detail="Missing or invalid Authorization Bearer token",
         )
     token = authorization.removeprefix("Bearer ").strip()
-    if token != expected:
+    if not hmac.compare_digest(token, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid internal API token",

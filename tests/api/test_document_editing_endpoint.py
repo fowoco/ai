@@ -269,6 +269,7 @@ def test_openapi_exposes_separate_document_actions() -> None:
     assert "/api/v1/documents/templates/{template_id}" in paths
 
     assert [tag["name"] for tag in schema["tags"]] == [
+        "Health",
         "Analyses",
         "Workflows",
         "OCR",
@@ -280,6 +281,7 @@ def test_openapi_exposes_separate_document_actions() -> None:
         "Document Conversion",
     ]
     assert [tag["description"] for tag in schema["tags"]] == [
+        "프로세스 liveness와 Intent 모델 readiness를 확인합니다.",
         (
             "Server가 호출하는 핵심 분석 API. "
             "analysisInput 지시문에서 Intent 분류, Slot 추출, 모호성 검사 수행"

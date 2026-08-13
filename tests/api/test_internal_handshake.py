@@ -1,5 +1,7 @@
 # slot_catalog·Internal Bearer 테스트
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app.agents.slot_catalog import requested_fields_for_api
 from app.core.config import get_settings
@@ -58,3 +60,14 @@ def test_internal_api_requires_bearer_when_token_set(monkeypatch) -> None:
     get_settings.cache_clear()
     monkeypatch.delenv("FOWOCO_INTERNAL_API_TOKEN", raising=False)
     get_settings.cache_clear()
+
+
+def test_required_internal_auth_rejects_startup_without_token(monkeypatch) -> None:
+    monkeypatch.setenv("FOWOCO_INTERNAL_API_AUTH_REQUIRED", "true")
+    monkeypatch.delenv("FOWOCO_INTERNAL_API_TOKEN", raising=False)
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(ValidationError, match="requires internal_api_token"):
+            create_app()
+    finally:
+        get_settings.cache_clear()

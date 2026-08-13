@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from threading import Semaphore
 
 from .guardrail import HRRoutingGuardrail
 from .models_hf import AxIntentModel, BertIntentModel
@@ -44,6 +45,8 @@ class HybridIntentPipeline:
         ax_adapter_revision: str | None = None,
         ax_max_new_tokens: int = 96,
     ) -> None:
+        # 단일 프로세스 안에서도 BERT/A.X가 동시에 메모리를 점유하지 않도록 직렬화한다.
+        self._inference_slots = Semaphore(1)
         self.bert = BertIntentModel(
             model_dir=bert_model_dir,
             device=device,
@@ -74,15 +77,21 @@ class HybridIntentPipeline:
 
     # readiness 전에 각 활성 모델의 첫 forward/generate를 완료한다.
     def warmup(self) -> None:
-        self.bert.predict("체류기간 연장 준비해줘")
-        if not self.ax_enabled:
-            return
-        if self.ax is None:
-            raise RuntimeError("A.X is enabled but unavailable")
-        self.ax.predict("여권 사본을 요청해줘")
+        with self._inference_slots:
+            self.bert.predict("체류기간 연장 준비해줘")
+            if not self.ax_enabled:
+                return
+            if self.ax is None:
+                raise RuntimeError("A.X is enabled but unavailable")
+            self.ax.predict("여권 사본을 요청해줘")
 
     # instruction → 정규화 Intent 예측
     def predict(self, instruction: str) -> HybridIntentPrediction:
+        with self._inference_slots:
+            return self._predict_serialized(instruction)
+
+    # BERT routing부터 A.X generate까지 하나의 직렬화 구간에서 실행한다.
+    def _predict_serialized(self, instruction: str) -> HybridIntentPrediction:
         probs, margin, bert_intents = self.bert.predict(instruction)
         route = self.guardrail.should_route_to_ax(instruction, probs, margin)
         if route.should_route and self.ax is not None:

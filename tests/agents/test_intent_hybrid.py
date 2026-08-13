@@ -1,7 +1,8 @@
 # HF Intent 에이전트·대표 Intent 선택 단위 테스트
 
 from concurrent.futures import ThreadPoolExecutor
-from threading import Event, Lock
+from threading import Event, Lock, Semaphore
+from time import sleep
 
 from app.agents.intent.guardrail import HRRoutingGuardrail
 from app.agents.intent.hybrid import HybridIntentPipeline, HybridIntentPrediction
@@ -286,6 +287,7 @@ def test_pipeline_calls_ax_when_guardrail_routes() -> None:
     pipeline.guardrail = _Guardrail()
     pipeline.ax = _Ax()
     pipeline.ax_enabled = True
+    pipeline._inference_slots = Semaphore(1)
 
     prediction = pipeline.predict("서류 챙겨줘")
 
@@ -310,6 +312,7 @@ def test_pipeline_warmup_runs_bert_and_enabled_ax() -> None:
     pipeline.bert = _Bert()
     pipeline.ax = _Ax()
     pipeline.ax_enabled = True
+    pipeline._inference_slots = Semaphore(1)
 
     pipeline.warmup()
 
@@ -332,9 +335,48 @@ def test_pipeline_marks_fallback_when_ax_enabled_but_unavailable() -> None:
     pipeline.guardrail = _Guardrail()
     pipeline.ax = None
     pipeline.ax_enabled = True
+    pipeline._inference_slots = Semaphore(1)
 
     prediction = pipeline.predict("서류 챙겨줘")
 
     assert prediction.selected_model == "BERT_FALLBACK"
     assert prediction.degraded is True
     assert prediction.prompt_version == AX_INTENT_PROMPT_VERSION
+
+
+def test_pipeline_serializes_concurrent_inference() -> None:
+    active = 0
+    max_active = 0
+    counter_lock = Lock()
+
+    class _Bert:
+        device = "cpu"
+
+        def predict(
+            self, _instruction: str
+        ) -> tuple[dict[str, float], float, list[str]]:
+            nonlocal active, max_active
+            with counter_lock:
+                active += 1
+                max_active = max(max_active, active)
+            sleep(0.03)
+            with counter_lock:
+                active -= 1
+            return {"EXPIRY_RENEWAL": 0.9}, 0.9, ["EXPIRY_RENEWAL"]
+
+    class _Guardrail:
+        def should_route_to_ax(self, *_args: object) -> object:
+            return type("Route", (), {"should_route": False})()
+
+    pipeline = HybridIntentPipeline.__new__(HybridIntentPipeline)
+    pipeline.bert = _Bert()
+    pipeline.guardrail = _Guardrail()
+    pipeline.ax = None
+    pipeline.ax_enabled = False
+    pipeline._inference_slots = Semaphore(1)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(pipeline.predict, ["첫 요청", "둘째 요청"]))
+
+    assert len(results) == 2
+    assert max_active == 1

@@ -39,6 +39,7 @@ test-results/
 .env
 .env.*
 !.env.example
+!.env.mac.example
 .env.local
 *.pem
 *.key

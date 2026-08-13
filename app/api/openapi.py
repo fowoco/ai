@@ -1,6 +1,7 @@
 """OpenAPI 태그 이름과 Swagger 표시 정보 관리"""
 
 ANALYSES_TAG = "Analyses"
+HEALTH_TAG = "Health"
 WORKFLOWS_TAG = "Workflows"
 OCR_TAG = "OCR"
 DOCUMENT_CAPABILITIES_TAG = "Document Capabilities"
@@ -12,6 +13,10 @@ DOCUMENT_CONVERSION_TAG = "Document Conversion"
 LANGUAGE_ASSISTANT_TAG = "Language Assistant"
 
 OPENAPI_TAGS_METADATA = [
+    {
+        "name": HEALTH_TAG,
+        "description": "프로세스 liveness와 Intent 모델 readiness를 확인합니다.",
+    },
     {
         "name": ANALYSES_TAG,
         "description": (

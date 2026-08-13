@@ -191,5 +191,6 @@ OCR과 문서 처리는 각각 `ocr`, `documents`가 실행하며, 범용 HWPX �
 | --- | --- |
 | API | [API 안내](app/api/README.md) · [API 화면](http://localhost:8000/docs) |
 | AI 연동 | [Server 연결](docs/ai-runtime-handshake.md) · [업무 분석 규격](docs/analyses-contract.md) · [재갱신 흐름 규격](docs/workflows-contract.md) |
+| 배포 | [Mac 시연용 Agent 서빙과 Kubernetes 이전](docs/mac-agent-serving.md) |
 | 다국어·OCR | [다국어 안내 운영](docs/language-assistant-operations.md) · [품질 평가](docs/evaluations/language-assistant-baseline.md) · [CLOVA OCR 연결](docs/clova-ocr-integration.md) |
 | 문서 처리 | [HWP·HWPX 처리](app/documents/README.md) · [HWPX 편집·검증](hwp-editor/README.md) |

@@ -17,6 +17,20 @@ async def test_app_boots() -> None:
 
 
 @pytest.mark.asyncio
+async def test_process_liveness_and_agent_readiness() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        live = await client.get("/health/live")
+        ready = await client.get("/internal/v1/health/ready")
+
+    assert live.status_code == 200
+    assert live.json() == {"status": "ok"}
+    assert ready.status_code == 200
+    assert ready.json()["ready"] is True
+
+
+@pytest.mark.asyncio
 async def test_document_capabilities() -> None:
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
