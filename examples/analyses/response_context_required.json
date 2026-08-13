@@ -4,6 +4,7 @@
   "contextRequirement": {
     "detectedIntent": "EXPIRY_RENEWAL",
     "workflowId": "WF-STY-001",
+    "agentTarget": "renewal-agent",
     "evidence": "체류연장 준비해줘",
     "confidence": null,
     "confidenceSource": "UNAVAILABLE",

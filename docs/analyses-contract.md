@@ -37,6 +37,7 @@ PLAN에는 `plannedIntent`, `plannedWorkflowId`, Worker context를 보내지 않
   "contextRequirement": {
     "detectedIntent": "EXPIRY_RENEWAL",
     "workflowId": "WF-STY-001",
+    "agentTarget": "renewal-agent",
     "evidence": "체류연장 준비해줘",
     "confidence": null,
     "confidenceSource": "UNAVAILABLE",
@@ -71,6 +72,8 @@ PLAN에는 `plannedIntent`, `plannedWorkflowId`, Worker context를 보내지 않
 규칙:
 
 - `workflowId`는 `WF-STY-001` 같은 Knowledge canonical ID다.
+- `agentTarget`은 `renewal-agent` 같은 논리 실행 Agent ID다. `MAC`/`K8S` 같은
+  배포 위치가 아니며, 물리 Endpoint는 Server의 `FOWOCO_AI_BASE_URL`이 결정한다.
 - A.X는 확률을 제공하지 않으므로 `confidence=null`, `confidenceSource=UNAVAILABLE`이다.
 - BERT가 최종 분류기이면 `confidenceSource=BERT`이고 confidence를 반환한다.
 - 고정 규칙 fallback은 `confidenceSource=MODEL`을 사용한다.
@@ -109,6 +112,7 @@ Server는 `OUT_OF_SCOPE`에서 Workflow 검증·DB 조회·ANALYZE 호출을 수
     "instruction": "응웬반안 체류연장 준비해줘",
     "plannedIntent": "EXPIRY_RENEWAL",
     "plannedWorkflowId": "WF-STY-001",
+    "agentTarget": "renewal-agent",
     "requestedFieldKeys": [
       "worker_id",
       "stay_expiry_date",
@@ -131,6 +135,8 @@ Server는 `OUT_OF_SCOPE`에서 Workflow 검증·DB 조회·ANALYZE 호출을 수
 규칙:
 
 - `plannedIntent`, `plannedWorkflowId`는 모두 필수다. 하나라도 없으면 422로 거부한다.
+- `agentTarget`은 전환 기간의 선택 필드다. PLAN에서 값이 반환되었다면 Server가 그대로
+  보존해 ANALYZE에 전달하며, 현재 허용값은 `renewal-agent`다.
 - AI는 이 값을 신뢰하여 Intent 모델을 다시 호출하지 않고 Slot/Context만 검사한다.
 - `providerAttemptCount=0`은 ANALYZE에서 모델 호출이 없었음을 뜻한다.
 - `requestedFieldKeys`는 PLAN에서 요청한 전체 key다.
@@ -168,7 +174,8 @@ Candidate의 `workflowId`는 `plannedWorkflowId`와 반드시 같아야 한다. 
 
 - PLAN의 confidence는 Intent 분류 결과다.
 - Server는 PLAN의 BERT confidence, confidenceSource, bertRoutingScore를 실행 이력에 보존한다.
-- ANALYZE 요청에는 `plannedIntent`, `plannedWorkflowId`만 전달한다.
+- ANALYZE 요청에는 `plannedIntent`, `plannedWorkflowId`와 PLAN에서 반환된 선택적
+  `agentTarget`만 결정 메타데이터로 전달한다.
 - AI는 Intent 모델을 재호출하지 않고 Candidate confidence를 null로 반환한다.
 - Server는 Candidate confidence와 PLAN confidence를 비교하지 않으며 nullable을 허용한다.
 - Candidate의 workflowId는 plannedWorkflowId와 반드시 같아야 한다.

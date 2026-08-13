@@ -20,6 +20,11 @@ FOWOCO AI Agent의 PLAN·ANALYZE API를 호출한다. Server가 BERT나 A.X를 �
 Mac Agent는 임시 시연 대상이다. Kubernetes 전환 후에도 소스·계약·Prompt 버전은
 같고 Backend의 Base URL과 Token만 교체한다.
 
+`agentTarget`은 물리 위치를 표시하지 않는다. PLAN의 `agentTarget=renewal-agent`는
+Workflow를 실행할 논리 Agent ID이고, Mac과 Kubernetes 중 어느 배포를 호출할지는
+Server의 `FOWOCO_AI_BASE_URL`이 결정한다. Server는 PLAN에서 받은 target을 실행 이력에
+보존하고 ANALYZE에 그대로 전달한다.
+
 ## 고정된 런타임 계약
 
 | 항목 | 값 |
@@ -123,8 +128,9 @@ Agent가 준비된 다음 별도 터미널에서 실행한다.
 2. readiness의 BERT/A.X 및 Prompt 버전
 3. A.X를 사용하는 PLAN 성공
 4. PLAN의 Intent·Workflow로 ANALYZE 성공
-5. ANALYZE `providerAttemptCount=0`
-6. Candidate `workflowId`와 PLAN `workflowId` 동일
+5. PLAN의 `agentTarget=renewal-agent`를 ANALYZE가 수용
+6. ANALYZE `providerAttemptCount=0`
+7. Candidate `workflowId`와 PLAN `workflowId` 동일
 
 Tunnel 연결 후에는 배포 주소를 지정해 같은 검증을 반복한다.
 

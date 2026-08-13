@@ -59,6 +59,7 @@ def _analyze_body(
             "instruction": instruction,
             "plannedIntent": "EXPIRY_RENEWAL",
             "plannedWorkflowId": "WF-STY-001",
+            "agentTarget": "renewal-agent",
             "requestedFieldKeys": requested_field_keys
             or ["worker_id", "stay_expiry_date"],
             "workers": [
@@ -89,6 +90,7 @@ async def test_plan_returns_context_required() -> None:
     ctx = data["contextRequirement"]
     assert ctx["detectedIntent"] == "EXPIRY_RENEWAL"
     assert ctx["workflowId"] == "WF-STY-001"
+    assert ctx["agentTarget"] == "renewal-agent"
     assert ctx["evidence"] is None
     assert ctx["confidenceSource"] == "MODEL"
     assert ctx["bertRoutingScore"] is None
@@ -135,6 +137,37 @@ async def test_analyze_rejects_request_without_planned_decision() -> None:
     body = _analyze_body()
     body["analysisInput"].pop("plannedIntent")
     body["analysisInput"].pop("plannedWorkflowId")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(ANALYSES_PATH, json=body)
+
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_analyze_rejects_unknown_agent_target() -> None:
+    body = _analyze_body()
+    body["analysisInput"]["agentTarget"] = "mac"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(ANALYSES_PATH, json=body)
+
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_analyze_accepts_missing_optional_agent_target() -> None:
+    body = _analyze_body()
+    body["analysisInput"].pop("agentTarget")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(ANALYSES_PATH, json=body)
+
+    assert resp.status_code == 200
+    assert resp.json()["providerAttemptCount"] == 0
+
+
+@pytest.mark.asyncio
+async def test_plan_rejects_agent_target_hint() -> None:
+    body = _plan_body()
+    body["analysisInput"]["agentTarget"] = "renewal-agent"
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.post(ANALYSES_PATH, json=body)
 

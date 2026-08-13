@@ -63,6 +63,7 @@ def _analyze_request(
             instruction=instruction,
             plannedIntent="EXPIRY_RENEWAL",
             plannedWorkflowId="WF-STY-001",
+            agentTarget="renewal-agent",
             requestedFieldKeys=requested_field_keys,
             workers=workers,
         ),
@@ -90,6 +91,7 @@ def test_plan_returns_single_context_decision_without_fake_evidence_slot() -> No
     ctx = res.context_requirement
     assert ctx.detected_intent == "EXPIRY_RENEWAL"
     assert ctx.workflow_id == "WF-STY-001"
+    assert ctx.agent_target == "renewal-agent"
     assert ctx.evidence == "체류연장 준비해줘"
     assert ctx.confidence_source == "BERT"
     assert ctx.extracted_slots == {}
@@ -114,6 +116,26 @@ def test_plan_out_of_scope_terminates_without_context_lookup() -> None:
     assert res.questions == []
     assert res.candidates == []
     assert res.provider_attempt_count == 1
+
+
+def test_plan_does_not_advertise_unimplemented_logical_agent() -> None:
+    pipe = AnalysisPipeline(
+        intent_agent=_FakeIntent(
+            intent="DOCUMENT_REQUEST",
+            workflow_id="WF-DOC-001",
+        )
+    )
+
+    res = pipe.run(
+        AnalysisRequest(
+            requestId=str(uuid4()),
+            phase="PLAN",
+            analysisInput=AnalysisInput(instruction="여권 사본을 요청해줘"),
+        )
+    )
+
+    assert res.context_requirement is not None
+    assert res.context_requirement.agent_target is None
 
 
 def test_analyze_requires_planned_intent_and_workflow() -> None:
@@ -200,6 +222,7 @@ def test_analyze_reuses_plan_decision_without_classifying_again() -> None:
                 instruction="체류연장 준비해줘",
                 plannedIntent=ctx.detected_intent,
                 plannedWorkflowId=ctx.workflow_id,
+                agentTarget=ctx.agent_target,
                 requestedFieldKeys=ctx.required_field_keys,
                 workers=[
                     WorkerContext(

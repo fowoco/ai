@@ -40,6 +40,12 @@ _NAME_STOP_PREFIXES = (
     "안내",
 )
 
+# agentTarget은 물리 배포 위치(Mac/Kubernetes)가 아니라 실행할 논리 Agent ID다.
+_AGENT_TARGET_BY_WORKFLOW: dict[str, str] = {
+    "WF-STY-001": "renewal-agent",
+    "WF-CON-001": "renewal-agent",
+}
+
 _SLOT_PROMPTS: dict[str, str] = {
     "worker_id": "대상 근로자를 지정해 주세요.",
     "stay_expiry_date": "체류 만료일을 입력해 주세요.",
@@ -75,6 +81,11 @@ def _guess_target_display_name(instruction: str) -> str:
 def _question_for(slot_key: str) -> AnalysisQuestion:
     prompt = _SLOT_PROMPTS.get(slot_key) or f"{slot_key} 값을 입력해 주세요."
     return AnalysisQuestion(slot_key=slot_key, prompt=prompt)
+
+
+# 실제 실행 Agent가 연결된 Workflow만 논리 target을 반환한다.
+def _agent_target_for(workflow_id: str) -> str | None:
+    return _AGENT_TARGET_BY_WORKFLOW.get(workflow_id)
 
 
 # Worker requestedFields·식별자를 슬롯으로 시드
@@ -184,6 +195,7 @@ class AnalysisPipeline:
             context_requirement=ContextRequirement(
                 detected_intent=intent_result.intent or "UNKNOWN",
                 workflow_id=workflow_id,
+                agent_target=_agent_target_for(workflow_id),
                 evidence=intent_result.evidence,
                 confidence=intent_result.confidence,
                 confidence_source=intent_result.confidence_source,

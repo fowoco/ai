@@ -5,6 +5,7 @@
     "instruction": "응웬반안 체류연장 준비해줘",
     "plannedIntent": "EXPIRY_RENEWAL",
     "plannedWorkflowId": "WF-STY-001",
+    "agentTarget": "renewal-agent",
     "requestedFieldKeys": [
       "worker_id",
       "stay_expiry_date",

@@ -52,7 +52,7 @@ def main() -> None:
             "Knowledge prompt version mismatch",
         )
 
-        plan = client.post(
+        ax_plan = client.post(
             "/internal/v1/analyses",
             json={
                 "requestId": "mac-smoke-plan",
@@ -60,27 +60,52 @@ def main() -> None:
                 "analysisInput": {"instruction": "여권 사본을 요청해줘"},
             },
         )
-        _require(plan.status_code == 200, "PLAN failed")
-        plan_body = plan.json()
-        _require(plan_body.get("outcome") == "CONTEXT_REQUIRED", "PLAN outcome mismatch")
-        _require(plan_body.get("versions", {}).get("modelVersion") == "AX", "A.X was not used")
+        _require(ax_plan.status_code == 200, "A.X PLAN failed")
+        ax_plan_body = ax_plan.json()
         _require(
-            plan_body.get("versions", {}).get("promptVersion") == PROMPT_VERSION,
+            ax_plan_body.get("outcome") == "CONTEXT_REQUIRED",
+            "A.X PLAN outcome mismatch",
+        )
+        _require(
+            ax_plan_body.get("versions", {}).get("modelVersion") == "AX",
+            "A.X was not used",
+        )
+        _require(
+            ax_plan_body.get("versions", {}).get("promptVersion") == PROMPT_VERSION,
             "PLAN prompt version mismatch",
         )
 
+        plan = client.post(
+            "/internal/v1/analyses",
+            json={
+                "requestId": "mac-smoke-renewal",
+                "phase": "PLAN",
+                "analysisInput": {"instruction": "체류기간 연장 준비해줘"},
+            },
+        )
+        _require(plan.status_code == 200, "renewal PLAN failed")
+        plan_body = plan.json()
+        _require(
+            plan_body.get("outcome") == "CONTEXT_REQUIRED",
+            "renewal PLAN outcome mismatch",
+        )
         context = plan_body.get("contextRequirement") or {}
+        _require(
+            context.get("agentTarget") == "renewal-agent",
+            "PLAN logical agentTarget mismatch",
+        )
         requested_keys = context.get("requiredFieldKeys") or []
         requested_fields = {key: "smoke-value" for key in requested_keys}
         analyze = client.post(
             "/internal/v1/analyses",
             json={
-                "requestId": "mac-smoke-analyze",
+                "requestId": "mac-smoke-renewal",
                 "phase": "ANALYZE",
                 "analysisInput": {
-                    "instruction": "여권 사본을 요청해줘",
+                    "instruction": "체류기간 연장 준비해줘",
                     "plannedIntent": context.get("detectedIntent"),
                     "plannedWorkflowId": context.get("workflowId"),
+                    "agentTarget": context.get("agentTarget"),
                     "requestedFieldKeys": requested_keys,
                     "workers": [
                         {
@@ -106,7 +131,7 @@ def main() -> None:
 
     print(
         "Mac Agent smoke passed: liveness, readiness, A.X PLAN, "
-        "and zero-provider ANALYZE"
+        "renewal agentTarget, and zero-provider ANALYZE"
     )
 
 

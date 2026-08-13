@@ -14,6 +14,7 @@ AnalysisOutcome = Literal[
     "OUT_OF_SCOPE",
 ]
 ConfidenceSource = Literal["MODEL", "BERT", "UNAVAILABLE"]
+AgentTarget = Literal["renewal-agent"]
 
 DEFAULT_CONTRACT_VERSION = "1.1.0"
 DEFAULT_KNOWLEDGE_VERSION = "0.2.0"
@@ -43,6 +44,7 @@ class AnalysisInput(BaseModel):
     workers: list[WorkerContext] = Field(default_factory=list)
     planned_intent: str | None = Field(None, alias="plannedIntent")
     planned_workflow_id: str | None = Field(None, alias="plannedWorkflowId")
+    agent_target: AgentTarget | None = Field(None, alias="agentTarget")
 
     model_config = {"populate_by_name": True}
 
@@ -61,7 +63,9 @@ class AnalysisRequest(BaseModel):
         ai = self.analysis_input
         has_intent = ai.planned_intent is not None
         has_workflow = ai.planned_workflow_id is not None
-        if self.phase == "PLAN" and (has_intent or has_workflow):
+        if self.phase == "PLAN" and (
+            has_intent or has_workflow or ai.agent_target is not None
+        ):
             raise ValueError("PLAN must not include a planned Intent decision")
         if self.phase == "ANALYZE" and not (has_intent and has_workflow):
             raise ValueError(
@@ -84,6 +88,7 @@ class ContextRequirement(BaseModel):
 
     detected_intent: str = Field(..., alias="detectedIntent")
     workflow_id: str = Field(..., alias="workflowId")
+    agent_target: AgentTarget | None = Field(None, alias="agentTarget")
     evidence: str | None = None
     confidence: float | None = Field(None, ge=0.0, le=1.0)
     confidence_source: ConfidenceSource = Field(..., alias="confidenceSource")
