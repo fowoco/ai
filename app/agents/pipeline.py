@@ -39,11 +39,41 @@ _NAME_STOP_PREFIXES = (
     "변경",
     "안내",
 )
-# 이름 토큰 뒤에 공백 없이 붙는 조사 (예: "체아의" -> "체아").
-# "이/가/을/를/은/는"은 음역 인명의 마지막 음절과 겹치는 경우가 많아
-# (예: "리웨이") 여기서는 제외한다. "의"는 인명 마지막 음절로 거의 쓰이지
-# 않아 상대적으로 안전하다.
-_NAME_JOSA_SUFFIXES = ("의",)
+# 받침 유무에 따라 짝이 갈리는 조사. 값은 "이 조사가 오려면 앞 음절에
+# 받침이 있어야 하는가". 예: "이"(주격)는 받침 있는 음절 뒤에만 오고,
+# 받침 없는 음절 뒤에는 "가"가 온다. 이 규칙에 안 맞으면 조사가 아니라
+# 음역 인명의 마지막 음절로 보고 자르지 않는다 (예: "리웨이"의 "이"는
+# "웨"(받침 없음) 뒤에 왔으니 규칙상 "가"여야 함 -> 조사 아님, 안 자름).
+_NAME_JOSA_PAIRS: dict[str, bool] = {
+    "이": True, "가": False,   # 주격
+    "은": True, "는": False,   # 보조사
+    "을": True, "를": False,   # 목적격
+}
+# 받침 유무와 무관하게 항상 같은 형태인 조사 (예: "체아의" -> "체아").
+_NAME_JOSA_INVARIANT = ("의",)
+
+
+def _has_batchim(ch: str) -> bool | None:
+    code = ord(ch) - 0xAC00
+    if code < 0 or code > 11171:
+        return None  # 한글 음절이 아님 (영문/숫자 등) -> 판단 불가
+    return code % 28 != 0
+
+
+# 토큰 끝에 붙은 조사를 판별해서 떼어낸다. 못 떼면 (원본, False).
+def _strip_trailing_josa(tok: str) -> tuple[str, bool]:
+    if len(tok) < 2:
+        return tok, False
+    last = tok[-1]
+    if last in _NAME_JOSA_INVARIANT:
+        return tok[:-1], True
+    needs_batchim = _NAME_JOSA_PAIRS.get(last)
+    if needs_batchim is None:
+        return tok, False
+    prev_has_batchim = _has_batchim(tok[-2])
+    if prev_has_batchim is None or prev_has_batchim != needs_batchim:
+        return tok, False
+    return tok[:-1], True
 
 _SLOT_PROMPTS: dict[str, str] = {
     "worker_id": "대상 근로자를 지정해 주세요.",
@@ -67,17 +97,13 @@ def _guess_target_display_name(instruction: str) -> str:
         return "unknown"
     parts: list[str] = []
     for tok in text.split():
-        if tok in {"의", "을", "를", "이", "가"}:
+        if tok in {"의", "을", "를", "이", "가", "은", "는"}:
             break
         if any(tok.startswith(p) for p in _NAME_STOP_PREFIXES):
             break
-        stripped = tok
-        for suffix in _NAME_JOSA_SUFFIXES:
-            if len(tok) > len(suffix) and tok.endswith(suffix):
-                stripped = tok[: -len(suffix)]
-                break
+        stripped, matched = _strip_trailing_josa(tok)
         parts.append(stripped)
-        if stripped != tok:
+        if matched:
             # 조사가 붙어 있던 토큰은 이름 구(句)의 끝으로 간주한다.
             break
     name = " ".join(parts).strip()

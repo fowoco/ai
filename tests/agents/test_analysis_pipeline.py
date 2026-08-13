@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.agents.intent.service import IntentResult
-from app.agents.pipeline import AnalysisPipeline
+from app.agents.pipeline import AnalysisPipeline, _guess_target_display_name
 from app.api.schemas.analyses import AnalysisInput, AnalysisRequest, WorkerContext
 
 
@@ -118,7 +118,8 @@ def test_plan_strips_trailing_josa_from_target_display_name() -> None:
 
 def test_plan_does_not_truncate_names_ending_in_a_particle_like_syllable() -> None:
     # "리웨이"처럼 마지막 음절이 조사(이/가 등)와 우연히 겹치는 음역 인명은
-    # 잘라내면 안 된다 — "의"만 좁게 처리하는 이유.
+    # 잘라내면 안 된다. "웨"(받침 없음) 뒤에 "이"(받침 있는 음절 뒤에만 오는
+    # 주격조사)가 온 건 받침 규칙에 안 맞으므로 조사가 아니라고 판단한다.
     pipe = AnalysisPipeline(
         intent_agent=_FakeIntent(intent="EXPIRY_RENEWAL", workflow_id="WF-STY-001")
     )
@@ -131,6 +132,26 @@ def test_plan_does_not_truncate_names_ending_in_a_particle_like_syllable() -> No
     )
     assert res.context_requirement is not None
     assert res.context_requirement.target_display_name == "리웨이"
+
+
+@pytest.mark.parametrize(
+    ("instruction", "expected_name"),
+    [
+        ("응우옌 티 란이 체류기간 연장 준비해줘", "응우옌 티 란"),
+        ("쩐 꾸옥 바오는 체류기간 연장이 필요해", "쩐 꾸옥 바오"),
+        ("마크 레예스를 위해 계약 갱신 준비", "마크 레예스"),
+        ("라니 위자야가 계약 종료 예정이라 준비해줘", "라니 위자야"),
+        ("아르준 타파의 서류 확인 요청", "아르준 타파"),
+    ],
+)
+def test_guess_target_display_name_strips_batchim_consistent_particles(
+    instruction: str, expected_name: str
+) -> None:
+    # 받침 유무가 실제 조사 짝과 일치하는 경우에만 잘라낸다 (예: "란"은
+    # 받침이 있어서 "이"가 올 수 있고, "바오"는 받침이 없어서 "는"이 올 수
+    # 있음). 이 규칙 덕분에 "리웨이"류 오탐 없이 이/가/은/는/을/를까지
+    # 넓게 처리할 수 있다.
+    assert _guess_target_display_name(instruction) == expected_name
 
 
 def test_plan_out_of_scope_terminates_without_context_lookup() -> None:
