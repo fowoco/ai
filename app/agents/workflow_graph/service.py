@@ -134,6 +134,7 @@ class RenewalOrchestrator:
         # 실행 중 내부 표기 — 응답 직전 서버 공개 status로 정규화
         initial["status"] = TaskStatus.DRAFT.value
         result = self._graph.invoke(initial)
+        result.pop("document_field_values", None)
         result["status"] = to_public_status(result.get("status"))  # type: ignore[index]
         self._task_store.save(result)  # type: ignore[arg-type]
         return result  # type: ignore[no-any-return]

@@ -9,6 +9,7 @@ from app.agents.workflow_graph.document_field_map import (
     merge_document_source_slots,
     values_for_template,
 )
+from app.agents.workflow_graph.nodes import document_generator
 from app.agents.workflow_graph.nodes.document_generator import EditingServiceDocumentGenerator
 from app.agents.workflow_graph.state import empty_renewal_state
 
@@ -107,6 +108,42 @@ def test_editing_generator_maps_and_generates_or_stubs(tmp_path: Path) -> None:
     if labor["status"] == "generated":
         assert Path(labor["path"]).exists()
         assert labor["changed_fields"]
+
+
+# 사전 계산된 템플릿 계획이 있으면 재매핑하지 않고 그대로 생성에 쓴다
+def test_generator_uses_precomputed_document_field_values(tmp_path: Path) -> None:
+    state = _sample_state()
+    state["document_field_values"] = {
+        "standard_labor_contract_v6": {"employee_name": "PLAN VALUE"}
+    }
+    generator = EditingServiceDocumentGenerator(
+        output_dir=tmp_path,
+        template_ids=("standard_labor_contract_v6",),
+    )
+
+    result = generator(state)
+
+    assert result[0]["mapped_fields"] == ["employee_name"]
+
+
+# 사전 계획이 없으면 기존 템플릿 mapper의 값을 생성 결과에 반영한다
+def test_generator_derives_values_when_no_precomputed_plan(
+    tmp_path: Path, monkeypatch
+) -> None:
+    state = _sample_state()
+    monkeypatch.setattr(
+        document_generator,
+        "values_for_template",
+        lambda template_id, renewal_state: {"derived_field": "DERIVED VALUE"},
+    )
+    generator = EditingServiceDocumentGenerator(
+        output_dir=tmp_path,
+        template_ids=("standard_labor_contract_v6",),
+    )
+
+    result = generator(state)
+
+    assert result[0]["mapped_fields"] == ["derived_field"]
 
 
 # OCR 신분 값이 slots보다 우선해 서류 매핑에 반영된다

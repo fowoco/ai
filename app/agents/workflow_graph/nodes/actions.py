@@ -224,22 +224,13 @@ def mark_ask_worker(state: RenewalState) -> dict[str, Any]:
 def generate_docs(
     state: RenewalState, *, document_generator: Any | None = None
 ) -> dict[str, Any]:
+    from ..workers import DocumentAutomationAgent, ValidationReviewAgent
     from .document_generator import StubDocumentGenerator
 
     generator = document_generator or StubDocumentGenerator()
-    docs = generator(state)
-    return {
-        "scenario": "generate",
-        "generated_documents": docs,
-        "status": TaskStatus.READY_FOR_REVIEW.value,
-        "outcome": "REVIEW_REQUIRED",
-        "missing_slots": [],
-        "guide_message": None,
-        "worker_request_message": None,
-        "case_signals": ["GENERATE_DRAFTS", "READY_FOR_REVIEW"],
-        "phase": WorkflowPhase.EXTRACTION_DOCUMENT.value,
-        "step": WorkflowStep.STEP_13_DOCUMENT_DRAFT.value,
-    }
+    automated = DocumentAutomationAgent(generator)(state)
+    reviewed = ValidationReviewAgent()({**state, **automated})
+    return {**automated, **reviewed}
 
 
 # 근로자 서류 OCR 결과를 DB 어댑터에 저장 (부족해도 초안 작성으로 진행)

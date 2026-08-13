@@ -81,3 +81,6 @@ Desktop.ini
 
 # Local Docker overrides
 compose.override.yml
+
+# Local isolated feature worktrees
+/.worktrees/
