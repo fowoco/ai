@@ -99,6 +99,40 @@ def test_plan_returns_single_context_decision_without_fake_evidence_slot() -> No
     assert "arc_status" in ctx.required_field_keys
 
 
+def test_plan_strips_trailing_josa_from_target_display_name() -> None:
+    # 회귀 재현: "속 체아의" -> 조사 "의"가 안 떨어져서 server의 exact-match 조회가
+    # 항상 TARGET_NOT_FOUND로 실패했던 문제 (2026-08-13).
+    pipe = AnalysisPipeline(
+        intent_agent=_FakeIntent(intent="EXPIRY_RENEWAL", workflow_id="WF-STY-001")
+    )
+    res = pipe.run(
+        AnalysisRequest(
+            requestId=str(uuid4()),
+            phase="PLAN",
+            analysisInput=AnalysisInput(instruction="속 체아의 체류기간 연장 준비해줘"),
+        )
+    )
+    assert res.context_requirement is not None
+    assert res.context_requirement.target_display_name == "속 체아"
+
+
+def test_plan_does_not_truncate_names_ending_in_a_particle_like_syllable() -> None:
+    # "리웨이"처럼 마지막 음절이 조사(이/가 등)와 우연히 겹치는 음역 인명은
+    # 잘라내면 안 된다 — "의"만 좁게 처리하는 이유.
+    pipe = AnalysisPipeline(
+        intent_agent=_FakeIntent(intent="EXPIRY_RENEWAL", workflow_id="WF-STY-001")
+    )
+    res = pipe.run(
+        AnalysisRequest(
+            requestId=str(uuid4()),
+            phase="PLAN",
+            analysisInput=AnalysisInput(instruction="리웨이 체류기간 연장 준비"),
+        )
+    )
+    assert res.context_requirement is not None
+    assert res.context_requirement.target_display_name == "리웨이"
+
+
 def test_plan_out_of_scope_terminates_without_context_lookup() -> None:
     pipe = AnalysisPipeline(intent_agent=_FakeIntent(intent="OUT_OF_SCOPE", confidence=0.7))
     res = pipe.run(

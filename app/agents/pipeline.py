@@ -39,6 +39,11 @@ _NAME_STOP_PREFIXES = (
     "변경",
     "안내",
 )
+# 이름 토큰 뒤에 공백 없이 붙는 조사 (예: "체아의" -> "체아").
+# "이/가/을/를/은/는"은 음역 인명의 마지막 음절과 겹치는 경우가 많아
+# (예: "리웨이") 여기서는 제외한다. "의"는 인명 마지막 음절로 거의 쓰이지
+# 않아 상대적으로 안전하다.
+_NAME_JOSA_SUFFIXES = ("의",)
 
 _SLOT_PROMPTS: dict[str, str] = {
     "worker_id": "대상 근로자를 지정해 주세요.",
@@ -66,7 +71,15 @@ def _guess_target_display_name(instruction: str) -> str:
             break
         if any(tok.startswith(p) for p in _NAME_STOP_PREFIXES):
             break
-        parts.append(tok)
+        stripped = tok
+        for suffix in _NAME_JOSA_SUFFIXES:
+            if len(tok) > len(suffix) and tok.endswith(suffix):
+                stripped = tok[: -len(suffix)]
+                break
+        parts.append(stripped)
+        if stripped != tok:
+            # 조사가 붙어 있던 토큰은 이름 구(句)의 끝으로 간주한다.
+            break
     name = " ".join(parts).strip()
     return name or "unknown"
 
