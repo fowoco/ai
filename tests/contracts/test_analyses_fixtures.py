@@ -13,6 +13,7 @@ _RESPONSES = (
     "response_context_required.json",
     "response_needs_info.json",
     "response_review_required.json",
+    "response_out_of_scope.json",
 )
 
 
@@ -30,7 +31,12 @@ def test_analysis_request_fixtures_parse(name: str) -> None:
 def test_analysis_response_fixtures_parse(name: str) -> None:
     raw = (_FIXTURES / name).read_text(encoding="utf-8")
     res = AnalysisResponse.model_validate_json(raw)
-    assert res.outcome in {"CONTEXT_REQUIRED", "NEEDS_INFO", "REVIEW_REQUIRED"}
+    assert res.outcome in {
+        "CONTEXT_REQUIRED",
+        "NEEDS_INFO",
+        "REVIEW_REQUIRED",
+        "OUT_OF_SCOPE",
+    }
     if res.outcome == "REVIEW_REQUIRED":
         assert res.candidates
         assert res.candidates[0].missing_slots == []
@@ -39,3 +45,7 @@ def test_analysis_response_fixtures_parse(name: str) -> None:
         assert res.candidates == []
     if res.outcome == "CONTEXT_REQUIRED":
         assert res.context_requirement is not None
+    if res.outcome == "OUT_OF_SCOPE":
+        assert res.context_requirement is None
+        assert res.questions == []
+        assert res.candidates == []

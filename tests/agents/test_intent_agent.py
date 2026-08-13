@@ -11,6 +11,9 @@ def test_fixed_expiry_renewal_ignores_unrelated_text() -> None:
     assert result.confidence == 1.0
     assert result.workflow_id == "WF-STY-001"
     assert result.extracted_slots == {}
+    assert result.model_provider == "internal"
+    assert result.model_name == "fixed-expiry-renewal"
+    assert result.model_version == "rules"
 
 
 def test_fixed_does_not_extract_slots_from_instruction() -> None:
@@ -22,6 +25,12 @@ def test_fixed_does_not_extract_slots_from_instruction() -> None:
 def test_fixed_respects_workflow_constraints() -> None:
     agent = FixedExpiryRenewalIntentAgent()
     result = agent.classify("연장", workflow_constraints=["WF-CON-001"])
+    assert result.workflow_id == "WF-CON-001"
+
+
+def test_fixed_routes_contract_renewal_without_catalog_order_fallback() -> None:
+    agent = FixedExpiryRenewalIntentAgent()
+    result = agent.classify("근로계약 종료 전에 재계약 준비해줘")
     assert result.workflow_id == "WF-CON-001"
 
 

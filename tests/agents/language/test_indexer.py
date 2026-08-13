@@ -4,16 +4,17 @@ from pathlib import Path
 
 import pytest
 
-from app.agents.language.ports import EpsIndexStore
+from app.agents.language.ports import DenseSparseEncoder, EpsIndexStore
 from app.agents.language.retrieval.indexer import (
     CollectionSpec,
     EpsCleaningResult,
+    build_embedded_index_plan,
     build_index_plan,
     clean_eps_data,
     compute_point_id,
     generate_collection_name,
 )
-from app.agents.language.retrieval.models import ExpectedIndexContract
+from app.agents.language.retrieval.models import ExpectedIndexContract, HybridVector
 
 
 class FakeEpsIndexStore(EpsIndexStore):
@@ -77,6 +78,22 @@ class FakeEpsIndexStore(EpsIndexStore):
 
     def swap_alias(self, alias_name: str, collection_name: str) -> None:
         self.aliases[alias_name] = collection_name
+
+
+class FakeDenseSparseEncoder(DenseSparseEncoder):
+    def __init__(self) -> None:
+        self.batches: list[tuple[str, ...]] = []
+
+    def encode_queries(self, texts: list[str]) -> tuple[HybridVector, ...]:
+        self.batches.append(tuple(texts))
+        return tuple(
+            HybridVector(
+                dense=(0.1,) * 1024,
+                sparse_indices=(1, 9),
+                sparse_values=(0.5, 0.2),
+            )
+            for _ in texts
+        )
 
 
 @pytest.fixture
@@ -203,14 +220,47 @@ def test_new_collection_is_verified_before_alias_switch() -> None:
         records=records,
         expected_contract=contract,
         switch_alias=True,
-        alias_name="eps_language_phrases",
+        alias_name="eps_language_phrases_active",
     )
-    assert store.aliases.get("eps_language_phrases") == coll_name
+    assert store.aliases.get("eps_language_phrases_active") == coll_name
+
+
+def test_embedded_index_plan_attaches_vectors_before_upsert(
+    minimal_fixture_path: Path,
+) -> None:
+    raw = json.loads(minimal_fixture_path.read_text(encoding="utf-8"))
+    records = clean_eps_data(raw).usable_records
+    contract = ExpectedIndexContract(
+        dataset_revision=records[0]["dataset_revision"],
+        embedding_model_repo="BAAI/bge-m3",
+        embedding_model_revision="5617a9f61b028005a4858fdac845db406aefb181",
+        index_contract_version="eps-language-index-v1",
+        point_count=1,
+    )
+    store = FakeEpsIndexStore()
+    encoder = FakeDenseSparseEncoder()
+
+    build_embedded_index_plan(
+        store=store,
+        encoder=encoder,
+        collection_name="versioned",
+        records=records,
+        expected_contract=contract,
+        batch_size=1,
+        switch_alias=True,
+    )
+
+    payload = store.points["versioned"][0]["payload"]
+    assert len(payload["dense"]) == 1024
+    assert payload["sparse_indices"] == [1, 9]
+    assert payload["sparse_values"] == [0.5, 0.2]
+    assert encoder.batches == [("고맙습니다.",)]
+    assert store.aliases["eps_language_phrases_active"] == "versioned"
 
 
 def test_failed_verification_keeps_old_alias() -> None:
     store = FakeEpsIndexStore()
-    store.aliases["eps_language_phrases"] = "old_collection"
+    store.aliases["eps_language_phrases_active"] = "old_collection"
     store.fail_verification = True
     contract = ExpectedIndexContract(
         dataset_revision="sha256:29106c33d43ccdd8453623ac1a0af44e0201d7c7cc1cc68c3fb438e0ccc61c6d",
@@ -226,9 +276,9 @@ def test_failed_verification_keeps_old_alias() -> None:
             records=[],
             expected_contract=contract,
             switch_alias=True,
-            alias_name="eps_language_phrases",
+            alias_name="eps_language_phrases_active",
         )
-    assert store.aliases["eps_language_phrases"] == "old_collection"
+    assert store.aliases["eps_language_phrases_active"] == "old_collection"
 
 
 def test_expected_count_must_match() -> None:

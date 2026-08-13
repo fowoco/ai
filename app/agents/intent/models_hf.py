@@ -2,7 +2,56 @@
 
 from __future__ import annotations
 
-from typing import Any
+from .prompts import AX_INTENT_PROMPT_VERSION, AX_INTENT_SYSTEM_PROMPT
+
+ALLOWED_INTENTS = frozenset(
+    {
+        "WORK_INSTRUCTION",
+        "DOCUMENT_REQUEST",
+        "PAYROLL_EXPLANATION",
+        "WORKER_ONBOARDING",
+        "EMPLOYMENT_CHANGE",
+        "EXPIRY_RENEWAL",
+        "OUT_OF_SCOPE",
+    }
+)
+
+
+def _validate_ax_intents(
+    items: object, hr_input: str
+) -> list[dict[str, str | None]]:
+    if not isinstance(items, list) or not items:
+        raise ValueError("A.X output must contain at least one intent")
+
+    validated: list[dict[str, str | None]] = []
+    seen: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError("A.X intent item must be an object")
+
+        intent = item.get("intent")
+        if not isinstance(intent, str) or intent not in ALLOWED_INTENTS:
+            raise ValueError(f"A.X returned unsupported intent: {intent!r}")
+        if intent in seen:
+            raise ValueError(f"A.X returned duplicate intent: {intent}")
+        seen.add(intent)
+
+        if "evidence" not in item:
+            raise ValueError(f"A.X evidence field is required for {intent}")
+        evidence = item.get("evidence")
+        if intent == "OUT_OF_SCOPE":
+            if evidence is not None:
+                raise ValueError("OUT_OF_SCOPE evidence must be null")
+        elif not isinstance(evidence, str) or not evidence or evidence not in hr_input:
+            raise ValueError(
+                f"A.X evidence must be an exact input substring for {intent}: {evidence!r}"
+            )
+
+        validated.append({"intent": intent, "evidence": evidence})
+
+    if "OUT_OF_SCOPE" in seen and len(validated) != 1:
+        raise ValueError("OUT_OF_SCOPE cannot be combined with another intent")
+    return validated
 
 
 # BERT multilabel Intent 분류기
@@ -15,6 +64,7 @@ class BertIntentModel:
         device: str,
         label_prob_threshold: float = 0.55,
         hf_token: str | None = None,
+        revision: str | None = None,
     ) -> None:
         import torch
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
@@ -25,9 +75,14 @@ class BertIntentModel:
             if (device == "auto" and torch.cuda.is_available())
             else (device if device != "auto" else "cpu")
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(model_dir, token=hf_token)
+        hub_kwargs: dict[str, str] = {}
+        if hf_token:
+            hub_kwargs["token"] = hf_token
+        if revision:
+            hub_kwargs["revision"] = revision
+        self.tokenizer = AutoTokenizer.from_pretrained(model_dir, **hub_kwargs)
         self.model = AutoModelForSequenceClassification.from_pretrained(
-            model_dir, token=hf_token
+            model_dir, **hub_kwargs
         )
         self.model.to(self.device).eval()
         self.id2label = self.model.config.id2label
@@ -65,11 +120,8 @@ class BertIntentModel:
 # A.X-4.0-Light QLoRA Intent 보조 모델 (GPU·bitsandbytes 필요)
 class AxIntentModel:
 
-    _SYSTEM_PROMPT = (
-        "당신은 HR 업무 요청 문장(hr_input)을 분석하여 의도(Intent)를 분류하는 전문 AI 에이전트입니다.\n"
-        "Intent + evidence 추출까지가 책임입니다.\n"
-        '출력은 JSON만: {"intents": [{"intent": "INTENT_CODE", "evidence": "...|null"}]}'
-    )
+    _SYSTEM_PROMPT = AX_INTENT_SYSTEM_PROMPT
+    prompt_version = AX_INTENT_PROMPT_VERSION
 
     # 4bit 베이스 + Peft 어댑터 로드
     def __init__(
@@ -79,6 +131,8 @@ class AxIntentModel:
         device: str,
         max_new_tokens: int = 96,
         hf_token: str | None = None,
+        base_revision: str | None = None,
+        adapter_revision: str | None = None,
     ) -> None:
         import torch
         from peft import PeftModel
@@ -91,19 +145,33 @@ class AxIntentModel:
             bnb_4bit_quant_type="nf4",
             bnb_4bit_compute_dtype=torch.float16,
         )
+        base_hub_kwargs: dict[str, str] = {}
+        adapter_hub_kwargs: dict[str, str] = {}
+        if hf_token:
+            base_hub_kwargs["token"] = hf_token
+            adapter_hub_kwargs["token"] = hf_token
+        if base_revision:
+            base_hub_kwargs["revision"] = base_revision
+        if adapter_revision:
+            adapter_hub_kwargs["revision"] = adapter_revision
+
         base_model = AutoModelForCausalLM.from_pretrained(
             base_model_name,
             quantization_config=bnb_config,
             torch_dtype=torch.float16,
             device_map={"": 0} if device != "cpu" else "cpu",
-            token=hf_token,
+            **base_hub_kwargs,
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(base_model_name, token=hf_token)
-        self.model = PeftModel.from_pretrained(base_model, adapter_path, token=hf_token)
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            base_model_name, **base_hub_kwargs
+        )
+        self.model = PeftModel.from_pretrained(
+            base_model, adapter_path, **adapter_hub_kwargs
+        )
         self.model.eval()
 
     # Intent 목록 [{"intent","evidence"}] — 실패 시 예외
-    def predict(self, hr_input: str) -> list[dict[str, Any]]:
+    def predict(self, hr_input: str) -> list[dict[str, str | None]]:
         import json
         import re
 
@@ -129,4 +197,6 @@ class AxIntentModel:
         if not match:
             raise ValueError(f"A.X output could not be parsed as JSON: {raw!r}")
         parsed = json.loads(match.group(0))
-        return list(parsed.get("intents") or [])
+        if not isinstance(parsed, dict):
+            raise ValueError("A.X output JSON root must be an object")
+        return _validate_ax_intents(parsed.get("intents"), hr_input)

@@ -44,6 +44,11 @@ intent-ax = [
   "peft>=0.13,<1",
   "bitsandbytes>=0.44,<1",
 ]
+language-retrieval = [
+  "qdrant-client>=1.19,<2",
+  "FlagEmbedding>=1.3,<2",
+  "huggingface-hub>=0.36,<2",
+]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["app*"]
@@ -51,6 +56,7 @@ include = ["app*"]
 [tool.setuptools.package-data]
 "app.documents.hwp5.templates" = ["*.json", "*.hwp"]
 "app.documents.hwpx.templates" = ["*.hwpx"]
+"app.agents.intent" = ["prompts/*.txt"]
 "app.agents.language.resources" = ["*.json", "*.sha256", "prompts/*.md"]
 
 [tool.pytest.ini_options]

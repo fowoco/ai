@@ -43,6 +43,23 @@ flowchart LR
     A -->|"분석·안내·문서 생성 결과 반환"| S
 ```
 
+- Analyses: BERT/A.X Intent + PLAN 결정 재사용 + Catalog 필수슬롯·Knowledge 모호표현 ([docs/analyses-contract.md](docs/analyses-contract.md))
+- Workflows: 재갱신 LangGraph — 슈퍼바이저 → 안내문(태정) / OCR(주현) / 초안 4종 — [docs/workflows-contract.md](docs/workflows-contract.md)
+- Language Assistant: 외국인근로자 15개 언어 번역, 쉬운 한국어 변환 및 표준 한국어 생성 — [docs/contracts/language-assistant-http-request.schema.json](docs/contracts/language-assistant-http-request.schema.json)
+- 최종 흐름도: [app/agents/workflow_graph/README.md](app/agents/workflow_graph/README.md)
+
+## 문서 API
+
+문서 API는 책임별로 분리한다.
+
+```text
+GET  /api/v1/documents/templates
+GET  /api/v1/documents/templates/{template_id}
+POST /api/v1/documents/inspect
+POST /api/v1/documents/edit
+POST /api/v1/documents/generate
+POST /api/v1/documents/generate/from-txt
+POST /api/v1/documents/convert
 | 연결 대상 | AI로 전달 | AI에서 반환 |
 | --- | --- | --- |
 | Knowledge | 업무 유형, 필요한 정보, 처리 순서와 공식 근거 | 업무 분석과 안내문에 반영된 기준 |

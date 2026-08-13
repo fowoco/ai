@@ -6,7 +6,47 @@ compose.test.yml: 테스트용 독립 Qdrant 볼륨 검증.
 
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_production_image_bakes_language_models() -> None:
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    dockerignore = (ROOT / ".dockerignore").read_text().splitlines()
+
+    assert "COPY scripts/download_language_models.py ./scripts/" in dockerfile
+    assert "/app/.venv/bin/python -m scripts.download_language_models" in dockerfile
+    assert "--cache-dir /opt/fowoco/language-models" in dockerfile
+    assert "FOWOCO_MODEL_CACHE_DIR=/opt/fowoco/language-models" in dockerfile
+    assert "scripts/*" in dockerignore
+    assert "!scripts/download_language_models.py" in dockerignore
+    assert "scripts" not in dockerignore
+
+
+def test_ai_service_uses_baked_model_path() -> None:
+    import yaml
+
+    data = yaml.safe_load((ROOT / "compose.yml").read_text())
+
+    assert (
+        data["services"]["ai"]["environment"]["FOWOCO_MODEL_CACHE_DIR"]
+        == "/opt/fowoco/language-models"
+    )
+
+
+@pytest.mark.parametrize("compose_file", ("compose.yml", "compose.test.yml"))
+def test_qdrant_healthcheck_uses_available_bash_tcp_probe(
+    compose_file: str,
+) -> None:
+    import yaml
+
+    data = yaml.safe_load((ROOT / compose_file).read_text())
+    command = data["services"]["qdrant"]["healthcheck"]["test"]
+
+    assert command[:2] == ["CMD", "/bin/bash"]
+    assert "/dev/tcp/127.0.0.1/6333" in command[-1]
+    assert "wget" not in " ".join(command)
 
 
 class TestComposeProdConfig:

@@ -10,10 +10,17 @@ class TestModelManifest:
     """모델 캐시 매니페스트 파일 구조 검증."""
 
     def test_manifest_constants_defined(self) -> None:
-        from scripts.download_language_models import BGE_M3_REVISION, BGE_RERANKER_REVISION
+        from app.agents.language.retrieval.manifest import (
+            BGE_M3_REVISION,
+            BGE_RERANKER_MODEL_REPO,
+            BGE_RERANKER_REVISION,
+        )
+        from scripts.download_language_models import MODEL_SPECS
 
         assert BGE_M3_REVISION == "5617a9f61b028005a4858fdac845db406aefb181"
-        assert BGE_RERANKER_REVISION == "953dc6f6f85ac1e88eb36f5f9ce67a74a6edbc22"
+        assert BGE_RERANKER_MODEL_REPO == "BAAI/bge-reranker-v2-m3"
+        assert BGE_RERANKER_REVISION == "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+        assert MODEL_SPECS[1]["revision"] == BGE_RERANKER_REVISION
 
     def test_model_specs_have_required_fields(self) -> None:
         from scripts.download_language_models import MODEL_SPECS

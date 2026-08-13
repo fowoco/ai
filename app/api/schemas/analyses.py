@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 AnalysisPhase = Literal["PLAN", "ANALYZE"]
-AnalysisOutcome = Literal["CONTEXT_REQUIRED", "NEEDS_INFO", "REVIEW_REQUIRED"]
+AnalysisOutcome = Literal[
+    "CONTEXT_REQUIRED",
+    "NEEDS_INFO",
+    "REVIEW_REQUIRED",
+    "OUT_OF_SCOPE",
+]
+ConfidenceSource = Literal["MODEL", "BERT", "UNAVAILABLE"]
 
-DEFAULT_CONTRACT_VERSION = "1.0.0"
+DEFAULT_CONTRACT_VERSION = "1.1.0"
 DEFAULT_KNOWLEDGE_VERSION = "0.2.0"
 
 
@@ -35,6 +41,8 @@ class AnalysisInput(BaseModel):
     instruction: str
     requested_field_keys: list[str] = Field(default_factory=list, alias="requestedFieldKeys")
     workers: list[WorkerContext] = Field(default_factory=list)
+    planned_intent: str | None = Field(None, alias="plannedIntent")
+    planned_workflow_id: str | None = Field(None, alias="plannedWorkflowId")
 
     model_config = {"populate_by_name": True}
 
@@ -47,6 +55,19 @@ class AnalysisRequest(BaseModel):
     analysis_input: AnalysisInput = Field(..., alias="analysisInput")
 
     model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def validate_planned_decision_for_phase(self) -> Self:
+        ai = self.analysis_input
+        has_intent = ai.planned_intent is not None
+        has_workflow = ai.planned_workflow_id is not None
+        if self.phase == "PLAN" and (has_intent or has_workflow):
+            raise ValueError("PLAN must not include a planned Intent decision")
+        if self.phase == "ANALYZE" and not (has_intent and has_workflow):
+            raise ValueError(
+                "ANALYZE requires plannedIntent and plannedWorkflowId from PLAN"
+            )
+        return self
 
 
 # 기계 판독용 검증 오류
@@ -62,7 +83,13 @@ class ValidationErrorItem(BaseModel):
 class ContextRequirement(BaseModel):
 
     detected_intent: str = Field(..., alias="detectedIntent")
-    confidence: float = Field(..., ge=0.0, le=1.0)
+    workflow_id: str = Field(..., alias="workflowId")
+    evidence: str | None = None
+    confidence: float | None = Field(None, ge=0.0, le=1.0)
+    confidence_source: ConfidenceSource = Field(..., alias="confidenceSource")
+    bert_routing_score: float | None = Field(
+        None, alias="bertRoutingScore", ge=0.0, le=1.0
+    )
     target_display_name: str = Field(..., alias="targetDisplayName")
     extracted_slots: dict[str, str] = Field(default_factory=dict, alias="extractedSlots")
     required_field_keys: list[str] = Field(..., alias="requiredFieldKeys")
@@ -87,7 +114,7 @@ class AnalysisCandidate(BaseModel):
     workflow_id: str = Field(..., alias="workflowId")
     extracted_slots: dict[str, str] = Field(default_factory=dict, alias="extractedSlots")
     missing_slots: list[str] = Field(default_factory=list, alias="missingSlots")
-    confidence: float = Field(..., ge=0.0, le=1.0)
+    confidence: float | None = Field(None, ge=0.0, le=1.0)
 
     model_config = {"populate_by_name": True}
 
@@ -96,10 +123,10 @@ class AnalysisCandidate(BaseModel):
 class AnalysisVersions(BaseModel):
 
     agent_version: str = Field(..., alias="agentVersion")
-    model_provider: str = Field("stub", alias="modelProvider")
-    model_name: str = Field("stub", alias="modelName")
-    model_version: str = Field("stub", alias="modelVersion")
-    prompt_version: str = Field("prompt-1", alias="promptVersion")
+    model_provider: str = Field(..., alias="modelProvider")
+    model_name: str = Field(..., alias="modelName")
+    model_version: str = Field(..., alias="modelVersion")
+    prompt_version: str = Field("not-applicable", alias="promptVersion")
     context_pack_version: str = Field(DEFAULT_KNOWLEDGE_VERSION, alias="contextPackVersion")
     workflow_catalog_version: str = Field(
         DEFAULT_KNOWLEDGE_VERSION, alias="workflowCatalogVersion"
@@ -123,5 +150,21 @@ class AnalysisResponse(BaseModel):
     versions: AnalysisVersions
     provider_attempt_count: int = Field(1, alias="providerAttemptCount")
     latency_ms: int = Field(0, alias="latencyMs")
+
+    model_config = {"populate_by_name": True, "by_alias": True}
+
+
+# Intent 모델 운영 상태 — 조회 자체는 모델을 강제로 로드하지 않는다.
+class IntentRuntimeStatus(BaseModel):
+
+    intent_model_enabled: bool = Field(..., alias="intentModelEnabled")
+    ax_enabled: bool = Field(..., alias="axEnabled")
+    initialized: bool
+    bert_available: bool = Field(..., alias="bertAvailable")
+    ax_available: bool = Field(..., alias="axAvailable")
+    ready: bool
+    warmup_completed: bool = Field(..., alias="warmupCompleted")
+    degraded: bool
+    prompt_version: str = Field(..., alias="promptVersion")
 
     model_config = {"populate_by_name": True, "by_alias": True}

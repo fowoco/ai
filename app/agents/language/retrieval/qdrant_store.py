@@ -22,7 +22,7 @@ except ImportError:
         class Distance:
             COSINE = "COSINE"
 
-        class PayloadSchema:
+        class PayloadSchemaType:
             KEYWORD = "keyword"
 
         class Fusion:
@@ -64,13 +64,40 @@ except ImportError:
         def CreateAlias(self, **kwargs: Any) -> Any:
             return kwargs
 
+        def DeleteAliasOperation(self, **kwargs: Any) -> Any:
+            return kwargs
+
+        def DeleteAlias(self, **kwargs: Any) -> Any:
+            return kwargs
+
     QdrantClient = Any
     qmodels = _MockQModels()
 
 
 class QdrantStore(HybridSearchStore, EpsIndexStore):
-    def __init__(self, client: Any) -> None:
+    def __init__(
+        self,
+        client: Any,
+        collection_alias: str = "eps_language_phrases_active",
+    ) -> None:
         self.client = client
+        self.collection_alias = collection_alias
+
+    @staticmethod
+    def _verify_vector_schema(info: Any, *, expected_dense_size: int = 1024) -> None:
+        vectors = info.config.params.vectors
+        if not (isinstance(vectors, dict) and "korean_dense" in vectors):
+            raise ValueError("RETRIEVAL_SCHEMA_MISMATCH")
+        dense = vectors["korean_dense"]
+        distance = str(getattr(dense, "distance", "")).upper()
+        if dense.size != expected_dense_size or "COSINE" not in distance:
+            raise ValueError("RETRIEVAL_SCHEMA_MISMATCH")
+
+        sparse_vectors = info.config.params.sparse_vectors
+        if not (
+            isinstance(sparse_vectors, dict) and "korean_sparse" in sparse_vectors
+        ):
+            raise ValueError("RETRIEVAL_SCHEMA_MISMATCH")
 
     def create_collection(
         self, collection_name: str, spec: CollectionSpec | None = None
@@ -101,7 +128,7 @@ class QdrantStore(HybridSearchStore, EpsIndexStore):
             self.client.create_payload_index(
                 collection_name=collection_name,
                 field_name=field,
-                field_schema=qmodels.PayloadSchema.KEYWORD,
+                field_schema=qmodels.PayloadSchemaType.KEYWORD,
             )
 
     def upsert_batch(
@@ -135,13 +162,13 @@ class QdrantStore(HybridSearchStore, EpsIndexStore):
             aliases = self.client.get_aliases()
             target_coll = None
             for a in aliases.aliases:
-                if a.alias_name == "eps_language_phrases":
+                if a.alias_name == self.collection_alias:
                     target_coll = a.collection_name
                     break
 
             if target_coll is None:
-                if self.client.collection_exists("eps_language_phrases"):
-                    target_coll = "eps_language_phrases"
+                if self.client.collection_exists(self.collection_alias):
+                    target_coll = self.collection_alias
                 else:
                     raise ValueError("RETRIEVAL_UNAVAILABLE")
 
@@ -151,25 +178,12 @@ class QdrantStore(HybridSearchStore, EpsIndexStore):
         except Exception as err:
             raise ValueError("RETRIEVAL_UNAVAILABLE") from err
 
-        # Verify vectors schema
-        vconfig = info.config.params.vectors
-        if isinstance(vconfig, dict) and "korean_dense" in vconfig:
-            dense_param = vconfig["korean_dense"]
-            dist_str = str(getattr(dense_param, "distance", "")).upper()
-            if (
-                dense_param.size != 1024
-                or ("COSINE" not in dist_str)
-            ):
-                raise ValueError("RETRIEVAL_SCHEMA_MISMATCH")
-        else:
-            raise ValueError("RETRIEVAL_SCHEMA_MISMATCH")
-
-        sparse_config = info.config.params.sparse_vectors
-        if not (isinstance(sparse_config, dict) and "korean_sparse" in sparse_config):
-            raise ValueError("RETRIEVAL_SCHEMA_MISMATCH")
+        self._verify_vector_schema(info)
 
         point_count = info.points_count or 0
         if point_count <= 0:
+            raise ValueError("RETRIEVAL_UNAVAILABLE")
+        if expected.point_count is not None and point_count != expected.point_count:
             raise ValueError("RETRIEVAL_UNAVAILABLE")
 
         # Exact provenance filters verification
@@ -223,6 +237,76 @@ class QdrantStore(HybridSearchStore, EpsIndexStore):
             index_contract_version=expected.index_contract_version,
             point_count=point_count,
         )
+
+    def verify_collection(
+        self,
+        collection_name: str,
+        expected_count: int,
+        spec: CollectionSpec,
+        expected_languages: tuple[str, ...],
+        expected_contract: ExpectedIndexContract,
+    ) -> None:
+        try:
+            info = self.client.get_collection(collection_name=collection_name)
+        except Exception as err:
+            raise ValueError("RETRIEVAL_UNAVAILABLE") from err
+
+        point_count = info.points_count or 0
+        if point_count != expected_count:
+            raise ValueError("RETRIEVAL_UNAVAILABLE")
+        self._verify_vector_schema(
+            info,
+            expected_dense_size=spec.dense_vector_size,
+        )
+
+        for language in expected_languages:
+            language_count = self.client.count(
+                collection_name=collection_name,
+                count_filter=qmodels.Filter(
+                    must=[
+                        qmodels.FieldCondition(
+                            key="target_language",
+                            match=qmodels.MatchValue(value=language),
+                        )
+                    ]
+                ),
+            ).count
+            if language_count <= 0:
+                raise ValueError("RETRIEVAL_DATASET_MISMATCH")
+
+        provenance_count = self.client.count(
+            collection_name=collection_name,
+            count_filter=qmodels.Filter(
+                must=[
+                    qmodels.FieldCondition(
+                        key="dataset_revision",
+                        match=qmodels.MatchValue(
+                            value=expected_contract.dataset_revision
+                        ),
+                    ),
+                    qmodels.FieldCondition(
+                        key="embedding_model_repo",
+                        match=qmodels.MatchValue(
+                            value=expected_contract.embedding_model_repo
+                        ),
+                    ),
+                    qmodels.FieldCondition(
+                        key="embedding_model_revision",
+                        match=qmodels.MatchValue(
+                            value=expected_contract.embedding_model_revision
+                        ),
+                    ),
+                    qmodels.FieldCondition(
+                        key="index_contract_version",
+                        match=qmodels.MatchValue(
+                            value=expected_contract.index_contract_version
+                        ),
+                    ),
+                ]
+            ),
+        ).count
+        if provenance_count != expected_count:
+            raise ValueError("RETRIEVAL_INDEX_PROVENANCE_MISMATCH")
 
     def search_many(
         self,
@@ -322,12 +406,21 @@ class QdrantStore(HybridSearchStore, EpsIndexStore):
         return tuple(rankings)
 
     def swap_alias(self, alias_name: str, collection_name: str) -> None:
-        self.client.update_collection_aliases(
-            change_aliases=[
-                qmodels.CreateAliasOperation(
-                    create_alias=qmodels.CreateAlias(
-                        collection_name=collection_name, alias_name=alias_name
-                    )
+        aliases = self.client.get_aliases().aliases
+        changes = []
+        if any(alias.alias_name == alias_name for alias in aliases):
+            changes.append(
+                qmodels.DeleteAliasOperation(
+                    delete_alias=qmodels.DeleteAlias(alias_name=alias_name)
                 )
-            ]
+            )
+        changes.append(
+            qmodels.CreateAliasOperation(
+                create_alias=qmodels.CreateAlias(
+                    collection_name=collection_name, alias_name=alias_name
+                )
+            )
+        )
+        self.client.update_collection_aliases(
+            change_aliases_operations=changes
         )

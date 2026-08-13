@@ -14,20 +14,20 @@
         "full_name": "NGUYEN VAN AN"
       },
       "missingSlots": [],
-      "confidence": 0.92
+      "confidence": null
     }
   ],
   "validationErrors": [],
   "versions": {
     "agentVersion": "0.1.0",
-    "modelProvider": "stub",
-    "modelName": "stub",
-    "modelVersion": "stub",
-    "promptVersion": "prompt-1",
+    "modelProvider": "server",
+    "modelName": "planned-intent",
+    "modelVersion": "reused",
+    "promptVersion": "not-applicable",
     "contextPackVersion": "0.2.0",
     "workflowCatalogVersion": "0.2.0",
-    "contractVersion": "1.0.0"
+    "contractVersion": "1.1.0"
   },
-  "providerAttemptCount": 1,
+  "providerAttemptCount": 0,
   "latencyMs": 245
 }

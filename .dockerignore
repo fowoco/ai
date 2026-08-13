@@ -26,7 +26,8 @@ tests
 .env.local
 *.pem
 
-# 문서·스크립트 (이미지에 불필요)
-scripts
+# 문서·스크립트 (모델 다운로더만 이미지에 포함)
+scripts/*
+!scripts/download_language_models.py
 *.md
 !README.md

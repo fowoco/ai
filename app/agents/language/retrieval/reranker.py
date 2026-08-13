@@ -62,10 +62,12 @@ class FlagEmbeddingReranker(CandidateReranker):
         model_path: str = "/models/bge-reranker-v2-m3",
         expected_revision: str = "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
         max_length: int = 256,
+        use_fp16: bool = False,
     ) -> None:
         self.model_path = model_path
         self.expected_revision = expected_revision
         self.max_length = max_length
+        self.use_fp16 = use_fp16
         self._reranker_model: Any = None
 
     def _get_model(self) -> Any:
@@ -76,7 +78,7 @@ class FlagEmbeddingReranker(CandidateReranker):
                 raise RuntimeError("FlagEmbedding model not available") from err
 
             self._reranker_model = FlagReranker(
-                self.model_path, use_fp16=True
+                self.model_path, use_fp16=self.use_fp16
             )
         return self._reranker_model
 
