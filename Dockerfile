@@ -42,15 +42,20 @@ RUN apt-get update \
         libreoffice-writer \
     && rm -rf /var/lib/apt/lists/*
 
-# 의존성 정의 파일만 먼저 복사해 캐시를 활용
+# 의존성 정의 파일 + 앱 소스를 먼저 복사한다.
+# uv sync는 fowoco-ai 자기 자신도 빌드해서 site-packages에 설치하므로,
+# app/ 복사보다 먼저 실행되면 그 시점의 app/(없거나 이전 레이어 캐시의 내용)이
+# site-packages에 고정되고, 이후 COPY app ./app은 /app/app만 갱신할 뿐
+# 실제 uv run이 임포트하는 설치본은 계속 예전 코드로 남는다 — uv.lock이
+# 안 바뀌면 이 RUN 레이어가 캐시 히트되어 app/ 변경이 몇 주간 반영되지
+# 않았던 실제 배포 장애의 원인이었다. app/를 먼저 복사해 항상 최신 소스로
+# 빌드·설치되게 한다.
 COPY pyproject.toml uv.lock README.md ./
+COPY app ./app
+COPY scripts/download_language_models.py ./scripts/
 
 # uv.lock 기반 재현 가능 설치 — Language retrieval + Intent A.X runtime 포함
 RUN uv sync --frozen --no-dev --extra language-retrieval --extra intent-ax
-
-# 앱 패키지 복사
-COPY app ./app
-COPY scripts/download_language_models.py ./scripts/
 
 # 고정 revision의 검색 모델을 이미지에 포함해 런타임 다운로드를 없앤다.
 RUN /app/.venv/bin/python -m scripts.download_language_models \
