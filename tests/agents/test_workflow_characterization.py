@@ -55,7 +55,7 @@ def _filled_renewal_slots() -> dict[str, str]:
     return slots
 
 
-def test_ask_worker_preserves_guide_fallback_document_evidence_and_route_order() -> None:
+def test_ask_worker_without_language_service_requires_review_without_internal_keys() -> None:
     result = public_result(
         RenewalOrchestrator().run(
             request_id="character-worker",
@@ -64,14 +64,13 @@ def test_ask_worker_preserves_guide_fallback_document_evidence_and_route_order()
         )
     )
 
-    assert result["status"] == "WAITING_WORKER"
-    assert result["outcome"] == "WAITING_WORKER"
+    assert result["status"] == "READY_FOR_REVIEW"
+    assert result["outcome"] == "REVIEW_REQUIRED"
     assert result["scenario"] == "ask_worker"
     assert result["language_assistant"] is None
-    assert str(result["guide_message"]).startswith(
-        "재갱신에 필요한 정보가 부족합니다. 다음 항목을 입력해 주세요: "
-    )
-    assert "(조합:both_missing)" in str(result["worker_request_message"])
+    assert result["guide_message"] is None
+    assert result["worker_request_message"] is None
+    assert result["case_signals"] == ["REVIEW_WORKER_GUIDE"]
     assert result["document_validation"] is not None
     assert result["document_validation"]["combo"] == "both_missing"
     assert [event["subgraph"] for event in result["progress_events"]] == [

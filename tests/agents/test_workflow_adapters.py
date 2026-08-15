@@ -166,7 +166,9 @@ def test_task_resume_merges_slots_across_runs() -> None:
         instruction="체류기간 연장 갱신",
         worker_id="worker-001",
     )
-    assert first["outcome"] == "WAITING_WORKER"
+    assert first["outcome"] == "REVIEW_REQUIRED"
+    assert first["worker_request_message"] is None
+    assert first["case_signals"] == ["REVIEW_WORKER_GUIDE"]
     task_id = first["task_id"]
 
     identity = {k: f"v-{k}" for k in IDENTITY_SLOTS}
