@@ -185,7 +185,10 @@ def test_task_resume_merges_slots_across_runs() -> None:
     assert second["scenario"] == "generate"
     assert len(second["generated_documents"]) == 4
 
-    contract = {k: f"c-{k}" for k in CONTRACT_SLOTS}
+    contract = {
+        **{k: f"c-{k}" for k in CONTRACT_SLOTS},
+        "due_at": "2026-11-30",
+    }
     third = orch.run(
         request_id="r3",
         instruction="체류기간 연장 갱신",

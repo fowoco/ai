@@ -34,7 +34,7 @@
     "caseId": "60000000-0000-0000-0000-000000000001",
     "taskType": "STAY_PERIOD_EXTENSION",
     "workflowId": "WF-STY-001",
-    "workflowCatalogVersion": "0.2.0",
+    "workflowCatalogVersion": "0.3.0",
     "title": "체류기간 연장 갱신",
     "description": "응웬반안 체류·취업활동 기간 연장 서류 초안",
     "businessDataJson": {

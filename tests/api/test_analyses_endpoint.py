@@ -60,13 +60,20 @@ def _analyze_body(
             "plannedIntent": "EXPIRY_RENEWAL",
             "plannedWorkflowId": "WF-STY-001",
             "requestedFieldKeys": requested_field_keys
-            or ["worker_id", "stay_expiry_date"],
+            or [
+                "worker_id",
+                "due_at",
+                "stay_expiry_date",
+                "passport_status",
+                "arc_status",
+            ],
             "workers": [
                 {
                     "workerRef": worker_ref,
                     "requestedFields": requested_fields
                     or {
                         "worker_id": worker_ref,
+                        "due_at": "2026-10-01T09:00:00+09:00",
                         "stay_expiry_date": "2026-12-31",
                     },
                 }
@@ -94,10 +101,16 @@ async def test_plan_returns_context_required() -> None:
     assert ctx["bertRoutingScore"] is None
     assert "intentDecisions" not in ctx
     assert ctx["targetDisplayName"] == "응웬반안"
-    assert "stay_expiry_date" in ctx["requiredFieldKeys"]
-    assert "worker_id" in ctx["requiredFieldKeys"]
+    assert ctx["requiredFieldKeys"] == [
+        "worker_id",
+        "due_at",
+        "stay_expiry_date",
+        "passport_status",
+        "arc_status",
+    ]
     assert data["versions"]["contractVersion"] == "1.1.0"
-    assert data["versions"]["workflowCatalogVersion"] == "0.2.0"
+    assert data["versions"]["contextPackVersion"] == "0.3.0"
+    assert data["versions"]["workflowCatalogVersion"] == "0.3.0"
     assert data["versions"]["modelProvider"] != "stub"
     assert data["versions"]["modelName"] != "stub"
     assert data["versions"]["modelVersion"] != "stub"
@@ -124,6 +137,7 @@ async def test_analyze_returns_review_required_when_slots_filled() -> None:
     assert "confidenceSource" not in candidate
     assert "bertRoutingScore" not in candidate
     assert candidate["extractedSlots"]["stay_expiry_date"] == "2026-12-31"
+    assert candidate["extractedSlots"]["due_at"] == "2026-10-01T09:00:00+09:00"
     assert candidate["extractedSlots"]["worker_id"] == (
         "30000000-0000-0000-0000-000000000001"
     )
@@ -144,7 +158,7 @@ async def test_analyze_rejects_request_without_planned_decision() -> None:
 @pytest.mark.asyncio
 async def test_analyze_returns_needs_info_when_db_fields_missing() -> None:
     body = _analyze_body(
-        requested_field_keys=["worker_id", "stay_expiry_date"],
+        requested_field_keys=["worker_id", "due_at", "stay_expiry_date"],
         requested_fields={"worker_id": "30000000-0000-0000-0000-000000000001"},
     )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -156,8 +170,45 @@ async def test_analyze_returns_needs_info_when_db_fields_missing() -> None:
     assert data["candidates"] == []
     assert data["contextRequirement"] is None
     keys = {q["slotKey"] for q in data["questions"]}
-    assert "stay_expiry_date" in keys
+    assert keys == {"due_at"}
     assert all("prompt" in q for q in data["questions"])
+
+
+@pytest.mark.asyncio
+async def test_analyze_does_not_block_when_optional_context_is_missing() -> None:
+    body = _analyze_body(
+        requested_field_keys=[
+            "worker_id",
+            "due_at",
+            "stay_expiry_date",
+            "passport_status",
+            "arc_status",
+        ],
+        requested_fields={
+            "worker_id": "30000000-0000-0000-0000-000000000001",
+            "due_at": "2026-10-01T09:00:00+09:00",
+        },
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(ANALYSES_PATH, json=body)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["outcome"] == "REVIEW_REQUIRED"
+    assert data["questions"] == []
+
+
+@pytest.mark.asyncio
+async def test_e2e_011_plan_keeps_one_representative_workflow() -> None:
+    instruction = "응웬반A가 3년 만료 예정이야. 재계약하고 체류연장 준비해줘"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(ANALYSES_PATH, json=_plan_body(instruction))
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["contextRequirement"]["detectedIntent"] == "EXPIRY_RENEWAL"
+    assert data["contextRequirement"]["workflowId"] == "WF-STY-001"
+    assert data["versions"]["workflowCatalogVersion"] == "0.3.0"
 
 
 @pytest.mark.asyncio
