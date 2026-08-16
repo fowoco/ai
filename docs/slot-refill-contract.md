@@ -35,7 +35,7 @@ Knowledge `required_slots`와 builtin Ambiguity 목록을 기준으로 맞춘다
 
 ## 대표 워크플로 Slot ↔ sourceHint
 
-Knowledge 0.3.0의 `required`와 `resolvable_from_context`를 구분한다. PLAN은
+Knowledge 0.3.1의 `required`와 `resolvable_from_context`를 구분한다. PLAN은
 Context 조회 대상을 내려주고, AI는 그중 필수 Slot이 없을 때만 HR 질문을 만든다.
 
 | workflowId | key | 구분 | sourceHint |
@@ -97,6 +97,6 @@ Server #56 Analyses 응답 와이어에는 `missingSlots`만 실는다.
 |---|---|
 | `missingSlots`·`requestedFields` 산출 | DB·화면에서 값 조회 |
 | 재호출 시 slots 병합·재검사 | attempt 증가·중복 Run 방지 (#24) |
-| Knowledge 0.3.0의 필수·선택 Slot 구분 유지 | 없는 필수값만 HR 입력으로 전환 |
+| Knowledge 0.3.1의 필수·선택 Slot 구분 유지 | 없는 필수값만 HR 입력으로 전환 |
 
 구현 코드: `app/agents/slot_catalog.py`

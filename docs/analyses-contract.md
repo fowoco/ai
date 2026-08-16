@@ -60,8 +60,8 @@ PLAN에는 `plannedIntent`, `plannedWorkflowId`, Worker context를 보내지 않
     "modelName": "skt/A.X-4.0-Light",
     "modelVersion": "AX",
     "promptVersion": "knowledge-25e778ad",
-    "contextPackVersion": "0.3.0",
-    "workflowCatalogVersion": "0.3.0",
+    "contextPackVersion": "0.3.1",
+    "workflowCatalogVersion": "0.3.1",
     "contractVersion": "1.1.0"
   },
   "providerAttemptCount": 1,

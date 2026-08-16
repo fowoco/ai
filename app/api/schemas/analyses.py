@@ -16,7 +16,7 @@ AnalysisOutcome = Literal[
 ConfidenceSource = Literal["MODEL", "BERT", "UNAVAILABLE"]
 
 DEFAULT_CONTRACT_VERSION = "1.1.0"
-DEFAULT_KNOWLEDGE_VERSION = "0.3.0"
+DEFAULT_KNOWLEDGE_VERSION = "0.3.1"
 
 
 # HTTP 와이어 Worker — workerRef + requestedFields (나머지 필드는 선택·하위호환)

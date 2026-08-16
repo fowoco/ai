@@ -101,8 +101,8 @@ def test_plan_returns_single_context_decision_without_fake_evidence_slot() -> No
         "passport_status",
         "arc_status",
     ]
-    assert res.versions.context_pack_version == "0.3.0"
-    assert res.versions.workflow_catalog_version == "0.3.0"
+    assert res.versions.context_pack_version == "0.3.1"
+    assert res.versions.workflow_catalog_version == "0.3.1"
 
 
 def test_plan_strips_trailing_josa_from_target_display_name() -> None:

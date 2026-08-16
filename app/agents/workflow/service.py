@@ -80,6 +80,27 @@ _BUILTIN_CATALOG: dict[str, dict[str, object]] = {
         ],
         "input_modes": ["AGENT_TASK", "INTERNAL_REQUEST"],
     },
+    "WF-STY-EXC-001": {
+        "name": "체류기간 만료 경과 상태 확인",
+        "intent": "EXPIRY_RENEWAL",
+        "sensitivity": "critical",
+        "required_slots": [
+            "worker_id",
+            "stay_expiry_date",
+            "stay_verification_status",
+        ],
+        "context_slots": [
+            "worker_id",
+            "stay_expiry_date",
+            "stay_verification_status",
+            "status_checked_at",
+            "extension_receipt_document_id",
+            "approval_result_document_id",
+            "new_stay_expiry_date",
+            "employment_end_confirmed_at",
+        ],
+        "input_modes": ["AGENT_TASK", "INTERNAL_REQUEST"],
+    },
     "WF-CON-001": {
         "name": "근로계약 갱신 준비",
         "intent": "EXPIRY_RENEWAL",

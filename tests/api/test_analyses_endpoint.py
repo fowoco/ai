@@ -109,8 +109,8 @@ async def test_plan_returns_context_required() -> None:
         "arc_status",
     ]
     assert data["versions"]["contractVersion"] == "1.1.0"
-    assert data["versions"]["contextPackVersion"] == "0.3.0"
-    assert data["versions"]["workflowCatalogVersion"] == "0.3.0"
+    assert data["versions"]["contextPackVersion"] == "0.3.1"
+    assert data["versions"]["workflowCatalogVersion"] == "0.3.1"
     assert data["versions"]["modelProvider"] != "stub"
     assert data["versions"]["modelName"] != "stub"
     assert data["versions"]["modelVersion"] != "stub"
@@ -208,7 +208,7 @@ async def test_e2e_011_plan_keeps_one_representative_workflow() -> None:
     data = resp.json()
     assert data["contextRequirement"]["detectedIntent"] == "EXPIRY_RENEWAL"
     assert data["contextRequirement"]["workflowId"] == "WF-STY-001"
-    assert data["versions"]["workflowCatalogVersion"] == "0.3.0"
+    assert data["versions"]["workflowCatalogVersion"] == "0.3.1"
 
 
 @pytest.mark.asyncio

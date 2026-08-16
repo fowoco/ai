@@ -27,7 +27,8 @@ def test_get_unknown_workflow() -> None:
 def test_list_workflows() -> None:
     agent = WorkflowAgent()
     workflows = agent.list_workflows()
-    assert len(workflows) == 8
+    assert len(workflows) == 9
+    assert any(workflow.workflow_id == "WF-STY-EXC-001" for workflow in workflows)
 
 
 def test_resolve_workflow_by_intent() -> None:
