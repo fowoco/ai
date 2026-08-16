@@ -255,8 +255,8 @@ XML → HWP: XML → HWPX → HWP
 XML → PDF: XML → HWPX → PDF
 ```
 
-HWP는 LibreOffice로 바로 PDF 변환한다. HWPX→PDF가 문서 호환성 문제로 실패하면
-`HWPX → HWP → PDF` fallback을 자동 실행하며 XML→PDF도 같은 fallback을 사용한다.
+HWP와 HWPX는 `rhwp` native PDF exporter로 직접 변환한다. Server의 실제 데모
+양식으로 페이지 수와 가독성을 검증하며, PDF 산출물도 parser로 다시 검사한다.
 
 ## 응답과 오류
 
@@ -271,7 +271,7 @@ HWP는 LibreOffice로 바로 PDF 변환한다. HWPX→PDF가 문서 호환성 �
 | 409 | 같은 문서 이름이 서로 다른 양식 구조에 이미 연결됨 |
 | 413 | 업로드 크기 제한 초과 |
 | 422 | 지원하지 않는 조합, 손상된 문서, 변환 실패 |
-| 503 | Java, rhwp, LibreOffice 등 설정된 엔진을 사용할 수 없음 |
+| 503 | Java, rhwp 등 설정된 엔진을 사용할 수 없음 |
 
 기본 업로드 제한은 50 MiB이며
 `FOWOCO_DOCUMENT_UPLOAD_MAX_BYTES`로 변경한다. 현재 변환 API는 동기 방식이므로
