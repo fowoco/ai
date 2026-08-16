@@ -1,5 +1,7 @@
-# rhwp 공식 릴리스 바이너리를 체크섬으로 고정해 가져오는 빌드 단계
-FROM python:3.12-slim-trixie AS rhwp
+# rhwp Linux 공식 릴리스가 x86_64만 제공되므로 runtime platform도 amd64로 고정한다.
+# Apple Silicon 개발 환경에서는 Docker Desktop이 amd64 emulation으로 실행한다.
+ARG FOWOCO_RUNTIME_PLATFORM=linux/amd64
+FROM --platform=${FOWOCO_RUNTIME_PLATFORM} python:3.12-slim-trixie AS rhwp
 
 ADD --checksum=sha256:fe3dc818a44f2bc4d4a001311514ed399d46a1e752b3df0d6e9e2f2ac8058402 \
     https://github.com/edwardkim/rhwp/releases/download/v0.7.19/rhwp-v0.7.19-linux-x86_64.tar.gz \
@@ -12,7 +14,7 @@ RUN mkdir -p /opt/rhwp \
 # uv 바이너리 고정 버전 복사
 FROM ghcr.io/astral-sh/uv:0.7.20 AS uv
 
-FROM python:3.12-slim-trixie
+FROM --platform=${FOWOCO_RUNTIME_PLATFORM} python:3.12-slim-trixie
 
 # 컨테이너 작업 디렉터리
 WORKDIR /app
@@ -33,13 +35,11 @@ COPY --from=uv /uv /usr/local/bin/uv
 COPY --from=rhwp /opt/rhwp/rhwp /usr/local/bin/rhwp
 COPY --from=rhwp /opt/rhwp/LICENSE /usr/share/licenses/rhwp/LICENSE
 
-# COM 없이 HWPX를 읽고 PDF로 렌더링하는 headless 엔진과 한글 폰트
+# 문서 변환용 Java runtime과 PDF 렌더링용 한글 폰트
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         fonts-noto-cjk \
         default-jre-headless \
-        libreoffice-h2orestart \
-        libreoffice-writer \
     && rm -rf /var/lib/apt/lists/*
 
 # 의존성 정의 파일 + 앱 소스를 먼저 복사한다.
