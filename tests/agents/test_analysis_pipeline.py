@@ -94,9 +94,15 @@ def test_plan_returns_single_context_decision_without_fake_evidence_slot() -> No
     assert ctx.confidence_source == "BERT"
     assert ctx.extracted_slots == {}
     assert res.versions.prompt_version == "test-prompt-v1"
-    assert "worker_id" in ctx.required_field_keys
-    assert "passport_status" in ctx.required_field_keys
-    assert "arc_status" in ctx.required_field_keys
+    assert ctx.required_field_keys == [
+        "worker_id",
+        "due_at",
+        "stay_expiry_date",
+        "passport_status",
+        "arc_status",
+    ]
+    assert res.versions.context_pack_version == "0.3.0"
+    assert res.versions.workflow_catalog_version == "0.3.0"
 
 
 def test_plan_strips_trailing_josa_from_target_display_name() -> None:
@@ -208,6 +214,7 @@ def test_analyze_does_not_ask_hr_for_document_managed_fields() -> None:
         workerRef="worker-1",
         requestedFields={
             "worker_id": "worker-1",
+            "due_at": "2026-10-01T09:00:00+09:00",
             "stay_expiry_date": "2026-12-31",
         },
     )
@@ -261,6 +268,7 @@ def test_analyze_reuses_plan_decision_without_classifying_again() -> None:
                         workerRef="worker-1",
                         requestedFields={
                             "worker_id": "worker-1",
+                            "due_at": "2026-10-01T09:00:00+09:00",
                             "stay_expiry_date": "2026-12-31",
                         },
                     )

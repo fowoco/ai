@@ -21,6 +21,14 @@ def try_get_repository(root: str | None = None) -> Any | None:
         return None
 
 
+# 응답에 기록할 실제 Knowledge package version
+def load_knowledge_version(repository: Any) -> str:
+    version = repository.manifest.get("version")
+    if not isinstance(version, str) or not version.strip():
+        raise ValueError("Knowledge manifest version must be a non-empty string")
+    return version.strip()
+
+
 # workflow_requirements.required 목록을 AmbiguityAgent용 dict로 변환
 # Knowledge required_slots.yaml에서 워크플로별 필수 slot 로드
 def load_required_slots(repository: Any) -> dict[str, list[str]]:
@@ -31,6 +39,18 @@ def load_required_slots(repository: Any) -> dict[str, list[str]]:
         required = cfg.get("required", [])
         if isinstance(required, list):
             result[str(workflow_id)] = [str(s) for s in required]
+    return result
+
+
+# workflow_requirements.resolvable_from_context 목록을 PLAN 조회용 dict로 변환
+def load_context_slots(repository: Any) -> dict[str, list[str]]:
+    data = repository.load_yaml("knowledge/required_slots.yaml")
+    requirements = data.get("workflow_requirements", {})
+    result: dict[str, list[str]] = {}
+    for workflow_id, cfg in requirements.items():
+        context_slots = cfg.get("resolvable_from_context", [])
+        if isinstance(context_slots, list):
+            result[str(workflow_id)] = [str(slot) for slot in context_slots]
     return result
 
 
@@ -71,6 +91,8 @@ def load_workflow_catalog(repository: Any) -> dict[str, dict[str, object]]:
         }
     # required_slots_ref가 있으면 required_slots.yaml에서 채움
     required_map = load_required_slots(repository)
+    context_map = load_context_slots(repository)
     for workflow_id, entry in catalog.items():
         entry["required_slots"] = required_map.get(workflow_id, [])
+        entry["context_slots"] = context_map.get(workflow_id, [])
     return catalog

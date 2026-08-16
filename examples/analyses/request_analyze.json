@@ -7,6 +7,7 @@
     "plannedWorkflowId": "WF-STY-001",
     "requestedFieldKeys": [
       "worker_id",
+      "due_at",
       "stay_expiry_date",
       "passport_status",
       "arc_status"
@@ -16,9 +17,10 @@
         "workerRef": "30000000-0000-0000-0000-000000000001",
         "requestedFields": {
           "worker_id": "30000000-0000-0000-0000-000000000001",
+          "due_at": "2026-10-01T09:00:00+09:00",
           "stay_expiry_date": "2026-12-31",
-          "passport_status": "VALID",
-          "arc_status": "VALID"
+          "passport_status": "VERIFIED",
+          "arc_status": "SUBMITTED"
         }
       }
     ]

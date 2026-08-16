@@ -33,23 +33,21 @@ Knowledge `required_slots`와 builtin Ambiguity 목록을 기준으로 맞춘다
 | `DOCUMENT_OCR` | 서류 업로드·OCR 후 재호출 |
 | `REQUEST` | 이미 요청에 있어야 하는 식별자 (`worker_id` 등) |
 
-## 워크플로별 필수 슬롯 ↔ sourceHint
+## 대표 워크플로 Slot ↔ sourceHint
 
-builtin / Knowledge `required_slots`와 동일 키를 쓴다.
+Knowledge 0.3.0의 `required`와 `resolvable_from_context`를 구분한다. PLAN은
+Context 조회 대상을 내려주고, AI는 그중 필수 Slot이 없을 때만 HR 질문을 만든다.
 
-| workflowId | key | sourceHint |
-|---|---|---|
-| `WF-STY-001` | `worker_id` | `REQUEST` |
-| `WF-STY-001` | `stay_expiry_date` | `WORKER_DB` |
-| `WF-CON-001` | `worker_id` | `REQUEST` |
-| `WF-CON-001` | `contract_end_date` | `WORKER_DB` |
-| `WF-DOC-001` | `worker_id` | `REQUEST` |
-| `WF-DOC-001` | `document_type` | `USER_INPUT` |
-| `WF-PAY-001` | `worker_id` | `REQUEST` |
-| `WF-PAY-001` | `pay_period` | `USER_INPUT` |
-| `WF-CHG-001` | `worker_id` | `REQUEST` |
-| `WF-CHG-001` | `change_type` | `USER_INPUT` |
-| `WF-WRK-001` / `WF-INS-001` / `WF-ADM-001` | `worker_id` | `REQUEST` |
+| workflowId | key | 구분 | sourceHint |
+|---|---|---|---|
+| `WF-STY-001` | `worker_id` | 필수 | `REQUEST` |
+| `WF-STY-001` | `due_at` | 필수 | `TASK_BUSINESS_DATA` 또는 `USER_INPUT` |
+| `WF-STY-001` | `stay_expiry_date` | 선택 Context | `WORKER_DB` |
+| `WF-STY-001` | `passport_status` | 선택 Context | `WORKER_DB` |
+| `WF-STY-001` | `arc_status` | 선택 Context | `WORKER_DB` |
+| `WF-CON-001` | `worker_id` | 필수 | `REQUEST` |
+| `WF-CON-001` | `due_at` | 필수 | `TASK_BUSINESS_DATA` 또는 `USER_INPUT` |
+| `WF-CON-001` | `contract_end_date` | 선택 Context | `WORKER_DB` |
 
 ### 재갱신(EXPIRY_RENEWAL) 추가 슬롯 (시나리오)
 
@@ -76,10 +74,9 @@ Server #56 Analyses 응답 와이어에는 `missingSlots`만 실는다.
 
 ```json
 {
-  "missingSlots": ["stay_expiry_date", "wage"],
+  "missingSlots": ["due_at"],
   "requestedFields": [
-    { "key": "stay_expiry_date", "sourceHint": "WORKER_DB" },
-    { "key": "wage", "sourceHint": "USER_INPUT" }
+    { "key": "due_at", "sourceHint": "USER_INPUT" }
   ]
 }
 ```
@@ -96,10 +93,10 @@ Server #56 Analyses 응답 와이어에는 `missingSlots`만 실는다.
 
 ## AI / Server 책임
 
-| AI (휘) | Server |
+| AI | Server |
 |---|---|
 | `missingSlots`·`requestedFields` 산출 | DB·화면에서 값 조회 |
 | 재호출 시 slots 병합·재검사 | attempt 증가·중복 Run 방지 (#24) |
-| Knowledge/builtin required_slots 기준 유지 | 없는 컬럼이면 DB 추가 또는 USER_INPUT으로 전환 |
+| Knowledge 0.3.0의 필수·선택 Slot 구분 유지 | 없는 필수값만 HR 입력으로 전환 |
 
 구현 코드: `app/agents/slot_catalog.py`

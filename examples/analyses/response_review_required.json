@@ -10,6 +10,7 @@
       "workflowId": "WF-STY-001",
       "extractedSlots": {
         "worker_id": "30000000-0000-0000-0000-000000000001",
+        "due_at": "2026-10-01T09:00:00+09:00",
         "stay_expiry_date": "2026-12-31",
         "full_name": "NGUYEN VAN AN"
       },
@@ -24,8 +25,8 @@
     "modelName": "planned-intent",
     "modelVersion": "reused",
     "promptVersion": "not-applicable",
-    "contextPackVersion": "0.2.0",
-    "workflowCatalogVersion": "0.2.0",
+    "contextPackVersion": "0.3.0",
+    "workflowCatalogVersion": "0.3.0",
     "contractVersion": "1.1.0"
   },
   "providerAttemptCount": 0,

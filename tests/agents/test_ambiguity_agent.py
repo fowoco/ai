@@ -6,7 +6,7 @@ from app.agents.ambiguity import AmbiguityAgent
 def test_detects_missing_slots() -> None:
     agent = AmbiguityAgent()
     result = agent.check("WF-STY-001", {"worker_id": "W-1"}, "체류 연장")
-    assert "stay_expiry_date" in result.missing_slots
+    assert result.missing_slots == ["due_at"]
     assert result.has_issues
 
 
@@ -14,7 +14,7 @@ def test_no_missing_when_all_provided() -> None:
     agent = AmbiguityAgent()
     result = agent.check(
         "WF-STY-001",
-        {"worker_id": "W-1", "stay_expiry_date": "2026-12-31"},
+        {"worker_id": "W-1", "due_at": "2026-10-01T09:00:00+09:00"},
         "체류 연장",
     )
     assert result.missing_slots == []
@@ -22,7 +22,11 @@ def test_no_missing_when_all_provided() -> None:
 
 def test_builtin_has_no_ungrounded_ambiguity_patterns() -> None:
     agent = AmbiguityAgent()
-    result = agent.check("WF-DOC-001", {"worker_id": "W-1", "document_type": "여권"}, "조만간 처리해줘")
+    result = agent.check(
+        "WF-DOC-001",
+        {"worker_id": "W-1", "document_type": "여권"},
+        "조만간 처리해줘",
+    )
     assert result.ambiguities == []
 
 
@@ -55,5 +59,13 @@ def test_detects_ambiguous_terms_when_knowledge_patterns_injected() -> None:
 
 def test_no_issues() -> None:
     agent = AmbiguityAgent()
-    result = agent.check("WF-INS-001", {"worker_id": "W-1"}, "내일 출근 스케줄 안내")
+    result = agent.check(
+        "WF-INS-001",
+        {
+            "worker_id": "W-1",
+            "effective_at": "2026-08-17T07:00:00+09:00",
+            "work_action": "2공장으로 출근",
+        },
+        "내일 출근 스케줄 안내",
+    )
     assert not result.has_issues

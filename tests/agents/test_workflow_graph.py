@@ -10,6 +10,7 @@ def _filled_renewal_slots() -> dict[str, str]:
     """문서생성까지 가기 위한 최소 슬롯 세트."""
     slots = {
         "worker_id": "WRK-001",
+        "due_at": "2026-11-30",
         "stay_expiry_date": "2026-12-31",
     }
     for key in IDENTITY_SLOTS:

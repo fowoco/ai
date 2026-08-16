@@ -9,6 +9,7 @@ from app.agents.ambiguity import AmbiguityAgent
 from app.agents.intent import IntentClassifier, build_intent_agent
 from app.agents.knowledge_support import (
     load_ambiguity_patterns,
+    load_knowledge_version,
     load_required_slots,
     load_workflow_catalog,
     try_get_repository,
@@ -70,6 +71,7 @@ def get_analysis_pipeline() -> AnalysisPipeline:
 
     return AnalysisPipeline(
         intent_agent=intent_agent,
+        knowledge_version=load_knowledge_version(repository),
         ambiguity_agent=AmbiguityAgent(
             required_slots=load_required_slots(repository),
             ambiguity_patterns=load_ambiguity_patterns(repository),

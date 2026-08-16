@@ -77,6 +77,7 @@ def _strip_trailing_josa(tok: str) -> tuple[str, bool]:
 
 _SLOT_PROMPTS: dict[str, str] = {
     "worker_id": "대상 근로자를 지정해 주세요.",
+    "due_at": "업무 준비를 마칠 날짜와 시간을 입력해 주세요.",
     "stay_expiry_date": "체류 만료일을 입력해 주세요.",
     "contract_end_date": "계약 종료일을 입력해 주세요.",
     "contract_start_date": "계약 시작일을 입력해 주세요.",
@@ -141,8 +142,11 @@ def _seed_slots_from_worker(worker: WorkerContext) -> dict[str, str]:
     return slots
 
 
-# 고정 버전 블록
-def _versions(intent_result: IntentResult) -> AnalysisVersions:
+# 응답에 기록할 실제 Agent·Knowledge 버전 블록
+def _versions(
+    intent_result: IntentResult,
+    knowledge_version: str,
+) -> AnalysisVersions:
     return AnalysisVersions(
         agent_version=__version__,
         model_provider=intent_result.model_provider,
@@ -150,8 +154,8 @@ def _versions(intent_result: IntentResult) -> AnalysisVersions:
         model_version=intent_result.model_version,
         prompt_version=intent_result.prompt_version,
         contract_version=DEFAULT_CONTRACT_VERSION,
-        workflow_catalog_version=DEFAULT_KNOWLEDGE_VERSION,
-        context_pack_version=DEFAULT_KNOWLEDGE_VERSION,
+        workflow_catalog_version=knowledge_version,
+        context_pack_version=knowledge_version,
     )
 
 
@@ -180,10 +184,12 @@ class AnalysisPipeline:
         intent_agent: IntentClassifier | None = None,
         ambiguity_agent: AmbiguityAgent | None = None,
         workflow_agent: WorkflowAgent | None = None,
+        knowledge_version: str = DEFAULT_KNOWLEDGE_VERSION,
     ) -> None:
         self._intent = intent_agent or build_intent_agent()
         self._ambiguity = ambiguity_agent or AmbiguityAgent()
         self._workflow = workflow_agent or WorkflowAgent()
+        self._knowledge_version = knowledge_version
 
     # phase에 따라 CONTEXT_REQUIRED 또는 최종 outcome 반환
     def run(self, request: AnalysisRequest) -> AnalysisResponse:
@@ -208,14 +214,15 @@ class AnalysisPipeline:
                 questions=[],
                 candidates=[],
                 validation_errors=[],
-                versions=_versions(intent_result),
+                versions=_versions(intent_result, self._knowledge_version),
                 provider_attempt_count=1,
                 latency_ms=0,
             )
 
         workflow_id = intent_result.workflow_id or ""
-        required = self._required_slots_for(workflow_id)
-        field_keys = list(required) if required else ["worker_id", "stay_expiry_date"]
+        context_slots = self._context_slots_for(workflow_id)
+        required_slots = self._required_slots_for(workflow_id)
+        field_keys = context_slots or required_slots or ["worker_id", "due_at"]
 
         return AnalysisResponse(
             request_id=request.request_id,
@@ -234,7 +241,7 @@ class AnalysisPipeline:
             questions=[],
             candidates=[],
             validation_errors=[],
-            versions=_versions(intent_result),
+            versions=_versions(intent_result, self._knowledge_version),
             provider_attempt_count=1,
             latency_ms=0,
         )
@@ -254,7 +261,7 @@ class AnalysisPipeline:
                 questions=[_question_for("worker_id")],
                 candidates=[],
                 validation_errors=[],
-                versions=_versions(intent_result),
+                versions=_versions(intent_result, self._knowledge_version),
                 provider_attempt_count=0,
                 latency_ms=0,
             )
@@ -264,11 +271,14 @@ class AnalysisPipeline:
         slots = _seed_slots_from_worker(worker)
         slots.update(intent_result.extracted_slots)
 
-        # Server가 못 채운 PLAN 요청 키 → HR 질문 후보
+        # Server가 못 채운 PLAN 조회 키 중 Workflow 필수 Slot만 HR 질문 후보로 만든다.
+        # 선택 Slot은 Context 조회에는 포함되지만 값이 없다고 업무를 막지 않는다.
         hr_keys: list[str] = []
+        required_slots = set(self._required_slots_for(workflow_id))
         for key in ai.requested_field_keys:
             if (
-                key not in HR_EXCLUDED_SLOTS
+                key in required_slots
+                and key not in HR_EXCLUDED_SLOTS
                 and key not in worker.requested_fields
                 and key not in slots
             ):
@@ -287,7 +297,7 @@ class AnalysisPipeline:
                 questions=[_question_for(k) for k in hr_keys],
                 candidates=[],
                 validation_errors=[],
-                versions=_versions(intent_result),
+                versions=_versions(intent_result, self._knowledge_version),
                 provider_attempt_count=0,
                 latency_ms=0,
             )
@@ -307,7 +317,7 @@ class AnalysisPipeline:
             questions=[],
             candidates=[candidate],
             validation_errors=[],
-            versions=_versions(intent_result),
+            versions=_versions(intent_result, self._knowledge_version),
             provider_attempt_count=0,
             latency_ms=0,
         )
@@ -320,3 +330,12 @@ class AnalysisPipeline:
         if info and info.required_slots:
             return list(info.required_slots)
         return self._ambiguity.check(workflow_id, {}, "").missing_slots
+
+    # PLAN에서 Server에 조회를 요청할 Slot (필수 + 선택 Context)
+    def _context_slots_for(self, workflow_id: str) -> list[str]:
+        if not workflow_id:
+            return []
+        info = self._workflow.get_workflow(workflow_id)
+        if info and info.context_slots:
+            return list(info.context_slots)
+        return self._required_slots_for(workflow_id)
