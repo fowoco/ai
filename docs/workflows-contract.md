@@ -22,6 +22,7 @@ Renewal 실행은 PLAN과 달리 Server에 이미 생성된 Task를 처리한다
 | `RECONTRACT` | `WF-CON-001` |
 | `EMPLOYMENT_PERIOD_EXTENSION` | `WF-CON-001` |
 | `STAY_PERIOD_EXTENSION` | `WF-STY-001` |
+| 체류기간 만료 경과 상태 확인 | `WF-STY-EXC-001` |
 
 외부 Language Node가 다른 Workflow를 반환해도 Renewal Graph는 Server Task의 Workflow를
 복원한다. `intent=OUT_OF_SCOPE`, `scenario=out_of_scope`인 종료 응답만 `workflowId=""`를
@@ -53,6 +54,30 @@ POST /internal/v1/workflows/renewal/run
 | `progressEvents` | `[{phase, step, message, subgraph}, …]` |
 | `evidence` | Intent·서류 근거 |
 | `supervisorSource` | `rules` \| `llm` |
+
+## 체류기간 만료 경과 예외
+
+체류 만료일 경과 여부와 현재 확인 상태는 Server Rule Engine이 결정합니다. AI는
+`variant=EXPIRED_STAY_EXCEPTION` 요청에서 HR 확인 질문과 다음 행동 후보만 반환하며,
+법적 체류 상태나 퇴사 여부를 새로 판단하지 않습니다.
+
+```json
+{
+  "requestId": "req-stay-exception-001",
+  "taskId": "task-stay-exception-001",
+  "instruction": "기록상 체류기간이 지나 상태 확인이 필요합니다.",
+  "workerId": "worker-001",
+  "variant": "EXPIRED_STAY_EXCEPTION",
+  "stayVerificationStatus": "UNKNOWN",
+  "slots": {
+    "stay_expiry_date": "2026-08-10"
+  }
+}
+```
+
+응답은 `workflowId=WF-STY-EXC-001`, `legalConclusion=null`을 유지합니다.
+`WF-CHG-001`은 Server가 `EMPLOYMENT_ENDED`를 전달한 경우에만 검토 후보로 제안하며
+자동 실행하지 않습니다.
 
 ### combo (Step4)
 

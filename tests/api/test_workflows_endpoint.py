@@ -1,11 +1,18 @@
 ﻿"""POST /internal/v1/workflows/renewal/run 엔드포인트 테스트."""
 
+import json
+from pathlib import Path
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 
 RENEWAL_PATH = "/internal/v1/workflows/renewal/run"
+EXPIRED_STAY_CASES = json.loads(
+    (Path(__file__).parents[1] / "fixtures" / "expired_stay_exception_cases.json")
+    .read_text(encoding="utf-8")
+)
 
 
 @pytest.fixture
@@ -105,3 +112,62 @@ async def test_renewal_run_accepts_prefilled_ocr_result(client: AsyncClient) -> 
     data = res.json()
     assert data["ocrResult"]["alien_registration_number"] == "900315-5123456"
     assert data["slots"]["stay_expiry_date"] == "2026-12-31"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", EXPIRED_STAY_CASES, ids=lambda case: case["caseId"])
+async def test_expired_stay_exception_follows_knowledge_golden_cases(
+    client: AsyncClient,
+    case: dict[str, object],
+) -> None:
+    """Knowledge #53의 E2E-012~016 상태별 다음 행동을 회귀 검증한다."""
+    payload = {
+        "requestId": f"req-{case['caseId']}",
+        "taskId": f"task-{case['caseId']}",
+        "instruction": "기록상 체류기간이 지나 상태 확인이 필요합니다.",
+        "workerId": "worker-001",
+        "variant": "EXPIRED_STAY_EXCEPTION",
+        "stayVerificationStatus": case["status"],
+        "slots": {
+            "worker_id": "worker-001",
+            "stay_expiry_date": "2026-08-10",
+            "stay_verification_status": case["status"],
+        },
+    }
+
+    response = await client.post(RENEWAL_PATH, json=payload)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["intent"] == "EXPIRY_RENEWAL"
+    assert data["workflowId"] == "WF-STY-EXC-001"
+    assert data["variant"] == "EXPIRED_STAY_EXCEPTION"
+    assert data["nextAction"] == case["nextAction"]
+    assert data["legalConclusion"] is None
+    assert data["suggestedWorkflowIds"] == case["suggestedWorkflowIds"]
+    assert data["questions"]
+    assert data["generatedDocuments"] == []
+    assert data["workerRequestMessage"] is None
+
+
+@pytest.mark.asyncio
+async def test_expired_stay_never_suggests_employment_change_before_confirmation(
+    client: AsyncClient,
+) -> None:
+    """기한 경과·미신청만으로 고용변동 Workflow를 제안하지 않는다."""
+    response = await client.post(
+        RENEWAL_PATH,
+        json={
+            "requestId": "req-no-auto-employment-change",
+            "instruction": "연장 신청을 안 했으니 자동으로 퇴사 처리해줘",
+            "workerId": "worker-001",
+            "variant": "EXPIRED_STAY_EXCEPTION",
+            "stayVerificationStatus": "NOT_APPLIED",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["legalConclusion"] is None
+    assert "WF-CHG-001" not in data["suggestedWorkflowIds"]
+    assert data["nextAction"] == "REQUEST_HR_STATUS_CONFIRMATION"
