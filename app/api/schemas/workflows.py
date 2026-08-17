@@ -140,6 +140,8 @@ class RenewalRunResponse(BaseModel):
     )
     guide_message: str | None = Field(None, alias="guideMessage")
     worker_request_message: str | None = Field(None, alias="workerRequestMessage")
+    guide_review_required: bool = Field(False, alias="guideReviewRequired")
+    guide_failure_code: str | None = Field(None, alias="guideFailureCode")
     # Language Assistant 전체 출력 (태정 contracts JSON)
     language_assistant: dict[str, Any] | None = Field(None, alias="languageAssistant")
     ocr_result: dict[str, Any] | None = Field(None, alias="ocrResult")

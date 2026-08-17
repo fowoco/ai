@@ -109,12 +109,18 @@ class LanguageGuideBridge:
     def __call__(self, state: RenewalState) -> dict[str, Any]:
         base = mark_guide_placeholder(state)
         if self._service is None:
-            return base
+            return {
+                **base,
+                "worker_request_message": None,
+                "guide_review_required": True,
+                "guide_failure_code": "LANGUAGE_ASSISTANT_NOT_CONFIGURED",
+            }
         try:
             parent = renewal_as_language_parent(state)
             request = project_language_input(parent)
             output = self._service.invoke(request)
             message = worker_message_from_language_output(output)
+            review_required = output.requires_human_review
             return {
                 **base,
                 "request_context": parent.get("request_context"),
@@ -122,11 +128,20 @@ class LanguageGuideBridge:
                 "nationality_code": parent.get("nationality_code"),
                 "language_assistant": output.model_dump(mode="json"),
                 "guide_message": output.standard_korean_text,
-                "worker_request_message": message,
+                "worker_request_message": None if review_required else message,
+                "guide_review_required": review_required,
+                "guide_failure_code": (
+                    "LANGUAGE_ASSISTANT_REVIEW_REQUIRED" if review_required else None
+                ),
             }
         except Exception:
             logger.exception("Language Assistant guide failed — placeholder fallback")
-            return base
+            return {
+                **base,
+                "worker_request_message": None,
+                "guide_review_required": True,
+                "guide_failure_code": "LANGUAGE_ASSISTANT_INVOCATION_FAILED",
+            }
 
 
 # LanguageAssistantService용 노드 팩토리 (태정 build_language_assistant_node 래핑)

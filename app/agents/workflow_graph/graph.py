@@ -65,7 +65,12 @@ def build_renewal_graph(
     def node_guide(state: RenewalState) -> dict[str, Any]:
         if guide_node is not None:
             return guide_node(state)
-        return mark_guide_placeholder(state)
+        return {
+            **mark_guide_placeholder(state),
+            "worker_request_message": None,
+            "guide_review_required": True,
+            "guide_failure_code": "LANGUAGE_ASSISTANT_NOT_CONFIGURED",
+        }
 
     def node_ocr(state: RenewalState) -> dict[str, Any]:
         return ocr_sg.invoke(state)

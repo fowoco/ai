@@ -24,8 +24,8 @@ async def client():
 
 
 @pytest.mark.asyncio
-async def test_renewal_run_waiting_worker(client: AsyncClient) -> None:
-    """재갱신 요청이 WAITING_WORKER 응답을 돌려준다."""
+async def test_renewal_run_requires_worker_guide_review(client: AsyncClient) -> None:
+    """안전한 근로자 안내문이 없으면 HR 검토가 필요하다."""
     payload = {
         "requestId": "req-renewal-001",
         "instruction": "외국인 근로자 체류기간 연장 갱신 어떻게 해?",
@@ -37,10 +37,13 @@ async def test_renewal_run_waiting_worker(client: AsyncClient) -> None:
     data = res.json()
     assert data["requestId"] == "req-renewal-001"
     assert data["intent"] == "EXPIRY_RENEWAL"
-    assert data["outcome"] == "WAITING_WORKER"
+    assert data["outcome"] == "REVIEW_REQUIRED"
     assert data["scenario"] == "ask_worker"
     assert data["taskId"]
-    assert data["workerRequestMessage"]
+    assert data["workerRequestMessage"] is None
+    assert data["guideReviewRequired"] is True
+    assert data["guideFailureCode"] == "LANGUAGE_ASSISTANT_NOT_CONFIGURED"
+    assert "REVIEW_WORKER_GUIDE" in data["caseSignals"]
 
 
 @pytest.mark.asyncio
