@@ -75,6 +75,7 @@ async def run_renewal(
         worker=request.worker.model_dump(by_alias=False) if request.worker else None,
         company=request.company.model_dump(by_alias=False) if request.company else None,
         task=request.task.model_dump(by_alias=False) if request.task else None,
+        agent_mode=request.agent_mode,
     )
     missing = state.get("missing_slots") or []
     return RenewalRunResponse(

@@ -41,6 +41,52 @@ async def test_renewal_run_waiting_worker(client: AsyncClient) -> None:
     assert data["scenario"] == "ask_worker"
     assert data["taskId"]
     assert data["workerRequestMessage"]
+    assert not any(
+        event.get("subgraph") == "agent-shadow"
+        for event in data["progressEvents"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_renewal_run_shadow_mode_returns_comparison_trace(
+    client: AsyncClient,
+) -> None:
+    """Shadow 요청은 결과를 바꾸지 않고 계획 비교 trace만 추가한다."""
+    response = await client.post(
+        RENEWAL_PATH,
+        json={
+            "requestId": "req-renewal-shadow",
+            "instruction": "체류기간 연장 준비해줘",
+            "workerId": "worker-shadow",
+            "agentMode": "SHADOW",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    shadow = next(
+        event
+        for event in data["progressEvents"]
+        if event.get("subgraph") == "agent-shadow"
+    )
+    assert data["scenario"] == "ask_worker"
+    assert shadow["mode"] == "SHADOW"
+    assert shadow["legacyRoute"] == data["scenario"]
+    assert shadow["plan"]
+
+
+@pytest.mark.asyncio
+async def test_renewal_run_rejects_unknown_agent_mode(client: AsyncClient) -> None:
+    response = await client.post(
+        RENEWAL_PATH,
+        json={
+            "requestId": "req-renewal-invalid-mode",
+            "instruction": "체류기간 연장 준비해줘",
+            "agentMode": "ACTIVE",
+        },
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

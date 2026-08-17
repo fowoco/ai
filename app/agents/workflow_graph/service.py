@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
+from .agent_mode import AgentExecutionMode
 from .graph import build_renewal_graph
 from .init_state import init_renewal_state_from_bundle
 from .nodes.document_generator import DocumentGenerator
@@ -71,6 +72,7 @@ class RenewalOrchestrator:
         worker: dict[str, Any] | None = None,
         company: dict[str, Any] | None = None,
         task: dict[str, Any] | None = None,
+        agent_mode: AgentExecutionMode = AgentExecutionMode.LEGACY,
     ) -> RenewalState:
         resolved_task_id = (
             task_id
@@ -97,6 +99,7 @@ class RenewalOrchestrator:
                 company_id=merged.get("company_id"),  # type: ignore[arg-type]
                 slots=merged.get("slots"),  # type: ignore[arg-type]
                 documents=merged.get("documents"),  # type: ignore[arg-type]
+                agent_mode=agent_mode,
             )
             if merged.get("ocr_result"):
                 initial["ocr_result"] = merged["ocr_result"]  # type: ignore[typeddict-item]
@@ -119,6 +122,7 @@ class RenewalOrchestrator:
                 task=task,
             )
             _seed_ocr_result(initial, ocr_result)
+            initial["agent_mode"] = agent_mode
         else:
             initial = empty_renewal_state(
                 task_id=str(resolved_task_id),
@@ -128,6 +132,7 @@ class RenewalOrchestrator:
                 company_id=company_id,
                 slots=slots,
                 documents=documents,
+                agent_mode=agent_mode,
             )
             _seed_ocr_result(initial, ocr_result)
 

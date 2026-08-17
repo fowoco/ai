@@ -10,6 +10,7 @@ from langgraph.graph import END, START, StateGraph
 from app.db.memory import InMemoryDb
 from app.db.protocols import IdentityStore, WorkerCompanyLookup
 
+from .agent_mode import AgentExecutionMode
 from .nodes.actions import (
     apply_supervisor,
     load_context,
@@ -20,6 +21,8 @@ from .nodes.actions import (
     route_from_supervisor,
 )
 from .nodes.document_generator import DocumentGenerator
+from .phases import append_progress, progress_event
+from .planning import build_shadow_plan
 from .protocols import LanguageNode, OcrNode
 from .state import RenewalState
 from .subgraphs import (
@@ -59,7 +62,43 @@ def build_renewal_graph(
         return {**ctx, **analysis}
 
     def node_supervisor(state: RenewalState) -> dict[str, Any]:
-        return apply_supervisor(state)
+        patch = apply_supervisor(state)
+        if state.get("agent_mode") != AgentExecutionMode.SHADOW:
+            return patch
+
+        proposed_route = state.get("shadow_proposed_route")
+        legacy_route = patch.get("supervisor_route")
+        event = progress_event(
+            phase=patch["phase"],
+            step=patch["step"],
+            message="Shadow Agent 계획과 기존 Supervisor 판단 비교",
+            subgraph="agent-shadow",
+        )
+        event.update(
+            {
+                "mode": AgentExecutionMode.SHADOW.value,
+                "decisionOwner": "AGENT",
+                "decisionType": "AGENT_JUDGMENT",
+                "proposedRoute": proposed_route,
+                "legacyRoute": legacy_route,
+                "matched": proposed_route == legacy_route,
+                "plan": list(state.get("shadow_plan") or []),
+            }
+        )
+        patch["progress_events"] = append_progress(
+            {**state, **patch},  # type: ignore[arg-type]
+            event,
+        )
+        return patch
+
+    def node_shadow_plan(state: RenewalState) -> dict[str, Any]:
+        if state.get("agent_mode") != AgentExecutionMode.SHADOW:
+            return {}
+        plan = build_shadow_plan(state)
+        return {
+            "shadow_proposed_route": plan.proposed_route,
+            "shadow_plan": [step.as_event_payload() for step in plan.steps],
+        }
 
     # 안내문 · 태정 Language Assistant (미주입 시 placeholder)
     def node_guide(state: RenewalState) -> dict[str, Any]:
@@ -78,6 +117,7 @@ def build_renewal_graph(
 
     graph: StateGraph = StateGraph(RenewalState)
     graph.add_node("load_context", node_load)
+    graph.add_node("shadow_plan", node_shadow_plan)
     graph.add_node("supervisor", node_supervisor)
     graph.add_node("guide", node_guide)
     graph.add_node("ask_hr", mark_ask_hr)
@@ -87,7 +127,8 @@ def build_renewal_graph(
     graph.add_node("generate", node_generate)
 
     graph.add_edge(START, "load_context")
-    graph.add_edge("load_context", "supervisor")
+    graph.add_edge("load_context", "shadow_plan")
+    graph.add_edge("shadow_plan", "supervisor")
     graph.add_conditional_edges(
         "supervisor",
         after_supervisor,

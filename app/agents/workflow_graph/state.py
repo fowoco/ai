@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, NotRequired, TypedDict
 
+from .agent_mode import AgentExecutionMode
+
 # 여권/외국인등록증 OCR로 채우는 신분 항목
 IDENTITY_SLOTS: frozenset[str] = frozenset(
     {
@@ -60,6 +62,9 @@ class RenewalState(TypedDict):
     supervisor_source: NotRequired[str | None]
     supervisor_route: NotRequired[str | None]
     active_subgraph: NotRequired[str | None]
+    agent_mode: NotRequired[AgentExecutionMode]
+    shadow_plan: NotRequired[list[dict[str, str]]]
+    shadow_proposed_route: NotRequired[str | None]
 
 
 # 초기 Shared State 생성
@@ -72,6 +77,7 @@ def empty_renewal_state(
     company_id: str | None = None,
     slots: dict[str, Any] | None = None,
     documents: list[dict[str, Any]] | None = None,
+    agent_mode: AgentExecutionMode = AgentExecutionMode.LEGACY,
 ) -> RenewalState:
     return RenewalState(
         task_id=task_id,
@@ -109,4 +115,7 @@ def empty_renewal_state(
         supervisor_source=None,
         supervisor_route=None,
         active_subgraph=None,
+        agent_mode=agent_mode,
+        shadow_plan=[],
+        shadow_proposed_route=None,
     )

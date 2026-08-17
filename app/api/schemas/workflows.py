@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.agents.workflow_graph.agent_mode import AgentExecutionMode
+
 
 # 담당자가 업로드한 신분서류 메타 (OCR 입력)
 class RenewalDocumentInput(BaseModel):
@@ -93,6 +95,11 @@ class RenewalRunRequest(BaseModel):
     documents: list[RenewalDocumentInput] = Field(default_factory=list)
     # Server가 CLOVA OCR API 후 DB에서 읽어 실어 보낼 선행 OCR 스냅샷
     ocr_result: dict[str, Any] | None = Field(None, alias="ocrResult")
+    agent_mode: AgentExecutionMode = Field(
+        AgentExecutionMode.LEGACY,
+        alias="agentMode",
+        description="LEGACY=기존 실행 | SHADOW=Agent 계획을 비교 로그로만 생성",
+    )
     worker: WorkerSnapshot | None = None
     company: CompanySnapshot | None = None
     task: TaskSnapshot | None = None

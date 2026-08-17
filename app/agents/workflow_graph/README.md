@@ -105,6 +105,15 @@ flowchart TB
 - 옵션: `FOWOCO_SUPERVISOR_MODE=llm` + `FOWOCO_LLM_*` — 제안 라우트, 실패/불허 시 rules 폴백
 - 응답: `caseSignals`, `documentValidation`, `progressEvents`, `supervisorReason`
 
+## Shadow Planning
+
+- 요청의 `agentMode` 기본값은 `LEGACY`입니다.
+- `SHADOW`에서는 별도 Planner가 현재 State의 다음 행동을 제안합니다.
+- 계획의 실행 행동은 `TOOL`, 승인·대기·발송 통제는 `SERVER_CONTROL`로 구분합니다.
+- 계획 자체는 `decisionType=AGENT_JUDGMENT`로 기록합니다.
+- 실제 Graph 분기는 계속 기존 Supervisor가 결정하며 Shadow 계획은 상태·문서를 변경하지 않습니다.
+- 비교 결과는 `progressEvents`의 `subgraph=agent-shadow` 이벤트로만 반환합니다.
+
 ## Shared State (추가 필드)
 
 | 필드 | 설명 |
