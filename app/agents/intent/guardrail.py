@@ -43,7 +43,10 @@ class HRRoutingGuardrail:
         if activated_count >= self.max_trained_labels:
             return RoutingResult(
                 should_route=True,
-                reason=f"활성 label {activated_count}개 (학습 최댓값 {self.max_trained_labels}개 이상)",
+                reason=(
+                    f"활성 label {activated_count}개 "
+                    f"(학습 최댓값 {self.max_trained_labels}개 이상)"
+                ),
                 category="OOD_Label_Count",
             )
         if any(kw in clean_input for kw in self.status_kw):

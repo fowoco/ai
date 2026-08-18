@@ -1,0 +1,95 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONPATH: .
+  FOWOCO_ENV_FILE: /dev/null
+  FOWOCO_CLOVA_OCR_ENABLED: "false"
+  FOWOCO_INTENT_MODEL_ENABLED: "false"
+  FOWOCO_INTENT_ENABLE_AX: "false"
+  FOWOCO_INTENT_WARMUP_ON_START: "false"
+  FOWOCO_INTENT_WARMUP_REQUIRED: "false"
+
+jobs:
+  core:
+    name: Core pytest · App Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.5"
+          enable-cache: true
+
+      - name: Install core test dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Lint app and tests
+        run: uv run ruff check app tests
+
+      - name: Run deterministic core tests
+        run: >-
+          uv run pytest
+          -m "not qdrant_integration and not language_models and not rhwp_integration and not windows_ocr"
+
+  qdrant-contract:
+    name: Qdrant contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.5"
+          enable-cache: true
+
+      - name: Install retrieval dependencies
+        run: uv sync --frozen --extra dev --extra language-retrieval
+
+      - name: Run Qdrant contract tests
+        run: >-
+          uv run pytest
+          tests/integration/language/test_qdrant_retrieval.py
+          tests/integration/language/test_runtime_composition.py
+          -m qdrant_integration
+
+  windows-ocr-contract:
+    name: Windows OCR script contract
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.5"
+          enable-cache: true
+
+      - name: Install test dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Run PowerShell OCR contract tests
+        run: uv run pytest tests/ocr/test_smoke_script.py -m windows_ocr
