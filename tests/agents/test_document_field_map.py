@@ -2,6 +2,7 @@
 from pathlib import Path
 
 from app.agents.workflow_graph.document_field_map import (
+    document_field_statuses,
     map_employment_extension_application,
     map_identity_guaranty,
     map_immigration_integrated_application,
@@ -12,6 +13,8 @@ from app.agents.workflow_graph.document_field_map import (
 from app.agents.workflow_graph.nodes import document_generator
 from app.agents.workflow_graph.nodes.document_generator import EditingServiceDocumentGenerator
 from app.agents.workflow_graph.state import empty_renewal_state
+from app.documents.common import DocumentFormat
+from app.documents.editing.models import DocumentMutationResult
 
 
 # 매핑·생성 검증용 샘플 Shared State
@@ -59,6 +62,38 @@ def test_labor_contract_mapping_uses_slots_and_company() -> None:
     assert values["contract_months"] == "12"
 
 
+def test_labor_contract_mapping_fills_body_from_renewal_slots() -> None:
+    """재갱신의 계약 슬롯은 표준근로계약서 본문 필드로도 전달된다."""
+    state = _sample_state()
+    state["slots"].update(
+        {
+            "working_hours": "09시 00분 ~ 18시 00분",
+            "daily_overtime_hours": "2",
+            "daily_overtime_limit": "4",
+            "recess_minutes": "60",
+            "monthly_wage": "2,500,000",
+            "base_wage": "2,400,000",
+            "fixed_allowances": "식대 수당: 100,000원",
+            "bonus": "0",
+            "probation_wage_detail": "2,250,000원, 3개월 이내 근무기간 2,400,000원",
+            "payment_date_detail": (
+                "매월 (25)일 또는 매주 (금)요일. 다만, 임금 지급일이 "
+                "공휴일인 경우에는 전날에 지급함."
+            ),
+            "accommodation_cost": "50,000",
+            "meal_cost": "30,000",
+        }
+    )
+
+    values = map_standard_labor_contract(state)
+
+    assert values["working_hours"] == "09시 00분 ~ 18시 00분"
+    assert values["monthly_wage"] == "2,500,000"
+    assert values["daily_overtime_limit"] == "4"
+    assert values["payment_date_detail"].startswith("매월 (25)일")
+    assert values["accommodation_cost"] == "50,000"
+
+
 # 통합신청서 매핑이 체류연장 체크와 성·이름·생년월일을 채운다
 def test_immigration_mapping_sets_stay_extension_and_name_parts() -> None:
     values = map_immigration_integrated_application(_sample_state())
@@ -92,6 +127,27 @@ def test_values_for_template_dispatches() -> None:
     assert values_for_template("unknown_template", state) == {}
 
 
+def test_template_slot_value_fills_a_field_not_in_the_handwritten_mapper() -> None:
+    """HR가 보충한 템플릿 필드는 개별 mapper 목록 밖이어도 문서에 전달한다."""
+    state = _sample_state()
+    state["slots"]["school_name"] = "FOWOCO Korean Academy"
+
+    values = values_for_template("immigration_integrated_application_v34", state)
+
+    assert values["school_name"] == "FOWOCO Korean Academy"
+
+
+def test_document_field_statuses_exclude_assets_and_expose_empty_text_fields() -> None:
+    """시연 화면은 사진·서명을 빼되, 비어 있는 텍스트 템플릿 필드는 숨기지 않는다."""
+    statuses = document_field_statuses(_sample_state())
+    immigration = statuses["immigration_integrated_application_v34"]
+
+    assert "photo" not in immigration["fields"]
+    assert "applicant_signature" not in immigration["fields"]
+    assert "passport_number" in immigration["filled_fields"]
+    assert "passport_issue_date" in immigration["empty_text_fields"]
+
+
 # 실생성기가 필수 4종 초안을 만들고 매핑 필드를 남긴다
 def test_editing_generator_maps_and_generates_or_stubs(tmp_path: Path) -> None:
     gen = EditingServiceDocumentGenerator(output_dir=tmp_path)
@@ -108,6 +164,41 @@ def test_editing_generator_maps_and_generates_or_stubs(tmp_path: Path) -> None:
     if labor["status"] == "generated":
         assert Path(labor["path"]).exists()
         assert labor["changed_fields"]
+
+
+def test_editing_generator_reports_generated_document_format(tmp_path: Path) -> None:
+    class SuccessfulEditing:
+        def generate(
+            self,
+            template_id: str,
+            document_format: DocumentFormat,
+            destination: Path,
+            *,
+            values: dict[str, object] | None = None,
+            **_: object,
+        ) -> DocumentMutationResult:
+            destination.touch()
+            return DocumentMutationResult(
+                destination,
+                document_format,
+                template_id,
+                tuple(values or {}),
+            )
+
+    state = empty_renewal_state(
+        task_id="task-generator-format",
+        request_id="req-generator-format",
+        instruction="체류기간 연장 갱신",
+        slots={"full_name": "NGUYEN VAN AN"},
+    )
+    docs = EditingServiceDocumentGenerator(
+        SuccessfulEditing(),
+        output_dir=tmp_path,
+        template_ids=("standard_labor_contract_v6",),
+    )(state)
+
+    assert docs[0]["status"] == "generated"
+    assert docs[0]["format"] == "hwp"
 
 
 # 사전 계산된 템플릿 계획이 있으면 재매핑하지 않고 그대로 생성에 쓴다

@@ -1,0 +1,14 @@
+{
+  "documentType": "ARC",
+  "filename": "demo-alien-registration-card.json",
+  "fields": {
+    "alien_registration_number": "900101-1234567",
+    "stay_expiration_date": "2026-10-02",
+    "residence_address_1": "경기도 안산시 단원구 산단로 000"
+  },
+  "hints": {
+    "submissionStatus": "RECEIVED",
+    "source": "language_assistant_demo",
+    "notice": "DEMO / NOT VALID"
+  }
+}

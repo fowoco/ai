@@ -11,12 +11,22 @@ from ..status import TaskStatus
 from ..supervisor import decide_route
 
 
-# DB에서 worker/company 조회 후 slots 선채움
+# Server 스냅샷이 있으면 그대로 쓰고, 직접 호출일 때만 로컬 lookup으로 보완
 def load_context(state: RenewalState, *, lookup: Any) -> dict[str, Any]:
     worker_id = state.get("worker_id")
     company_id = state.get("company_id")
-    worker = lookup.get_worker(worker_id) if worker_id else None
-    company = lookup.get_company(company_id) if company_id else None
+    supplied_worker = state.get("worker_record")
+    supplied_company = state.get("company_record")
+    worker = (
+        dict(supplied_worker)
+        if isinstance(supplied_worker, dict)
+        else (lookup.get_worker(worker_id) if worker_id else None)
+    )
+    company = (
+        dict(supplied_company)
+        if isinstance(supplied_company, dict)
+        else (lookup.get_company(company_id) if company_id else None)
+    )
     slots = dict(state.get("slots") or {})
     if worker:
         for key in ("worker_id", "stay_expiry_date", "contract_end_date", "display_name"):

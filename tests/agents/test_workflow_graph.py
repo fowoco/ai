@@ -1,6 +1,8 @@
 ﻿"""재갱신 LangGraph 오케스트레이터 유닛 테스트."""
 
 from app.agents.workflow_graph import RenewalOrchestrator
+from app.agents.workflow_graph.init_state import init_renewal_state_from_bundle
+from app.agents.workflow_graph.nodes.actions import load_context
 from app.agents.workflow_graph.nodes.document_generator import (
     RENEWAL_DRAFT_TEMPLATE_IDS,
     StubDocumentGenerator,
@@ -22,6 +24,38 @@ def _filled_renewal_slots() -> dict[str, str]:
     for key in CONTRACT_SLOTS:
         slots[key] = f"stub-{key}"
     return slots
+
+
+def test_load_context_keeps_server_company_snapshot_before_document_mapping() -> None:
+    """Server가 tenant 범위에서 보낸 회사 스냅샷은 AI 로컬 fallback으로 대체하지 않는다."""
+    state = init_renewal_state_from_bundle(
+        request_id="req-server-company",
+        instruction="체류기간 연장 갱신",
+        worker_id="worker-server-1",
+        company_id="company-server-1",
+        worker={"worker_id": "worker-server-1", "display_name": "응웬반A"},
+        company={
+            "company_id": "company-server-1",
+            "name": "Server Company",
+            "employer_name": "김대표",
+        },
+    )
+    lookup = InMemoryDb(
+        companies={
+            "company-server-1": {
+                "name": "stale local fallback",
+                "employer_name": "잘못된 대표자",
+            }
+        }
+    )
+
+    context = load_context(state, lookup=lookup)
+
+    assert context["company_record"] == {
+        "company_id": "company-server-1",
+        "name": "Server Company",
+        "employer_name": "김대표",
+    }
 
 
 def test_expiry_renewal_without_guide_routes_to_review() -> None:
