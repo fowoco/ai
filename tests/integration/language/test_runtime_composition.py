@@ -97,6 +97,7 @@ def test_factory_selects_native_adapter_for_ollama_provider() -> None:
     assert isinstance(generator, OllamaGenerationPort)
 
 
+@pytest.mark.qdrant_integration
 def test_factory_selects_hybrid_retriever_when_qdrant_is_configured() -> None:
     from app.agents.language.composition import _build_production_ports
 
@@ -112,6 +113,7 @@ def test_factory_selects_hybrid_retriever_when_qdrant_is_configured() -> None:
     assert isinstance(retriever, HybridEpsRetriever)
 
 
+@pytest.mark.qdrant_integration
 def test_factory_wires_fixed_revision_reranker_when_qdrant_is_configured(
     tmp_path: Path,
 ) -> None:

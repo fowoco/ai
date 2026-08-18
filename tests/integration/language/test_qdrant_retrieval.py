@@ -6,6 +6,8 @@ from app.agents.language.queries import SearchQuery
 from app.agents.language.retrieval.models import ExpectedIndexContract, HybridVector
 from app.agents.language.retrieval.qdrant_store import QdrantStore
 
+pytestmark = pytest.mark.qdrant_integration
+
 
 @pytest.fixture
 def expected_contract() -> ExpectedIndexContract:

@@ -6,6 +6,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from uuid import UUID
 
+import pytest
+
+pytestmark = [
+    pytest.mark.windows_ocr,
+    pytest.mark.skipif(
+        shutil.which("powershell") is None and shutil.which("pwsh") is None,
+        reason="PowerShell is unavailable on this operating system",
+    ),
+]
+
 
 def _powershell() -> str:
     executable = shutil.which("powershell") or shutil.which("pwsh")

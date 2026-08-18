@@ -51,7 +51,12 @@ def to_public_status(status: str | None) -> str:
 
 ALLOWED_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
     TaskStatus.DRAFT: frozenset(
-        {TaskStatus.NEEDS_INFO, TaskStatus.READY_FOR_REVIEW, TaskStatus.WAITING_WORKER, TaskStatus.CANCELLED}
+        {
+            TaskStatus.NEEDS_INFO,
+            TaskStatus.READY_FOR_REVIEW,
+            TaskStatus.WAITING_WORKER,
+            TaskStatus.CANCELLED,
+        }
     ),
     TaskStatus.NEEDS_INFO: frozenset(
         {
