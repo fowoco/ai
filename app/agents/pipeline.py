@@ -30,6 +30,7 @@ _INTENT_TAG_SUFFIX = re.compile(r",\s*[A-Z][A-Z0-9_]+\s*$")
 _NAME_STOP_PREFIXES = (
     "체류",
     "계약",
+    "재계약",
     "서류",
     "급여",
     "연장",

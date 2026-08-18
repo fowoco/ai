@@ -122,6 +122,24 @@ def test_plan_strips_trailing_josa_from_target_display_name() -> None:
     assert res.context_requirement.target_display_name == "속 체아"
 
 
+def test_plan_stops_target_name_before_renewal_action() -> None:
+    pipe = AnalysisPipeline(
+        intent_agent=_FakeIntent(intent="EXPIRY_RENEWAL", workflow_id="WF-STY-001")
+    )
+    res = pipe.run(
+        AnalysisRequest(
+            requestId=str(uuid4()),
+            phase="PLAN",
+            analysisInput=AnalysisInput(
+                instruction="응웬반A 재계약하고 체류연장 준비해줘"
+            ),
+        )
+    )
+
+    assert res.context_requirement is not None
+    assert res.context_requirement.target_display_name == "응웬반A"
+
+
 def test_plan_does_not_truncate_names_ending_in_a_particle_like_syllable() -> None:
     # "리웨이"처럼 마지막 음절이 조사(이/가 등)와 우연히 겹치는 음역 인명은
     # 잘라내면 안 된다. "웨"(받침 없음) 뒤에 "이"(받침 있는 음절 뒤에만 오는

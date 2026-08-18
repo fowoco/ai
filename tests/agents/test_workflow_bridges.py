@@ -132,6 +132,9 @@ def test_language_guide_bridge_none_service_uses_placeholder() -> None:
     state = empty_renewal_state(task_id="t1", request_id="r1", instruction="체류연장")
     patch = LanguageGuideBridge(service=None)(state)
     assert "language_assistant" not in patch
+    assert patch["guide_review_required"] is True
+    assert patch["guide_failure_code"] == "LANGUAGE_ASSISTANT_NOT_CONFIGURED"
+    assert patch["worker_request_message"] is None
     assert patch["step"]
     assert patch["active_subgraph"] == "language"
 
@@ -151,4 +154,7 @@ def test_language_guide_bridge_invoke_error_falls_back() -> None:
     )
     patch = LanguageGuideBridge(service=_Boom())(state)
     assert "language_assistant" not in patch
+    assert patch["guide_review_required"] is True
+    assert patch["guide_failure_code"] == "LANGUAGE_ASSISTANT_INVOCATION_FAILED"
+    assert patch["worker_request_message"] is None
     assert patch["active_subgraph"] == "language"

@@ -20,8 +20,8 @@ def _filled_renewal_slots() -> dict[str, str]:
     return slots
 
 
-def test_expiry_renewal_routes_to_waiting_worker() -> None:
-    """신분 슬롯이 비면 근로자 서류(WAITING_WORKER)로 간다."""
+def test_expiry_renewal_requires_guide_review_when_language_is_unavailable() -> None:
+    """안내 생성기가 없으면 내부 키를 보내지 않고 HR 검토로 멈춘다."""
     orch = RenewalOrchestrator(lookup=InMemoryDb(), store=InMemoryDb())
     state = orch.run(
         request_id="req-1",
@@ -31,8 +31,11 @@ def test_expiry_renewal_routes_to_waiting_worker() -> None:
     )
     assert state["intent"] == "EXPIRY_RENEWAL"
     assert state["scenario"] == "ask_worker"
-    assert state["outcome"] == "WAITING_WORKER"
-    assert state["worker_request_message"]
+    assert state["outcome"] == "REVIEW_REQUIRED"
+    assert state["worker_request_message"] is None
+    assert state["guide_review_required"] is True
+    assert state["guide_failure_code"] == "LANGUAGE_ASSISTANT_NOT_CONFIGURED"
+    assert "REVIEW_WORKER_GUIDE" in state["case_signals"]
     assert "passport_number" in state["missing_slots"]
 
 
@@ -165,19 +168,23 @@ def test_ask_worker_passes_through_guide_placeholder() -> None:
     )
 
 
-def test_supervisor_document_combo_on_waiting_worker() -> None:
-    """신분 부족 시 documentValidation·caseSignals가 채워진다."""
+def test_supervisor_document_combo_requires_worker_guide_review() -> None:
+    """신분 서류가 부족하고 안내문이 없으면 HR 검토로 안전하게 전환한다."""
     orch = RenewalOrchestrator()
     state = orch.run(
         request_id="req-combo",
         instruction="체류기간 연장 갱신",
         worker_id="worker-001",
     )
-    assert state["outcome"] == "WAITING_WORKER"
+    assert state["outcome"] == "REVIEW_REQUIRED"
+    assert state["status"] == "READY_FOR_REVIEW"
+    assert state["worker_request_message"] is None
+    assert state["guide_review_required"] is True
+    assert state["guide_failure_code"] == "LANGUAGE_ASSISTANT_NOT_CONFIGURED"
     assert state.get("document_validation", {}).get("combo") in {
         "both_missing",
         "passport_only",
         "alien_only",
         "partial_unknown",
     }
-    assert state.get("case_signals")
+    assert "REVIEW_WORKER_GUIDE" in (state.get("case_signals") or [])
