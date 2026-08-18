@@ -4,192 +4,213 @@
   <a href="https://github.com/fowoco/ai/actions/workflows/deploy.yml"><img alt="AI Deploy" src="https://github.com/fowoco/ai/actions/workflows/deploy.yml/badge.svg?branch=main"></a>
 </p>
 
-E-9 외국인근로자 고용 업무를 돕는 AI 서버입니다.
+E-9 외국인근로자를 고용한 사업장의 재계약·체류기간 연장 업무를 분석하고,
+담당자가 검토할 안내문과 문서 초안을 만드는 FastAPI 기반 AI Runtime입니다.
 
-담당자가 입력한 문장을 이해하고, 재계약·체류기간 연장에 필요한 다음 업무를 안내합니다.<br>
-여권·외국인등록증의 정보를 읽어 HWP 문서 초안을 만들고, 외국인근로자에게 필요한
-안내문을 쉬운 한국어와 15개 언어로 제공합니다.
+> AI는 HR 업무를 대신 승인하거나 제출하지 않습니다. AI가 만드는 것은 **분석 결과와
+> 초안**이며, 사용자·사업장 권한, 공식 업무 상태, 파일 저장, 승인과 감사 이력은
+> FOWOCO Server가 통제합니다.
 
-## AI Team
+## 프로젝트 한눈에 보기
 
-| 담당 | 담당 영역 | 주요 작업 |
+| 영역 | 구현 내용 | 실제 Provider 조건 |
 | --- | --- | --- |
-| 이휘 | AI 워크플로 설계·통합 | 메인 그래프, 슈퍼바이저, 재갱신 워크플로, Server·MCP 연동 |
-| 박태정 | Language Assistant·HWPX MCP | 다국어 안내, EPS 검색·생성 파이프라인, HWPX MCP 설계·구현 |
-| 안주현 | OCR·문서 매핑 | 여권·외국인등록증 인식, CLOVA 연동, 인식 정보 정리, OCR 결과·문서 입력 칸 연결 |
+| Intent 분석 | BERT 우선 분류, Guardrail, 필요 시 A.X 보완, PLAN 결정 재사용 | Hugging Face 모델과 토큰을 설정해야 실제 모델 사용 |
+| Renewal Agent | LangGraph로 HR 질문·근로자 요청·OCR·문서 생성 분기 | Server가 검증된 Worker·Company·Task Context 제공 |
+| Language Assistant | 표준 한국어·쉬운 한국어·15개 대상 언어 안내 초안과 검토 경고 | OpenAI 호환 LLM, 선택적으로 Qdrant 필요 |
+| OCR | 여권·외국인등록증 Template OCR 결과 정규화 | CLOVA OCR URL·Secret 필요 |
+| 문서 처리 | 재갱신 HWP 초안 4종, HWP/HWPX 검사·편집·변환 | 변환별 Java·rhwp·LibreOffice 실행환경 필요 |
+| 안전 처리 | 누락정보·낮은 신뢰도·Provider 실패를 HR 검토 상태로 반환 | 자동 승인·자동 발송·업무 DB 직접 수정 금지 |
 
-## AI 주요 기능
+환경변수를 설정하지 않은 선택 기능은 Stub 또는 명시적인 `503`으로 동작합니다.
+따라서 “코드가 존재함”과 “실제 Provider가 활성화됨”을 구분해 확인해야 합니다.
 
-| AI 주요 기능 | 결과 |
-| --- | --- |
-| 자연어 요청에서 업무 의도와 필요 정보 분석 | 업무 유형·입력값·누락정보 |
-| 재갱신 업무 흐름과 분기 실행 | 다음 행동·진행 상태 |
-| 표준 한국어·쉬운 한국어·15개 언어 생성 | 근로자 안내문·검토 경고 |
-| CLOVA OCR로 신분서류 인식 | 정리된 여권·외국인등록증 정보 |
-| 재갱신 필수 양식에 업무 데이터 자동 기입 | HWP 문서 초안 4종 |
-| HWP·HWPX 검사·편집·변환 | 문서 분석 결과·변환 파일 |
-| HWPX MCP 승인 편집·시각 비교 | 검증된 최종 HWPX·검토 요청 |
+## 저장소 경계
 
-## Server·Knowledge 연결
+FOWOCO는 모델이 업무 시스템을 직접 조작하지 않도록 저장소별 책임을 분리합니다.
 
-```mermaid
-flowchart LR
-    K["Knowledge<br/>업무 유형·필요 정보·처리 기준"]
-    A["FOWOCO AI<br/>분석·안내·문서 생성"]
-    S["Server<br/>업무 요청·근로자·사업장 정보"]
+| 저장소 | 소유하는 것 | 소유하지 않는 것 |
+| --- | --- | --- |
+| `ai` | Prompt, 모델 라우팅, Agent 판단, OCR·언어·문서 Tool 조합 | 로그인, 사업장 권한, 공식 업무 상태, 감사로그 |
+| `server` | 인증·tenant, Worker·Task·Case, 승인, FileStorage, 실행 이력 | Prompt와 Provider SDK, 모델 내부 판단 |
+| `knowledge` | Intent·Workflow·Slot의 canonical ID, 공식 근거, 평가 데이터 | 실행 상태와 사용자 권한 |
+| `client` | HR·근로자 화면, 질문·검토·승인 입력 | AI 결과의 최종 확정 |
 
-    K -->|"업무 기준 제공"| A
-    S -->|"업무 요청과 필요한 정보 전달"| A
-    A -->|"분석·안내·문서 생성 결과 반환"| S
-```
+AI는 운영 DB에 SQL을 만들거나 직접 접근하지 않습니다. PLAN에서 필요한
+`requestedFieldKeys`를 반환하면 Server가 allow-list와 `company_id` 권한을 검사해
+필요한 값만 ANALYZE 또는 Renewal 요청에 보충합니다. `app/db`는 로컬·테스트용
+인메모리 Adapter이며 운영 업무 데이터의 기준이 아닙니다.
 
-- Analyses: BERT/A.X Intent + PLAN 결정 재사용 + Catalog 필수슬롯·Knowledge 모호표현 ([docs/analyses-contract.md](docs/analyses-contract.md))
-- Workflows: 재갱신 LangGraph — 슈퍼바이저 → 안내문(태정) / OCR(주현) / 초안 4종 — [docs/workflows-contract.md](docs/workflows-contract.md)
-- Language Assistant: 외국인근로자 15개 언어 번역, 쉬운 한국어 변환 및 표준 한국어 생성 — [docs/contracts/language-assistant-http-request.schema.json](docs/contracts/language-assistant-http-request.schema.json)
-- 최종 흐름도: [app/agents/workflow_graph/README.md](app/agents/workflow_graph/README.md)
+## Tool·Agent·Server 통제
 
-## 문서 API
+기능 이름이 “Agent”라는 이유로 모든 결정을 모델에 맡기지 않습니다.
 
-문서 API는 책임별로 분리한다.
+| 구분 | 예시 | 책임 |
+| --- | --- | --- |
+| Tool | CLOVA OCR 호출, Qdrant 검색, HWP/HWPX 생성·변환 | 정해진 입력을 실행하고 구조화된 결과 반환 |
+| Agent 판단 | Intent 후보, 누락 Slot, 다음 분기, 안내문 초안 | 선택 이유·결과·경고를 응답하되 상태를 직접 확정하지 않음 |
+| Server 통제 | tenant 조회, Workflow ID 검증, HR 승인, Task 전이, 파일·감사 저장 | AI 결과를 신뢰하기 전에 재검증하고 실제 업무 반영 여부 결정 |
+
+이 경계 덕분에 Provider가 실패하거나 모델 판단이 바뀌어도 승인·증빙·업무 상태는
+Server에서 일관되게 유지됩니다.
+
+## 대표 실행 흐름
 
 ```text
-GET  /api/v1/documents/templates
-GET  /api/v1/documents/templates/{template_id}
-POST /api/v1/documents/inspect
-POST /api/v1/documents/edit
-POST /api/v1/documents/generate
-POST /api/v1/documents/generate/from-txt
-POST /api/v1/documents/convert
-| 연결 대상 | AI로 전달 | AI에서 반환 |
-| --- | --- | --- |
-| Knowledge | 업무 유형, 필요한 정보, 처리 순서와 공식 근거 | 업무 분석과 안내문에 반영된 기준 |
-| Server | 담당자의 요청, 근로자·사업장 정보, 보유 문서 | 분석 결과, 다음 업무, 안내문, 인식 결과, HWP 초안 생성 결과 |
+HR 원문 입력
+→ Server가 AiRun 생성
+→ AI PLAN: 대표 Intent·Workflow와 필요한 field 결정
+→ Server가 PLAN 결정을 저장하고 허용된 Context만 조회
+→ AI ANALYZE: 저장된 결정을 재사용해 질문 또는 Candidate 생성
+→ Server가 Workflow 일치 여부를 검증
+→ HR이 Candidate 채택
+→ Server가 Renewal 실행 요청
+→ Agent가 HR 질문 / 근로자 요청 / OCR / 안내 / 문서 생성 분기
+→ Server가 초안과 파일을 저장
+→ HR 검토·승인 후에만 다음 업무 진행
+```
 
-## 현재 구현 기준
+### PLAN과 ANALYZE를 나눈 이유
 
-| 영역 | 현재 확인할 수 있는 내용 |
-| --- | --- |
-| 업무 분석 | 재갱신 업무 유형, 필수 정보, 누락·모호한 표현 확인 |
-| 업무 흐름 | 규칙 또는 AI를 이용한 다음 단계 선택, 안내·OCR·문서 생성 |
-| 다국어 안내 | 표준·쉬운 한국어와 15개 언어 안내, 관련 EPS 문장 검색 |
-| 신분서류 인식 | 여권·외국인등록증 정보 추출, 항목 정리와 정확도 제공 |
-| 문서 처리 | 재갱신 HWP 초안 4종 생성, HWP·HWPX 검사·편집·변환 |
-| HWPX 편집 | 입력 칸 탐색, 편집 승인, 원본·결과 화면 비교와 최종본 생성 |
-| 실행 환경 | FastAPI, Qdrant, HWP MCP의 Docker Compose 구성 |
+PLAN은 “무슨 업무이며 어떤 정보가 필요한가”를 결정하고, ANALYZE는 Server가 보충한
+정보로 “어떤 업무카드를 제안할 것인가”를 만듭니다. ANALYZE가 Intent 모델을 다시
+호출하지 않도록 `plannedIntent`와 `plannedWorkflowId`를 재사용해 결과 불일치와
+중복 모델 호출을 줄였습니다.
 
-## 전체 흐름
+- `detectedIntent`: `EXPIRY_RENEWAL`처럼 사용자의 업무 의도
+- `workflowId`: `WF-STY-001`처럼 Knowledge가 정의한 실행 절차 ID
+- `confidence`: 모델이 확률을 제공할 때만 사용하며, A.X처럼 제공하지 않으면 `null`
+- `evidence`: 모델이 근거 구간을 제공할 때만 사용하며 없으면 `null`
+
+상세 계약은 [업무 분석 계약](docs/analyses-contract.md)과
+[재갱신 Workflow 계약](docs/workflows-contract.md)을 기준으로 합니다.
+
+### Renewal Agent 분기
 
 ```mermaid
 flowchart TB
-    subgraph Renewal["재갱신 업무"]
-        direction TB
-        A["업무 요청"] --> B["업무 유형·필요 정보 분석<br/>누락정보 확인"]
-        B --> C["다음 단계 선택"]
-        C -->|"신분서류 부족"| D["다국어 안내 생성"]
-        D --> D1["근로자 서류 요청"]
-        C -->|"업무정보 부족"| E["담당자 입력 요청"]
-        C -->|"업로드 서류 있음"| F["신분서류 OCR"]
-        F --> G["인식 결과와 업무 정보 통합"]
-        C -->|"생성정보 충분"| H["HWP 초안 4종 생성"]
-        G --> H
-        H --> I["HWP 초안 검토 요청"]
-        C -->|"지원 범위 밖"| J["범위 밖 처리"]
-
-        D1 --> R["Server 응답"]
-        E --> R
-        I --> R
-        J --> R
-    end
-
-    subgraph Hwpx["범용 HWPX 초안 편집"]
-        direction TB
-        K["HWPX 초안"] --> L["문서 구조·필드 분석"]
-        L --> M["입력 필드 매핑"]
-        M --> N["사용자 입력 확인"]
-        N --> O["편집 계획 승인"]
-        O --> P["HWPX 편집 적용"]
-        P --> Q["구조·렌더 비교"]
-        Q --> V["Vision 검증"]
-        V --> W["최종 HWPX"]
-    end
+    R["Renewal 요청"] --> S["Slot·서류 상태 확인"]
+    S -->|"HR 입력 부족"| H["ask_hr"]
+    S -->|"근로자 서류 부족"| W["ask_worker"]
+    S -->|"검토할 신분서류"| O["OCR Tool"]
+    O --> V["HR OCR 검토"]
+    S -->|"필수정보 충족"| D["문서 생성 Tool"]
+    W --> L["Language Assistant 초안"]
+    H --> X["Server 응답"]
+    L --> X
+    V --> X
+    D --> X
 ```
 
-### 재갱신 요청 분기
+Provider 오류나 번역 검토가 필요한 경우 근로자용 임시 문장을 만들지 않습니다.
+`guideReviewRequired`, `guideFailureCode`, `workerRequestMessage=null`을 반환해 Server가
+HR 검토 경로로 전환하게 합니다. 생성 문서도 자동 승인·발송하지 않습니다.
 
-| 조건 | 처리 | 결과 |
+## 주요 API
+
+| Method | Path | 호출 주체·역할 |
 | --- | --- | --- |
-| 신분서류 부족 | 다국어 안내 생성 | 근로자 서류 요청 |
-| 계약·근무정보 부족 | 담당자 입력 요청 | 추가 입력이 필요한 항목 |
-| 인식할 신분서류가 있음 | 서류 정보 추출 후 HWP 생성 | HWP 초안 생성 결과 |
-| 생성정보 충분 | HWP 초안 바로 생성 | HWP 초안 생성 결과 |
-| 지원 범위 밖 | 워크플로 종료 | 범위 밖 안내 |
+| `POST` | `/internal/v1/analyses` | Server가 PLAN·ANALYZE 실행 |
+| `GET` | `/internal/v1/intent/status` | Intent 설정·모델 가용성 확인 |
+| `GET` | `/internal/v1/intent/readiness` | 모델 warmup 완료 여부 확인 |
+| `POST` | `/internal/v1/workflows/renewal/run` | Server가 Renewal Agent 실행 |
+| `POST` | `/internal/v1/ocr/worker-documents/{worker_document_id}` | Server가 선택한 신분서류 OCR 실행 |
+| `POST` | `/internal/v1/language-assistant` | 구조화된 근로자 안내 초안 생성 |
+| `GET` | `/api/v1/documents/capabilities` | 사용 가능한 문서 처리 기능 조회 |
+| `POST` | `/api/v1/documents/inspect` | HWP/HWPX 구조 검사 |
+| `POST` | `/api/v1/documents/edit` | 승인된 필드 편집 적용 |
+| `POST` | `/api/v1/documents/generate` | 재갱신 양식 초안 생성 |
+| `POST` | `/api/v1/documents/convert` | 지원 형식 간 변환 |
 
-문서 생성 결과에는 각 초안의 생성 여부, 파일 형식, 저장 위치와 입력된 항목이 포함됩니다.<br>
-문서를 만들지 못한 경우에도 입력값을 보존해 원인을 확인하고 다시 처리할 수 있습니다.
+로컬 Swagger는 애플리케이션 실행 후 [http://localhost:8000/docs](http://localhost:8000/docs)에서
+확인합니다. 분석·Intent 상태·Renewal·OCR 같은 Server 전용 운영 호출에는 Server와
+공유한 Bearer Token을 사용합니다.
 
-HWPX MCP는 양식 종류와 관계없이 기존 HWPX 초안에서 입력할 칸을 찾아냅니다.<br>
-사용자가 내용을 확인하고 승인하면 문서에 값을 채우고, 원본과 결과 화면을 비교한 뒤 최종본을 제공합니다.
-
-## 구성·연결
-
-| 구성 | 입력 | 처리 결과 | 연결 |
-| --- | --- | --- | --- |
-| 언어 처리 | 업무 요청·기본 정보 | 업무 유형·필요 정보·안내문 | 다음 단계 선택에 사용 |
-| OCR 처리 | 업로드 신분서류 | 여권·외국인등록증 정보 | 문서 생성에 사용 |
-| 문서 생성 | 업무 정보·OCR 결과 | 양식별 입력값·HWP 초안 4종 | 재갱신 결과로 반환 |
-| HWPX MCP | 편집할 HWPX 초안·사용자 입력 | 필드 매핑·승인 편집·시각 검증 | 최종 HWPX로 반환 |
-
-재갱신 문서는 `업무 정보 + OCR 결과 → 양식의 입력 칸 연결 → HWP 초안 4종` 순서로
-만듭니다.<br>
-HWPX 편집은 `문서 구조 분석 → 입력 칸 찾기 → 사용자 확인 → 승인된 내용 적용` 순서로
-진행합니다.
-
-## 아키텍처
-
-```mermaid
-flowchart LR
-    Server --> AI["FastAPI AI 서버"]
-    Knowledge["Knowledge<br/>업무 기준"] --> AI
-    AI --> LLM["External LLM"]
-    AI --> Qdrant["Qdrant"]
-    AI --> Clova["CLOVA OCR"]
-    AI --> Documents["HWP·HWPX Engine"]
-    AI --> MCP["HWPX MCP"]
-    MCP --> AI
-    AI --> Server
-```
-
-Server는 업무 정보를 전달하고 결과를 받습니다. Knowledge는 업무 기준을 제공하며,
-LLM은 문장 생성, Qdrant는 관련 문장 검색, CLOVA OCR은 신분서류 인식을 담당합니다.
-HWP·HWPX Engine과 HWPX MCP는 문서 생성·편집과 결과 검증을 처리합니다.
+## 코드 구조
 
 ```text
 app/
-├── main.py               FastAPI 진입점
-├── api/                  API·요청/응답 계약
-├── agents/               분석·워크플로·다국어 처리
-├── ocr/                  CLOVA OCR 연결·인식 정보 정리
-├── documents/            HWP·HWPX 생성·편집·변환
-├── db/                   업무 데이터 조회·저장 인터페이스
-└── core/                 환경설정·공통 기반
+├── main.py                 FastAPI 진입점
+├── api/                    HTTP 요청·응답 계약과 인증
+├── agents/
+│   ├── intent/             BERT·A.X 분류와 Guardrail
+│   ├── language/           안내문 생성·검증
+│   └── workflow_graph/     Renewal LangGraph 오케스트레이션
+├── ocr/                    CLOVA OCR Adapter와 결과 정규화
+├── documents/              HWP·HWPX 생성·검사·편집·변환
+├── db/                     로컬·테스트용 인메모리 Port 구현
+└── core/                   설정과 공통 기반
 
-hwp-editor/
-├── src/hwp_mcp/          HWPX 분석·필드 매핑·검증
-└── tests/                MCP 워크플로 검증
-
-docs/                     API·연동·운영 문서
-scripts/                  실행·모델·색인 도구
-tests/                    AI 서버 테스트
+hwp-editor/                 HWPX 필드 탐색·승인 편집·시각 검증 MCP
+docs/                       API·Provider·운영 계약
+tests/                      단위·계약·통합 테스트
 ```
 
-`api`가 요청을 받고 `agents`가 흐름을 결정합니다.<br>
-OCR과 문서 처리는 각각 `ocr`, `documents`가 실행하며, 범용 HWPX 편집·검증은 `hwp-editor`가 담당합니다.
+## 로컬 검증
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+cp .env.example .env
+uvicorn app.main:app --reload --port 8000
+```
+
+별도 터미널에서 다음을 실행합니다.
+
+```bash
+pytest
+ruff check app tests
+```
+
+실제 기능이 필요할 때만 선택 의존성과 Secret을 추가합니다.
+
+```bash
+pip install -e ".[intent]"              # Hugging Face Intent
+pip install -e ".[language-retrieval]"  # Qdrant 검색
+docker compose up --build                 # AI + Qdrant
+```
+
+실제 API Key·HF Token·CLOVA Secret은 `.env` 또는 배포 Secret에만 넣고 Git에
+커밋하지 않습니다. 전체 환경변수 이름과 opt-in 조건은 [.env.example](.env.example)을
+확인합니다.
+
+## 팀 협업과 기여
+
+| 개발자 | 주 담당 | 주요 구현 |
+| --- | --- | --- |
+| 이휘 | Agent Workflow | 메인 그래프, Supervisor, Renewal Workflow, Server·MCP 연결 기반 |
+| 박태정 | Language Assistant·HWPX MCP | 다국어 안내, EPS 검색·생성 Pipeline, HWPX 편집·검증 |
+| 안주현 | OCR·문서 매핑 | CLOVA OCR, 여권·외국인등록증 결과 정규화, 문서 필드 연결 |
+| 최현준 [`@hywznn`](https://github.com/hywznn) | Server–AI 계약·E2E 통합 | Intent와 canonical Workflow ID 분리, Knowledge A.X Prompt·PLAN 결정 재사용, OCR 계약 교정, Knowledge 0.3 Slot 반영, 체류만료 예외 Workflow, 실패 시 HR 검토 전환 |
+
+### `@hywznn` 교차 저장소 기여 하이라이트
+
+현준님은 Server에서 AI 결과를 통제된 HR Workflow로 연결하면서, AI 저장소의 계약과
+실행 결과가 실제 Server 흐름과 맞지 않는 지점을 직접 수정·검증했습니다.
+
+- [`#19`](https://github.com/fowoco/ai/pull/19): Intent와 `WF-STY-001` 같은 canonical Workflow ID를 분리
+- [`#23`](https://github.com/fowoco/ai/pull/23): OCR 날짜 파싱 실패 시 필드와 confidence 계약을 일치
+- [`#33`](https://github.com/fowoco/ai/pull/33): Knowledge A.X Prompt를 연결하고 PLAN 결정을 ANALYZE에서 재사용
+- [`#44`](https://github.com/fowoco/ai/pull/44): 안내 생성 실패를 자동 발송이 아닌 HR 검토로 전환
+- [`#52`](https://github.com/fowoco/ai/pull/52): Knowledge 0.3.0 Workflow·Slot 계약을 Agent에 반영
+- [`#57`](https://github.com/fowoco/ai/pull/57): 체류기간 만료 경과를 별도 검토 Workflow로 연결
+
+세부 변경은 [`@hywznn`의 병합 PR](https://github.com/fowoco/ai/pulls?q=is%3Apr+is%3Amerged+author%3Ahywznn)에서
+코드와 테스트 단위로 확인할 수 있습니다. OCR·Language·HWPX의 원래 담당 영역을
+대체했다는 의미가 아니라, 저장소 사이의 계약과 대표 시나리오를 완성한 교차 기여를
+명확히 기록한 것입니다.
 
 ## 주요 문서
 
-| 구분 | 문서 |
+| 찾는 내용 | 문서 |
 | --- | --- |
-| API | [API 안내](app/api/README.md) · [API 화면](http://localhost:8000/docs) |
-| AI 연동 | [Server 연결](docs/ai-runtime-handshake.md) · [업무 분석 규격](docs/analyses-contract.md) · [재갱신 흐름 규격](docs/workflows-contract.md) |
-| 다국어·OCR | [다국어 안내 운영](docs/language-assistant-operations.md) · [품질 평가](docs/evaluations/language-assistant-baseline.md) · [CLOVA OCR 연결](docs/clova-ocr-integration.md) |
-| 문서 처리 | [HWP·HWPX 처리](app/documents/README.md) · [HWPX 편집·검증](hwp-editor/README.md) |
+| Server 연결과 인증 | [AI Runtime Handshake](docs/ai-runtime-handshake.md) |
+| PLAN·ANALYZE 계약 | [Analyses Contract](docs/analyses-contract.md) |
+| Renewal Agent 계약 | [Workflows Contract](docs/workflows-contract.md) |
+| Slot 재보충 | [Slot Refill Contract](docs/slot-refill-contract.md) |
+| Language Assistant 운영 | [Language Assistant Operations](docs/language-assistant-operations.md) |
+| Language 품질 기준 | [Language Assistant Baseline](docs/evaluations/language-assistant-baseline.md) |
+| CLOVA OCR 연결 | [CLOVA OCR Integration](docs/clova-ocr-integration.md) |
+| HWP·HWPX 처리 | [Document Engine](app/documents/README.md) |
+| HWPX MCP | [HWP Editor](hwp-editor/README.md) |

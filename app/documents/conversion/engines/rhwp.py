@@ -1,4 +1,4 @@
-"""Adapter for the pinned rhwp HWPX-to-HWP conversion binary."""
+"""Adapter for the pinned rhwp document conversion binary."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import olefile
+from pypdf import PdfReader
+from pypdf.errors import PdfReadError
 
 from app.documents.conversion.errors import (
     ConversionEngineUnavailableError,
@@ -25,7 +27,7 @@ class RhwpNotAvailableError(ConversionEngineUnavailableError):
 
 @dataclass(frozen=True)
 class RhwpEngine:
-    """Run verified HWPX-to-HWP conversion in an isolated directory."""
+    """Run verified HWP/HWPX conversion in an isolated directory."""
 
     executable: str = "rhwp"
     timeout_seconds: int = 120
@@ -47,6 +49,8 @@ class RhwpEngine:
         return Path(resolved)
 
     def convert(self, source: str | Path, destination: str | Path) -> Path:
+        """Convert HWPX to a verified HWP 5.x document."""
+
         executable = self.require_available()
         source_path = Path(source).resolve()
         destination_path = Path(destination).resolve()
@@ -79,6 +83,48 @@ class RhwpEngine:
                     message = f"{message}: {details}"
                 raise DocumentConversionError(message)
             self._validate_hwp(output_path)
+            os.replace(output_path, destination_path)
+        return destination_path
+
+    def export_pdf(self, source: str | Path, destination: str | Path) -> Path:
+        """Render an HWP or HWPX document with rhwp's native PDF exporter."""
+
+        executable = self.require_available()
+        source_path = Path(source).resolve()
+        destination_path = Path(destination).resolve()
+        if not source_path.is_file():
+            raise FileNotFoundError(source_path)
+        if source_path.suffix.casefold() not in {".hwp", ".hwpx"}:
+            raise DocumentConversionError("rhwp PDF input must be HWP or HWPX")
+
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix=".rhwp-pdf-",
+            dir=destination_path.parent,
+        ) as temporary_directory:
+            working_directory = Path(temporary_directory)
+            input_path = working_directory / f"input{source_path.suffix.casefold()}"
+            output_path = working_directory / "output.pdf"
+            shutil.copy2(source_path, input_path)
+            completed = self._run(
+                [
+                    str(executable),
+                    "export-pdf",
+                    str(input_path),
+                    "--output",
+                    str(output_path),
+                    "--profile",
+                    "high-quality",
+                    "--text-as-paths",
+                ]
+            )
+            if not output_path.is_file():
+                details = self._details(completed)
+                message = "rhwp did not create the expected PDF"
+                if details:
+                    message = f"{message}: {details}"
+                raise DocumentConversionError(message)
+            self._validate_pdf(output_path)
             os.replace(output_path, destination_path)
         return destination_path
 
@@ -119,6 +165,32 @@ class RhwpEngine:
             raise DocumentConversionError("generated HWP has an invalid CFB container") from exc
         if signature != HWP5_SIGNATURE:
             raise DocumentConversionError("generated HWP has an invalid HWP 5.x signature")
+
+    @staticmethod
+    def _validate_pdf(output_path: Path) -> None:
+        """Validate the PDF container and every page, not only its signature."""
+
+        try:
+            with output_path.open("rb") as stream:
+                if stream.read(5) != b"%PDF-":
+                    raise DocumentConversionError("generated output is not a PDF document")
+                stream.seek(0)
+                document = PdfReader(stream, strict=True)
+                if document.is_encrypted:
+                    raise DocumentConversionError("generated PDF must not be encrypted")
+                if not document.pages:
+                    raise DocumentConversionError("generated PDF has no pages")
+                for page in document.pages:
+                    width = float(page.mediabox.width)
+                    height = float(page.mediabox.height)
+                    if width <= 0 or height <= 0:
+                        raise DocumentConversionError(
+                            "generated PDF contains a page with an invalid media box"
+                        )
+        except DocumentConversionError:
+            raise
+        except (PdfReadError, OSError, TypeError, ValueError) as exc:
+            raise DocumentConversionError("generated PDF has an invalid structure") from exc
 
     @staticmethod
     def _details(completed: subprocess.CompletedProcess[str]) -> str:

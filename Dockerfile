@@ -1,5 +1,7 @@
-# rhwp 공식 릴리스 바이너리를 체크섬으로 고정해 가져오는 빌드 단계
-FROM python:3.12-slim-trixie AS rhwp
+# rhwp Linux 공식 릴리스가 x86_64만 제공되므로 runtime platform도 amd64로 고정한다.
+# Apple Silicon 개발 환경에서는 Docker Desktop이 amd64 emulation으로 실행한다.
+ARG FOWOCO_RUNTIME_PLATFORM=linux/amd64
+FROM --platform=${FOWOCO_RUNTIME_PLATFORM} python:3.12-slim-trixie AS rhwp
 
 ADD --checksum=sha256:fe3dc818a44f2bc4d4a001311514ed399d46a1e752b3df0d6e9e2f2ac8058402 \
     https://github.com/edwardkim/rhwp/releases/download/v0.7.19/rhwp-v0.7.19-linux-x86_64.tar.gz \
@@ -12,7 +14,7 @@ RUN mkdir -p /opt/rhwp \
 # uv 바이너리 고정 버전 복사
 FROM ghcr.io/astral-sh/uv:0.7.20 AS uv
 
-FROM python:3.12-slim-trixie
+FROM --platform=${FOWOCO_RUNTIME_PLATFORM} python:3.12-slim-trixie
 
 # 컨테이너 작업 디렉터리
 WORKDIR /app
@@ -33,24 +35,27 @@ COPY --from=uv /uv /usr/local/bin/uv
 COPY --from=rhwp /opt/rhwp/rhwp /usr/local/bin/rhwp
 COPY --from=rhwp /opt/rhwp/LICENSE /usr/share/licenses/rhwp/LICENSE
 
-# COM 없이 HWPX를 읽고 PDF로 렌더링하는 headless 엔진과 한글 폰트
+# 문서 변환용 Java runtime과 PDF 렌더링용 한글 폰트
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         fonts-noto-cjk \
         default-jre-headless \
-        libreoffice-h2orestart \
-        libreoffice-writer \
     && rm -rf /var/lib/apt/lists/*
 
-# 의존성 정의 파일만 먼저 복사해 캐시를 활용
+# 의존성 정의 파일 + 앱 소스를 먼저 복사한다.
+# uv sync는 fowoco-ai 자기 자신도 빌드해서 site-packages에 설치하므로,
+# app/ 복사보다 먼저 실행되면 그 시점의 app/(없거나 이전 레이어 캐시의 내용)이
+# site-packages에 고정되고, 이후 COPY app ./app은 /app/app만 갱신할 뿐
+# 실제 uv run이 임포트하는 설치본은 계속 예전 코드로 남는다 — uv.lock이
+# 안 바뀌면 이 RUN 레이어가 캐시 히트되어 app/ 변경이 몇 주간 반영되지
+# 않았던 실제 배포 장애의 원인이었다. app/를 먼저 복사해 항상 최신 소스로
+# 빌드·설치되게 한다.
 COPY pyproject.toml uv.lock README.md ./
+COPY app ./app
+COPY scripts/download_language_models.py ./scripts/
 
 # uv.lock 기반 재현 가능 설치 — Language retrieval + Intent A.X runtime 포함
 RUN uv sync --frozen --no-dev --extra language-retrieval --extra intent-ax
-
-# 앱 패키지 복사
-COPY app ./app
-COPY scripts/download_language_models.py ./scripts/
 
 # 고정 revision의 검색 모델을 이미지에 포함해 런타임 다운로드를 없앤다.
 RUN /app/.venv/bin/python -m scripts.download_language_models \

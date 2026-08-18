@@ -6,14 +6,14 @@ from dataclasses import dataclass, field
 
 # Knowledge required_slots / workflow_catalog required_slots_ref 와 동일
 _BUILTIN_REQUIRED_SLOTS: dict[str, list[str]] = {
-    "WF-WRK-001": ["worker_id"],
-    "WF-STY-001": ["worker_id", "stay_expiry_date"],
-    "WF-CON-001": ["worker_id", "contract_end_date"],
-    "WF-DOC-001": ["worker_id", "document_type"],
-    "WF-PAY-001": ["worker_id", "pay_period"],
-    "WF-INS-001": ["worker_id"],
-    "WF-CHG-001": ["worker_id", "change_type"],
-    "WF-ADM-001": ["worker_id", "document_type"],
+    "WF-WRK-001": ["source_document_id"],
+    "WF-STY-001": ["worker_id", "due_at"],
+    "WF-CON-001": ["worker_id", "due_at"],
+    "WF-DOC-001": ["worker_id", "document_type", "due_at", "submission_channel"],
+    "WF-PAY-001": ["worker_id", "pay_period", "source_document_id"],
+    "WF-INS-001": ["worker_id", "effective_at", "work_action"],
+    "WF-CHG-001": ["worker_id", "change_type", "incident_at"],
+    "WF-ADM-001": ["worker_id", "document_type", "due_at"],
 }
 
 

@@ -6,26 +6,26 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from app.documents.common import DocumentFormat
-from app.documents.conversion.engines import LibreOfficeEngine
+from app.documents.conversion.engines import RhwpEngine
 from app.documents.conversion.errors import DocumentConversionError
 from app.documents.hwp5 import Hwp5BinaryDocument
 from app.documents.hwp5.editor import Hwp5Error
 
 
 class HwpToPdfConverter:
-    """Validate binary HWP and render it directly with LibreOffice."""
+    """Validate binary HWP and render it with rhwp."""
 
     source_format = DocumentFormat.HWP
     target_format = DocumentFormat.PDF
 
     def __init__(
         self,
-        executable: str | Path = "soffice",
+        executable: str | Path = "rhwp",
         *,
         timeout_seconds: int = 120,
-        engine: LibreOfficeEngine | None = None,
+        engine: RhwpEngine | None = None,
     ):
-        self.engine = engine or LibreOfficeEngine(
+        self.engine = engine or RhwpEngine(
             str(executable),
             timeout_seconds,
         )
@@ -45,11 +45,7 @@ class HwpToPdfConverter:
             Hwp5BinaryDocument(source)
         except (Hwp5Error, OSError) as exc:
             raise DocumentConversionError("invalid HWP 5.x input") from exc
-        return self.engine.export_pdf(
-            source,
-            destination,
-            input_filter="Hwp2002_File",
-        )
+        return self.engine.export_pdf(source, destination)
 
 
 __all__ = ["HwpToPdfConverter"]

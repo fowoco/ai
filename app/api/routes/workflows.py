@@ -3,6 +3,11 @@
 from fastapi import APIRouter, Depends
 
 from app.agents.slot_catalog import requested_fields_for_api
+from app.agents.workflow.expired_stay import (
+    EXPIRED_STAY_VARIANT,
+    EXPIRED_STAY_WORKFLOW_ID,
+    decide_expired_stay_exception,
+)
 from app.agents.workflow_graph import RenewalOrchestrator
 from app.api.dependencies import get_renewal_orchestrator
 from app.api.openapi import WORKFLOWS_TAG
@@ -29,6 +34,32 @@ async def run_renewal(
     orchestrator: RenewalOrchestrator = Depends(get_renewal_orchestrator),  # noqa: B008
 ) -> RenewalRunResponse:
     import asyncio
+
+    if request.variant == EXPIRED_STAY_VARIANT:
+        decision = decide_expired_stay_exception(request.stay_verification_status)
+        task_id = request.task_id or f"stay-verification-{request.worker_id or request.request_id}"
+        return RenewalRunResponse(
+            request_id=request.request_id,
+            attempt_id=request.attempt_id,
+            task_id=task_id,
+            intent="EXPIRY_RENEWAL",
+            workflow_id=EXPIRED_STAY_WORKFLOW_ID,
+            variant=EXPIRED_STAY_VARIANT,
+            next_action=decision.next_action,
+            legal_conclusion=None,
+            questions=decision.questions,
+            suggested_workflow_ids=decision.suggested_workflow_ids,
+            confidence=0.0,
+            status="READY_FOR_REVIEW",
+            outcome="REVIEW_REQUIRED",
+            scenario="ask_hr",
+            phase="PHASE_EXCEPTION_REVIEW",
+            step="VERIFY_STAY_STATUS",
+            slots=dict(request.slots),
+            case_signals=decision.case_signals,
+            supervisor_reason="Server가 확인한 체류상태를 HR 검토 흐름으로 연결",
+            supervisor_source="rules",
+        )
 
     # CPU·동기 LangGraph를 워커 스레드로 넘겨 FastAPI 이벤트 루프를 막지 않음
     state = await asyncio.to_thread(

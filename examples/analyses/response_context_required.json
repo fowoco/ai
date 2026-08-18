@@ -12,6 +12,7 @@
     "extractedSlots": {},
     "requiredFieldKeys": [
       "worker_id",
+      "due_at",
       "stay_expiry_date",
       "passport_status",
       "arc_status"
@@ -26,8 +27,8 @@
     "modelName": "skt/A.X-4.0-Light",
     "modelVersion": "AX",
     "promptVersion": "knowledge-25e778ad",
-    "contextPackVersion": "0.2.0",
-    "workflowCatalogVersion": "0.2.0",
+    "contextPackVersion": "0.3.0",
+    "workflowCatalogVersion": "0.3.0",
     "contractVersion": "1.1.0"
   },
   "providerAttemptCount": 1,

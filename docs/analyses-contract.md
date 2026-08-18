@@ -45,6 +45,7 @@ PLAN에는 `plannedIntent`, `plannedWorkflowId`, Worker context를 보내지 않
     "extractedSlots": {},
     "requiredFieldKeys": [
       "worker_id",
+      "due_at",
       "stay_expiry_date",
       "passport_status",
       "arc_status"
@@ -59,8 +60,8 @@ PLAN에는 `plannedIntent`, `plannedWorkflowId`, Worker context를 보내지 않
     "modelName": "skt/A.X-4.0-Light",
     "modelVersion": "AX",
     "promptVersion": "knowledge-25e778ad",
-    "contextPackVersion": "0.2.0",
-    "workflowCatalogVersion": "0.2.0",
+    "contextPackVersion": "0.3.1",
+    "workflowCatalogVersion": "0.3.1",
     "contractVersion": "1.1.0"
   },
   "providerAttemptCount": 1,
@@ -80,6 +81,8 @@ PLAN에는 `plannedIntent`, `plannedWorkflowId`, Worker context를 보내지 않
 - A.X가 여러 Intent를 반환해도 MVP 응답은 원문 등장 순서의 첫 Intent만 사용한다.
 - 같은 Intent에 여러 Knowledge Workflow가 있으면 발화/evidence의 업무 신호로 선택한다.
 - `EXPIRY_RENEWAL`의 체류 신호는 `WF-STY-001`, 계약·재계약·취업활동기간 연장·고용허가기간 연장 신호는 `WF-CON-001`이다.
+- `requiredFieldKeys`는 Server에 조회를 요청할 Context key다. 이 중 Workflow의 필수 Slot만 누락 질문을 만들며 선택 Slot 누락은 실행을 막지 않는다.
+- `WF-STY-001`에서 `worker_id`, `due_at`은 필수이고 `stay_expiry_date`, `passport_status`, `arc_status`는 선택 Context다.
 
 ## OUT_OF_SCOPE 응답
 
@@ -111,6 +114,7 @@ Server는 `OUT_OF_SCOPE`에서 Workflow 검증·DB 조회·ANALYZE 호출을 수
     "plannedWorkflowId": "WF-STY-001",
     "requestedFieldKeys": [
       "worker_id",
+      "due_at",
       "stay_expiry_date",
       "passport_status",
       "arc_status"
@@ -120,7 +124,10 @@ Server는 `OUT_OF_SCOPE`에서 Workflow 검증·DB 조회·ANALYZE 호출을 수
         "workerRef": "30000000-0000-0000-0000-000000000001",
         "requestedFields": {
           "worker_id": "30000000-0000-0000-0000-000000000001",
-          "stay_expiry_date": "2026-12-31"
+          "due_at": "2026-10-01T09:00:00+09:00",
+          "stay_expiry_date": "2026-12-31",
+          "passport_status": "VERIFIED",
+          "arc_status": "SUBMITTED"
         }
       }
     ]
@@ -135,6 +142,8 @@ Server는 `OUT_OF_SCOPE`에서 Workflow 검증·DB 조회·ANALYZE 호출을 수
 - `providerAttemptCount=0`은 ANALYZE에서 모델 호출이 없었음을 뜻한다.
 - `requestedFieldKeys`는 PLAN에서 요청한 전체 key다.
 - `workers[].requestedFields`에는 Server DB에서 실제로 찾은 값만 담는다.
+- 필수 `due_at`이 없으면 `NEEDS_INFO`로 HR 입력을 요청한다.
+- 선택 Context나 문서 상태가 없다는 이유만으로 `NEEDS_INFO`를 만들지 않는다.
 - MVP는 Worker 한 명과 대표 Intent/Workflow 한 쌍만 처리한다.
 
 ## ANALYZE 응답
@@ -154,6 +163,7 @@ Server는 `OUT_OF_SCOPE`에서 Workflow 검증·DB 조회·ANALYZE 호출을 수
   "workflowId": "WF-STY-001",
   "extractedSlots": {
     "worker_id": "30000000-0000-0000-0000-000000000001",
+    "due_at": "2026-10-01T09:00:00+09:00",
     "stay_expiry_date": "2026-12-31"
   },
   "missingSlots": [],
