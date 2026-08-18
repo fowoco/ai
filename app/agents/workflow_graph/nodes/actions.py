@@ -11,12 +11,22 @@ from ..status import TaskStatus
 from ..supervisor import decide_route
 
 
-# DB에서 worker/company 조회 후 slots 선채움
+# Server 스냅샷이 있으면 그대로 쓰고, 직접 호출일 때만 로컬 lookup으로 보완
 def load_context(state: RenewalState, *, lookup: Any) -> dict[str, Any]:
     worker_id = state.get("worker_id")
     company_id = state.get("company_id")
-    worker = lookup.get_worker(worker_id) if worker_id else None
-    company = lookup.get_company(company_id) if company_id else None
+    supplied_worker = state.get("worker_record")
+    supplied_company = state.get("company_record")
+    worker = (
+        dict(supplied_worker)
+        if isinstance(supplied_worker, dict)
+        else (lookup.get_worker(worker_id) if worker_id else None)
+    )
+    company = (
+        dict(supplied_company)
+        if isinstance(supplied_company, dict)
+        else (lookup.get_company(company_id) if company_id else None)
+    )
     slots = dict(state.get("slots") or {})
     if worker:
         for key in ("worker_id", "stay_expiry_date", "contract_end_date", "display_name"):
@@ -154,41 +164,17 @@ def mark_guide_placeholder(state: RenewalState) -> dict[str, Any]:
         "active_subgraph": "language",
         "phase": WorkflowPhase.VALIDATION_COMMUNICATION.value,
         "step": WorkflowStep.STEP_7_LANGUAGE_GUIDE.value,
+        "guide_review_required": True,
+        "guide_failure_code": "LANGUAGE_ASSISTANT_NOT_CONFIGURED",
+        "guide_message": None,
+        "worker_request_message": None,
     }
 
 
 # 근로자 서류 — 여권·등록증 요청 문구 (Language Assistant 결과 우선)
 def mark_ask_worker(state: RenewalState) -> dict[str, Any]:
-    if state.get("guide_review_required"):
-        signals = list(state.get("case_signals") or [])
-        if "REVIEW_WORKER_GUIDE" not in signals:
-            signals.append("REVIEW_WORKER_GUIDE")
-        events = append_progress(
-            state,
-            progress_event(
-                phase=WorkflowPhase.VALIDATION_COMMUNICATION,
-                step=WorkflowStep.STEP_5_CASE_SIGNAL,
-                message="근로자 안내문은 HR 검토 후 발송",
-                subgraph="main",
-            ),
-        )
-        return {
-            "scenario": "ask_worker",
-            "status": TaskStatus.READY_FOR_REVIEW.value,
-            "outcome": "REVIEW_REQUIRED",
-            "worker_request_message": None,
-            "guide_review_required": True,
-            "guide_failure_code": state.get("guide_failure_code")
-            or "WORKER_GUIDE_UNAVAILABLE",
-            "phase": WorkflowPhase.VALIDATION_COMMUNICATION.value,
-            "step": WorkflowStep.STEP_5_CASE_SIGNAL.value,
-            "case_signals": signals,
-            "progress_events": events,
-            "active_subgraph": "main",
-        }
-
     existing = state.get("worker_request_message")
-    if existing:
+    if existing and not state.get("guide_review_required"):
         events = append_progress(
             state,
             progress_event(
@@ -212,12 +198,14 @@ def mark_ask_worker(state: RenewalState) -> dict[str, Any]:
             "active_subgraph": "main",
         }
 
+    # 안내가 없거나 검토가 필요하면 내부 Slot/검증 키로 임시 문장을 만들지 않는다.
+    # Server는 REVIEW_WORKER_GUIDE 신호를 HR 검토 화면으로 연결해야 한다.
     events = append_progress(
         state,
         progress_event(
             phase=WorkflowPhase.VALIDATION_COMMUNICATION,
             step=WorkflowStep.STEP_5_CASE_SIGNAL,
-            message="근로자 안내문을 만들 수 없어 HR 검토 요청",
+            message="근로자 안내 검토 필요: 자동 발송 차단",
             subgraph="main",
         ),
     )
@@ -227,11 +215,12 @@ def mark_ask_worker(state: RenewalState) -> dict[str, Any]:
         "outcome": "REVIEW_REQUIRED",
         "worker_request_message": None,
         "guide_review_required": True,
-        "guide_failure_code": "WORKER_GUIDE_UNAVAILABLE",
+        "guide_failure_code": (
+            state.get("guide_failure_code") or "WORKER_GUIDE_UNAVAILABLE"
+        ),
         "phase": WorkflowPhase.VALIDATION_COMMUNICATION.value,
         "step": WorkflowStep.STEP_5_CASE_SIGNAL.value,
-        "case_signals": list(state.get("case_signals") or [])
-        + ["REVIEW_WORKER_GUIDE"],
+        "case_signals": ["REVIEW_WORKER_GUIDE"],
         "progress_events": events,
         "active_subgraph": "main",
     }
@@ -241,22 +230,13 @@ def mark_ask_worker(state: RenewalState) -> dict[str, Any]:
 def generate_docs(
     state: RenewalState, *, document_generator: Any | None = None
 ) -> dict[str, Any]:
+    from ..workers import DocumentAutomationAgent, ValidationReviewAgent
     from .document_generator import StubDocumentGenerator
 
     generator = document_generator or StubDocumentGenerator()
-    docs = generator(state)
-    return {
-        "scenario": "generate",
-        "generated_documents": docs,
-        "status": TaskStatus.READY_FOR_REVIEW.value,
-        "outcome": "REVIEW_REQUIRED",
-        "missing_slots": [],
-        "guide_message": None,
-        "worker_request_message": None,
-        "case_signals": ["GENERATE_DRAFTS", "READY_FOR_REVIEW"],
-        "phase": WorkflowPhase.EXTRACTION_DOCUMENT.value,
-        "step": WorkflowStep.STEP_13_DOCUMENT_DRAFT.value,
-    }
+    automated = DocumentAutomationAgent(generator)(state)
+    reviewed = ValidationReviewAgent()({**state, **automated})
+    return {**automated, **reviewed}
 
 
 # 근로자 서류 OCR 결과를 DB 어댑터에 저장 (부족해도 초안 작성으로 진행)

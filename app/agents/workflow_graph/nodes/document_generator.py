@@ -83,10 +83,11 @@ class EditingServiceDocumentGenerator:
         out_dir = self._output_dir or Path(tempfile.mkdtemp(prefix="fowoco-renewal-"))
         out_dir.mkdir(parents=True, exist_ok=True)
         template_ids = self._template_ids or draft_template_ids(state)
+        plans = state.get("document_field_values") or {}
         results: list[dict[str, Any]] = []
         for tid in template_ids:
             dest = out_dir / f"{tid}.hwp"
-            values = values_for_template(tid, state)
+            values = dict(plans[tid]) if tid in plans else values_for_template(tid, state)
             try:
                 mutation = self._editing.generate(
                     tid,

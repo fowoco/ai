@@ -3,13 +3,32 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from typing import Any
+
+from app.documents.hwp5.template_registry import Hwp5TemplateRegistry
 
 from .state import IDENTITY_SLOTS, RenewalState
 
 _DATE_PARTS = re.compile(
     r"(?P<y>\d{4})\D+(?P<m>\d{1,2})\D+(?P<d>\d{1,2})"
 )
+_ASSET_FIELD_TYPES = frozenset({"image", "photo", "signature"})
+
+
+@lru_cache(maxsize=1)
+def _template_registry() -> Hwp5TemplateRegistry:
+    return Hwp5TemplateRegistry()
+
+
+def editable_template_fields(template_id: str) -> dict[str, dict[str, object]]:
+    """사진·서명을 뺀 HWP 템플릿 필드 정의를 반환한다."""
+    template = _template_registry().get(template_id)
+    return {
+        name: dict(specification)
+        for name, specification in template.fields.items()
+        if str(specification.get("type", "text")) not in _ASSET_FIELD_TYPES
+    }
 
 
 # 첫 번째 truthy 값 반환
@@ -25,6 +44,64 @@ def _as_str(value: Any | None) -> str | None:
     if value is None or value == "":
         return None
     return str(value)
+
+
+def _english_working_hours(value: Any | None) -> str | None:
+    text = _as_str(value)
+    if not text:
+        return None
+    match = re.search(
+        r"(?P<from_h>\d{1,2})시\s*(?P<from_m>\d{1,2})분\s*~\s*"
+        r"(?P<to_h>\d{1,2})시\s*(?P<to_m>\d{1,2})분",
+        text,
+    )
+    if not match:
+        return text
+    return (
+        f"from ({int(match.group('from_h')):02d}:{int(match.group('from_m')):02d}) "
+        f"to ({int(match.group('to_h')):02d}:{int(match.group('to_m')):02d})"
+    )
+
+
+def _english_probation_wage(value: Any | None) -> str | None:
+    text = _as_str(value)
+    if not text:
+        return None
+    amounts = [
+        amount.replace("원", "").strip()
+        for amount in re.findall(r"\d[\d,]*원", text)
+    ]
+    if len(amounts) < 2:
+        return text
+    return (
+        f"{amounts[0]} won, but for up to the first 3 months of probation period: "
+        f"{amounts[1]} won"
+    )
+
+
+def _english_payment_date(value: Any | None) -> str | None:
+    text = _as_str(value)
+    if not text:
+        return None
+    month_day = re.search(r"매월\s*\(([^)]*)\)일", text)
+    weekday = re.search(r"매주\s*\(([^)]*)\)요일", text)
+    if not month_day or not weekday:
+        return text
+    weekday_names = {
+        "월": "Monday",
+        "화": "Tuesday",
+        "수": "Wednesday",
+        "목": "Thursday",
+        "금": "Friday",
+        "토": "Saturday",
+        "일": "Sunday",
+    }
+    day_name = weekday_names.get(weekday.group(1).strip(), weekday.group(1).strip())
+    return (
+        f"Every ({month_day.group(1)})th day of the month or every ({day_name}) day "
+        "of the week. If the payment date falls on a holiday, the payment will be "
+        "made on the day before the holiday."
+    )
 
 
 # 성·이름을 대략 분리 실패 시 given_names에 전체
@@ -93,59 +170,14 @@ def _passthrough_known_fields(
     return {k: v for k, v in slots.items() if k in field_names and v not in (None, "")}
 
 
-def _contract_period_fields(value: Any) -> dict[str, object]:
-    normalized = _as_str(value)
-    if not normalized:
-        return {}
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}\s*~\s*\d{4}-\d{2}-\d{2}", normalized):
-        start, end = (part.strip() for part in normalized.split("~", 1))
-        return {"contract_period": f"{start} ~ {end}"}
-    return {"contract_months": normalized}
-
-
-def _working_hours_summary(value: Any) -> str | None:
-    normalized = _as_str(value)
-    if not normalized:
-        return None
-    if re.fullmatch(r"\d+(?:\.\d+)?", normalized):
-        return f"주 {normalized}시간 (시작·종료 시각 HR 확인 필요)"
-    return normalized
-
-
-def _format_won(value: Any) -> str | None:
-    normalized = _as_str(value)
-    if not normalized:
-        return None
-    compact = normalized.replace(",", "")
-    if compact.isdigit():
-        return f"{int(compact):,}"
-    return normalized
-
-
 # 표준근로계약서에 넣을 값
 def map_standard_labor_contract(state: RenewalState) -> dict[str, object]:
     slots = _slots(state)
     company = _company(state)
-    fields = {
-        "enterprise_name",
-        "enterprise_phone",
-        "enterprise_address",
-        "employer_name",
-        "business_number",
-        "employee_name",
-        "employee_birthdate",
-        "employee_home_address",
-        "contract_months",
-        "industry",
-        "business_description",
-        "job_description",
-        "contract_date",
-        "work_place",
-        "working_hours_summary",
-        "monthly_normal_wage",
-        "accommodation_summary",
-    }
-    values: dict[str, object] = _passthrough_known_fields(slots, fields)
+    values: dict[str, object] = _passthrough_known_fields(
+        slots,
+        set(editable_template_fields("standard_labor_contract_v6")),
+    )
     _put(values, "employee_name", _first(slots.get("full_name"), slots.get("employee_name")))
     _put(
         values,
@@ -156,17 +188,18 @@ def map_standard_labor_contract(state: RenewalState) -> dict[str, object]:
     _put(
         values,
         "enterprise_address",
-        _first(company.get("address"), slots.get("enterprise_address")),
+        _first(slots.get("work_location"), company.get("address"), slots.get("enterprise_address")),
     )
-    values.update(
-        _contract_period_fields(
-            _first(slots.get("contract_period"), slots.get("contract_months"))
-        )
+    _put(
+        values,
+        "work_location",
+        _first(slots.get("work_location"), company.get("address"), slots.get("workplace_address")),
     )
-    _put(values, "work_place", slots.get("work_location"))
-    _put(values, "working_hours_summary", _working_hours_summary(slots.get("working_hours")))
-    _put(values, "monthly_normal_wage", _format_won(slots.get("wage")))
-    _put(values, "accommodation_summary", slots.get("lodging"))
+    _put(
+        values,
+        "contract_months",
+        _first(slots.get("contract_period"), slots.get("contract_months")),
+    )
     _put(values, "enterprise_name", _first(company.get("name"), slots.get("enterprise_name")))
     _put(
         values,
@@ -177,12 +210,31 @@ def map_standard_labor_contract(state: RenewalState) -> dict[str, object]:
     _put(values, "employer_name", _first(company.get("employer_name"), slots.get("employer_name")))
     _put(values, "industry", slots.get("industry"))
     _put(values, "business_description", slots.get("business_description"))
+    _put(values, "working_hours_en", _english_working_hours(slots.get("working_hours")))
+    _put(
+        values,
+        "probation_wage_detail_en",
+        _first(
+            slots.get("probation_wage_detail_en"),
+            _english_probation_wage(slots.get("probation_wage_detail")),
+        ),
+    )
+    _put(
+        values,
+        "payment_date_detail_en",
+        _first(
+            slots.get("payment_date_detail_en"),
+            _english_payment_date(slots.get("payment_date_detail")),
+        ),
+    )
     _put(
         values,
         "employee_home_address",
         _first(slots.get("home_country_address"), slots.get("employee_home_address")),
     )
     _put(values, "contract_date", slots.get("contract_date"))
+    _put(values, "monthly_wage", _first(slots.get("monthly_wage"), slots.get("wage")))
+    _put(values, "base_wage", _first(slots.get("base_wage"), slots.get("wage")))
     return values
 
 
@@ -400,4 +452,51 @@ def values_for_template(template_id: str, state: RenewalState) -> dict[str, obje
     mapper = _TEMPLATE_MAPPERS.get(template_id)
     if mapper is None:
         return {}
-    return mapper(state)
+    values = dict(mapper(state))
+    slots = _slots(state)
+    # Handwritten mapper에 아직 없는 템플릿 필드는 HR 보충 슬롯을 그대로 사용한다.
+    for field_name in editable_template_fields(template_id):
+        value = slots.get(field_name)
+        if value not in (None, ""):
+            values[field_name] = value
+    fields = editable_template_fields(template_id)
+    for field_name, specification in fields.items():
+        source_field = specification.get("mirror_of")
+        if (
+            isinstance(source_field, str)
+            and field_name not in values
+            and source_field in values
+        ):
+            values[field_name] = values[source_field]
+    return values
+
+
+def document_field_statuses(state: RenewalState) -> dict[str, dict[str, object]]:
+    """Streamlit 시연용: 템플릿별 자동 채움·빈 텍스트·체크 필드를 계산한다."""
+    statuses: dict[str, dict[str, object]] = {}
+    for template_id in _TEMPLATE_MAPPERS:
+        fields = editable_template_fields(template_id)
+        values = values_for_template(template_id, state)
+        field_names = sorted(fields)
+        filled = sorted(
+            name for name in field_names if values.get(name) not in (None, "")
+        )
+        empty_text = sorted(
+            name
+            for name, specification in fields.items()
+            if str(specification.get("type", "text")) == "text"
+            and values.get(name) in (None, "")
+        )
+        checkboxes = sorted(
+            name
+            for name, specification in fields.items()
+            if str(specification.get("type", "text")) == "checkbox"
+        )
+        statuses[template_id] = {
+            "fields": field_names,
+            "filled_fields": filled,
+            "empty_text_fields": empty_text,
+            "checkbox_fields": checkboxes,
+            "values": {name: values[name] for name in filled},
+        }
+    return statuses

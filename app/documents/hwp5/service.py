@@ -62,6 +62,14 @@ def edit_hwp5(
 
     document = Hwp5BinaryDocument(source_path)
     text_values = {name: str(value) for name, value in (values or {}).items()}
+    for field_name, specification in template_data["fields"].items():
+        source_field = specification.get("mirror_of")
+        if (
+            isinstance(source_field, str)
+            and field_name not in text_values
+            and source_field in text_values
+        ):
+            text_values[field_name] = text_values[source_field]
     changed = document.apply_fields(
         template_data["fields"],
         text_values,

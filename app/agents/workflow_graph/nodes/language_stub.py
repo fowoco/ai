@@ -11,6 +11,7 @@ from ..state import HR_EXCLUDED_SLOTS, IDENTITY_SLOTS, RenewalState
 
 # 담당자 입력 — 클라이언트가 채우는 계약·근무 슬롯.
 CONTRACT_SLOTS: tuple[str, ...] = (
+    "due_at",
     "wage",
     "working_hours",
     "job_description",

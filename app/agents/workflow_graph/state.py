@@ -37,6 +37,7 @@ class RenewalState(TypedDict):
     outcome: str
     guide_message: NotRequired[str | None]
     worker_request_message: NotRequired[str | None]
+    # 근로자 안내를 바로 발송할 수 없는 경우 HR 검토로 닫는 안전 신호
     guide_review_required: NotRequired[bool]
     guide_failure_code: NotRequired[str | None]
     # Language Assistant (태정) — projection/결과 보관
@@ -47,6 +48,7 @@ class RenewalState(TypedDict):
     documents: list[dict[str, Any]]
     ocr_result: NotRequired[dict[str, Any] | None]
     generated_documents: list[dict[str, Any]]
+    document_field_values: NotRequired[dict[str, dict[str, object]]]
     worker_record: NotRequired[dict[str, Any] | None]
     company_record: NotRequired[dict[str, Any] | None]
     scenario: NotRequired[str | None]
@@ -99,6 +101,7 @@ def empty_renewal_state(
         documents=list(documents or []),
         ocr_result=None,
         generated_documents=[],
+        document_field_values={},
         worker_record=None,
         company_record=None,
         scenario=None,

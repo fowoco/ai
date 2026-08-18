@@ -32,12 +32,14 @@ app/agents/workflow_graph/
 ```
 
 `get_renewal_orchestrator()`는 `DocumentOcrNode` + (가능하면) `LanguageGuideBridge`를 연결한다.  
-Language 환경변수(.env)가 없으면 503(서버 다운 방지) 후 guide는 placeholder로 폴백한다.
+Language 환경변수(.env)가 없거나 대상 언어 생성·검증에 실패하면 근로자용 placeholder를
+만들지 않는다. `REVIEW_REQUIRED`와 `REVIEW_WORKER_GUIDE` 신호로 HR 검토에 넘긴다.
 
 ### renewal/run 와이어 (Server)
 - `documents[].fields` — CLOVA/DB 구조화 필드 (주현 컬럼명)
 - `ocrResult` (요청) — OCR API 후 Server가 DB에서 읽어 선행 주입 가능
 - `languageAssistant` (응답) — Language 전체 JSON (성공 시)
+- `guideReviewRequired` / `guideFailureCode` (응답) — 안내 자동 발송 차단 여부와 안전한 원인 코드
 
 ## 최종 흐름
 
@@ -63,11 +65,13 @@ flowchart TB
   SUP -->|서류 있음| OCR["OCR · 주현"]
   SUP -->|정보 충분| GEN
 
-  GUIDE --> AW["근로자 서류 요청"]
+  GUIDE -->|생성·검증 성공| AW["근로자 서류 요청"]
+  GUIDE -->|미구성·실패·검토 필요| GR["HR 안내 검토"]
 
   OCR -->|1회 처리 후<br/>부족해도 빈 값으로 진행| GEN
 
   AW --> ENDN((종료 → 서버))
+  GR --> ENDN
   AH --> ENDN
   OOS --> ENDN
 
@@ -114,6 +118,8 @@ flowchart TB
 | `evidence` | Intent·서류 근거 |
 | `document_validation` | passport/alien combo |
 | `case_signals` | Server Case/Task용 신호 (생성은 Server) |
+| `guide_review_required` | 근로자 안내 자동 발송 차단 여부 |
+| `guide_failure_code` | PII를 포함하지 않는 안내 실패·검토 코드 |
 
 신분 슬롯(`IDENTITY_SLOTS`): `passport_number`, `alien_registration_number`, `nationality`, `full_name`, `date_of_birth`
 

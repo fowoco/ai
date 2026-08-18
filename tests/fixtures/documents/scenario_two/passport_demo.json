@@ -1,0 +1,17 @@
+{
+  "documentType": "PASSPORT_COPY",
+  "filename": "demo-passport-copy.json",
+  "fields": {
+    "full_name": "NGUYEN VAN AN",
+    "date_of_birth": "1995-04-12",
+    "nationality": "VIET NAM",
+    "passport_number": "P1234567",
+    "passport_issue_date": "2021.03.20",
+    "passport_expiry_date": "2031.03.19"
+  },
+  "hints": {
+    "submissionStatus": "RECEIVED",
+    "source": "language_assistant_demo",
+    "notice": "DEMO / NOT VALID"
+  }
+}

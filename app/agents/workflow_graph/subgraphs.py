@@ -9,18 +9,24 @@ from langgraph.graph import END, START, StateGraph
 from app.db.memory import InMemoryDb
 from app.db.protocols import IdentityStore
 
-from .nodes.actions import generate_docs, persist_ocr
+from .nodes.actions import persist_ocr
 from .nodes.document_generator import DocumentGenerator, StubDocumentGenerator
 from .nodes.language_stub import StubLanguageNode
 from .nodes.ocr_stub import StubOcrNode
 from .phases import WorkflowPhase, WorkflowStep, append_progress, progress_event
 from .protocols import LanguageNode, OcrNode
 from .state import RenewalState
+from .workers import (
+    BusinessRecognitionAgent,
+    DocumentAutomationAgent,
+    DocumentIntelligenceAgent,
+    ValidationReviewAgent,
+)
 
 
 # Language 서브그래프 컴파일 (Intent·Slot·가이드)
 def build_language_subgraph(*, language_node: LanguageNode | None = None) -> Any:
-    language = language_node or StubLanguageNode()
+    language = BusinessRecognitionAgent(language_node or StubLanguageNode())
 
     def run_language(state: RenewalState) -> dict[str, Any]:
         patch = dict(language(state))
@@ -110,9 +116,15 @@ def build_document_subgraph(
     *, document_generator: DocumentGenerator | None = None
 ) -> Any:
     docs = document_generator or StubDocumentGenerator()
+    intelligence = DocumentIntelligenceAgent()
+    automation = DocumentAutomationAgent(docs)
+    review = ValidationReviewAgent()
 
-    def run_generate(state: RenewalState) -> dict[str, Any]:
-        patch = dict(generate_docs(state, document_generator=docs))
+    def run_intelligence(state: RenewalState) -> dict[str, Any]:
+        return dict(intelligence(state))
+
+    def run_automation(state: RenewalState) -> dict[str, Any]:
+        patch = dict(automation(state))
         events = append_progress(
             state,
             progress_event(
@@ -128,8 +140,15 @@ def build_document_subgraph(
         patch["step"] = WorkflowStep.STEP_13_DOCUMENT_DRAFT.value
         return patch
 
+    def run_review(state: RenewalState) -> dict[str, Any]:
+        return dict(review(state))
+
     g: StateGraph = StateGraph(RenewalState)
-    g.add_node("document_run", run_generate)
-    g.add_edge(START, "document_run")
-    g.add_edge("document_run", END)
+    g.add_node("document_intelligence", run_intelligence)
+    g.add_node("document_automation", run_automation)
+    g.add_node("validation_review", run_review)
+    g.add_edge(START, "document_intelligence")
+    g.add_edge("document_intelligence", "document_automation")
+    g.add_edge("document_automation", "validation_review")
+    g.add_edge("validation_review", END)
     return g.compile()
