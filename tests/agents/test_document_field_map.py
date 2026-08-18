@@ -11,6 +11,7 @@ from app.agents.workflow_graph.document_field_map import (
 )
 from app.agents.workflow_graph.nodes.document_generator import EditingServiceDocumentGenerator
 from app.agents.workflow_graph.state import empty_renewal_state
+from app.documents.hwp5 import Hwp5BinaryDocument
 
 
 # 매핑·생성 검증용 샘플 Shared State
@@ -31,8 +32,9 @@ def _sample_state():
             "job_description": "금속 부품 조립",
             "work_location": "경기도 안산시",
             "lodging": "기숙사 A동",
-            "contract_period": "12",
+            "contract_period": "2026-10-01~2027-09-30",
             "wage": "2500000",
+            "working_hours": "40",
             "industry": "제조업",
             "employer_name": "김민수",
         },
@@ -55,7 +57,22 @@ def test_labor_contract_mapping_uses_slots_and_company() -> None:
     assert values["enterprise_name"] == "주식회사 한빛정밀"
     assert values["business_number"] == "123-45-67890"
     assert values["job_description"] == "금속 부품 조립"
+    assert values["contract_period"] == "2026-10-01 ~ 2027-09-30"
+    assert values["enterprise_address"] == "경기도 안산시 단원구 산단로 000"
+    assert values["work_place"] == "경기도 안산시"
+    assert values["working_hours_summary"] == "주 40시간 (시작·종료 시각 HR 확인 필요)"
+    assert values["monthly_normal_wage"] == "2,500,000"
+    assert values["accommodation_summary"] == "기숙사 A동"
+
+
+def test_labor_contract_mapping_keeps_legacy_month_count() -> None:
+    state = _sample_state()
+    state["slots"]["contract_period"] = "12"
+
+    values = map_standard_labor_contract(state)
+
     assert values["contract_months"] == "12"
+    assert "contract_period" not in values
 
 
 # 통합신청서 매핑이 체류연장 체크와 성·이름·생년월일을 채운다
@@ -107,6 +124,16 @@ def test_editing_generator_maps_and_generates_or_stubs(tmp_path: Path) -> None:
     if labor["status"] == "generated":
         assert Path(labor["path"]).exists()
         assert labor["changed_fields"]
+
+        paragraphs = {
+            paragraph.index: paragraph.text
+            for paragraph in Hwp5BinaryDocument(labor["path"]).paragraphs()
+        }
+        assert "2026-10-01 ~ 2027-09-30" in paragraphs[24]
+        assert "경기도 안산시" in paragraphs[33]
+        assert "주 40시간" in paragraphs[48]
+        assert "2,500,000" in paragraphs[73]
+        assert "기숙사 A동" in paragraphs[99]
 
 
 # OCR 신분 값이 slots보다 우선해 서류 매핑에 반영된다
