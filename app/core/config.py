@@ -1,3 +1,4 @@
+import os
 import tempfile
 from functools import lru_cache
 from pathlib import Path
@@ -10,7 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # 환경변수·.env에서 앱 설정을 읽어 오는 모델
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=os.getenv("FOWOCO_ENV_FILE", ".env"),
         env_file_encoding="utf-8",
         env_prefix="FOWOCO_",
         extra="ignore",

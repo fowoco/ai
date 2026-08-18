@@ -82,6 +82,7 @@ markers = [
     "qdrant_integration: mark test as requiring Qdrant integration",
     "language_models: mark test as requiring language model cache",
     "rhwp_integration: mark test as requiring the rhwp executable",
+    "windows_ocr: mark test as requiring PowerShell on Windows",
 ]
 
 
