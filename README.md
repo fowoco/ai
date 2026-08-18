@@ -1,6 +1,7 @@
 # FOWOCO AI
 
 <p align="center">
+  <a href="https://github.com/fowoco/ai/actions/workflows/ci.yml"><img alt="AI CI" src="https://github.com/fowoco/ai/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/fowoco/ai/actions/workflows/deploy.yml"><img alt="AI Deploy" src="https://github.com/fowoco/ai/actions/workflows/deploy.yml/badge.svg?branch=main"></a>
 </p>
 
@@ -24,6 +25,31 @@ E-9 외국인근로자를 고용한 사업장의 재계약·체류기간 연장 
 
 환경변수를 설정하지 않은 선택 기능은 Stub 또는 명시적인 `503`으로 동작합니다.
 따라서 “코드가 존재함”과 “실제 Provider가 활성화됨”을 구분해 확인해야 합니다.
+
+## 왜 이렇게 설계했나요?
+
+| 선택 | 프로젝트에서 필요했던 이유 |
+| --- | --- |
+| BERT → Guardrail → A.X | 반복적인 단일 Intent는 빠르게 처리하고, 경계·복합 발화만 더 큰 모델로 보완하기 위해서입니다. |
+| PLAN → ANALYZE 분리 | AI가 DB를 직접 조회하지 않고 필요한 field key만 요청한 뒤, Server가 권한을 검사해 Context를 보충하기 위해서입니다. |
+| LangGraph 상태 흐름 | 누락 정보, OCR, 근로자 안내, 문서 생성 분기를 코드와 테스트에서 명시적으로 추적하기 위해서입니다. |
+| 결정론적 문서 Tool | LLM이 HWP/HWPX 구조를 임의로 수정하지 않고 승인된 템플릿과 field map만 사용하게 하기 위해서입니다. |
+| Human-in-the-loop | 번역·OCR·문서 결과가 불확실하면 자동 발송하지 않고 HR 검토 상태로 되돌리기 위해서입니다. |
+
+## 5분 코드 투어
+
+심사·리뷰 시 아래 순서로 보면 전체 구현을 가장 빠르게 확인할 수 있습니다.
+
+| 순서 | 확인할 내용 | 대표 코드·테스트 |
+| --- | --- | --- |
+| 1 | FastAPI 진입점과 API 경계 | [`app/main.py`](app/main.py), [`app/api/router.py`](app/api/router.py), [`tests/api`](tests/api) |
+| 2 | PLAN·ANALYZE와 Intent 결정 재사용 | [`app/agents/pipeline.py`](app/agents/pipeline.py), [`app/agents/intent`](app/agents/intent), [`tests/agents/test_intent_hybrid.py`](tests/agents/test_intent_hybrid.py) |
+| 3 | Renewal Agent 상태·분기 | [`app/agents/workflow_graph/graph.py`](app/agents/workflow_graph/graph.py), [`app/agents/workflow_graph/supervisor.py`](app/agents/workflow_graph/supervisor.py), [`tests/agents/test_workflow_graph.py`](tests/agents/test_workflow_graph.py) |
+| 4 | Tool 구현과 실패 격리 | [`app/ocr`](app/ocr), [`app/agents/language`](app/agents/language), [`app/documents`](app/documents) |
+| 5 | Server–AI 계약과 대표 응답 | [`docs/analyses-contract.md`](docs/analyses-contract.md), [`docs/workflows-contract.md`](docs/workflows-contract.md), [`examples`](examples) |
+
+설계와 코드 관계를 더 자세히 보려면 [Architecture & Code Tour](docs/architecture.md),
+문서 전체 분류는 [Documentation Index](docs/README.md)를 확인합니다.
 
 ## 저장소 경계
 
@@ -205,6 +231,8 @@ docker compose up --build                 # AI + Qdrant
 
 | 찾는 내용 | 문서 |
 | --- | --- |
+| 문서 전체 탐색 | [Documentation Index](docs/README.md) |
+| 아키텍처와 코드 위치 | [Architecture & Code Tour](docs/architecture.md) |
 | Server 연결과 인증 | [AI Runtime Handshake](docs/ai-runtime-handshake.md) |
 | PLAN·ANALYZE 계약 | [Analyses Contract](docs/analyses-contract.md) |
 | Renewal Agent 계약 | [Workflows Contract](docs/workflows-contract.md) |
