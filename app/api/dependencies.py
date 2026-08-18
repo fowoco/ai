@@ -9,6 +9,7 @@ from app.agents.ambiguity import AmbiguityAgent
 from app.agents.intent import IntentClassifier, build_intent_agent
 from app.agents.knowledge_support import (
     load_ambiguity_patterns,
+    load_knowledge_version,
     load_required_slots,
     load_workflow_catalog,
     try_get_repository,
@@ -45,7 +46,7 @@ from app.documents.conversion.converters import (
     HwpxToXmlConverter,
     XmlToHwpxConverter,
 )
-from app.documents.conversion.engines import LibreOfficeEngine
+from app.documents.conversion.engines import RhwpEngine
 from app.documents.snapshots import DocumentSnapshotRepository
 from app.ocr.service import OcrService
 
@@ -70,6 +71,7 @@ def get_analysis_pipeline() -> AnalysisPipeline:
 
     return AnalysisPipeline(
         intent_agent=intent_agent,
+        knowledge_version=load_knowledge_version(repository),
         ambiguity_agent=AmbiguityAgent(
             required_slots=load_required_slots(repository),
             ambiguity_patterns=load_ambiguity_patterns(repository),
@@ -164,7 +166,13 @@ def get_document_conversion_service() -> DocumentConversionService:
         XmlToHwpxConverter(hwpx_service, snapshot_repository),
     ]
     settings = get_settings()
-    hwpx_to_hwp_converter = None
+    rhwp_engine = None
+    if settings.hwpx_to_hwp_enabled or settings.hwpx_pdf_enabled:
+        rhwp_engine = RhwpEngine(
+            settings.rhwp_path,
+            settings.document_conversion_timeout_seconds,
+        )
+        rhwp_engine.require_available()
     if settings.hwp_to_hwpx_enabled:
         hwp_converter = HwpToHwpxConverter(
             settings.java_path,
@@ -173,31 +181,15 @@ def get_document_conversion_service() -> DocumentConversionService:
         hwp_converter.require_available()
         converters.append(hwp_converter)
     if settings.hwpx_to_hwp_enabled:
-        hwpx_to_hwp_converter = HwpxToHwpConverter(
-            settings.rhwp_path,
-            timeout_seconds=settings.document_conversion_timeout_seconds,
-        )
-        hwpx_to_hwp_converter.require_available()
+        assert rhwp_engine is not None
+        hwpx_to_hwp_converter = HwpxToHwpConverter(engine=rhwp_engine)
         converters.append(hwpx_to_hwp_converter)
     if settings.hwpx_pdf_enabled:
-        pdf_engine = LibreOfficeEngine(
-            settings.soffice_path,
-            settings.document_conversion_timeout_seconds,
-        )
-        pdf_engine.require_available()
-        hwp_to_pdf_converter = HwpToPdfConverter(engine=pdf_engine)
-        fallback_converters = (
-            (hwpx_to_hwp_converter, hwp_to_pdf_converter)
-            if hwpx_to_hwp_converter is not None
-            else None
-        )
+        assert rhwp_engine is not None
         converters.extend(
             (
-                hwp_to_pdf_converter,
-                HwpxToPdfConverter(
-                    engine=pdf_engine,
-                    fallback_converters=fallback_converters,
-                ),
+                HwpToPdfConverter(engine=rhwp_engine),
+                HwpxToPdfConverter(engine=rhwp_engine),
             )
         )
     return DocumentConversionService(tuple(converters))

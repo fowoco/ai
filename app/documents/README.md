@@ -94,9 +94,9 @@ app/documents/
 | 변환기 | 엔진 또는 방식 |
 |---|---|
 | HWP→HWPX | `hwp2hwpx==1.0.1` Java/JAR |
-| HWP→PDF | Headless LibreOffice 직접 변환 |
+| HWP→PDF | `rhwp v0.7.19` native PDF exporter |
 | HWPX→HWP | `rhwp v0.7.19` |
-| HWPX→PDF | Headless LibreOffice, 실패 시 HWP 경유 |
+| HWPX→PDF | `rhwp v0.7.19` native PDF exporter |
 | HWPX→XML | section XML 추출과 스냅샷 저장 |
 | XML→HWPX | 참조 스냅샷에 수정 XML 재패키징 |
 
@@ -107,9 +107,10 @@ app/documents/
 - HWPX: ZIP 구조, 필수 항목, 무압축 `mimetype`
 - PDF: `%PDF-` 헤더
 
-HWPX→PDF 직접 렌더링이 `DocumentConversionError`로 실패하면 임시 HWP를 만들고
-HWP→PDF 변환기를 재사용한다. fallback까지 실패하면 직접 변환과 fallback 양쪽
-오류를 함께 반환하며 임시 HWP는 항상 제거한다.
+PDF 변환은 LibreOffice의 HWP import filter를 사용하지 않는다. `rhwp export-pdf`가
+원본 HWP/HWPX를 직접 해석하고, Server가 제공한 실제 데모 양식의 페이지 수와
+가독성을 Smoke Test로 확인한다. 산출물은 PDF 서명뿐 아니라 PDF parser로 페이지와
+media box 구조까지 다시 검증하며 임시 파일은 항상 제거한다.
 
 ## XML 스냅샷 왕복
 
@@ -248,13 +249,28 @@ FOWOCO_JAVA_PATH=java
 FOWOCO_HWPX_TO_HWP_ENABLED=true
 FOWOCO_RHWP_PATH=rhwp
 FOWOCO_HWPX_PDF_ENABLED=true
-FOWOCO_SOFFICE_PATH=soffice
 FOWOCO_DOCUMENT_CONVERSION_TIMEOUT_SECONDS=120
 FOWOCO_DOCUMENT_SNAPSHOT_DIR=/data/document-snapshots
 ```
 
-Docker 이미지는 Java, 고정된 rhwp 바이너리, LibreOffice Writer, H2Orestart 필터와
-CJK 글꼴을 포함한다.
+Docker 이미지는 Java, 고정된 rhwp 바이너리와 CJK 글꼴을 포함한다.
+rhwp Linux 공식 바이너리가 x86_64만 제공되므로 이미지는 `linux/amd64`로 빌드한다.
+Apple Silicon Docker Desktop에서는 amd64 emulation을 사용한다.
+
+### Server 실제 데모 양식 Smoke Test
+
+Server 저장소와 AI 저장소를 함께 받은 개발 환경에서는 아래 스크립트로 Server의
+합성 HWP 1종과 HWPX 3종을 그대로 검증한다. 성공 기준은 계약서 2쪽, 취업활동기간
+연장신청서 2쪽, 통합신청서 1쪽이며 PDF parser 검증과 최소 파일 크기도 함께 확인한다.
+
+```bash
+python -m scripts.smoke_server_document_pdf \
+  --fixture-dir ../server/src/main/resources/demo-data/document-templates \
+  --output-dir /tmp/fowoco-document-preview \
+  --rhwp-path rhwp
+```
+
+macOS에서는 `rhwp` 공식 macOS binary의 절대 경로를 `--rhwp-path`에 지정할 수 있다.
 
 ## 확장 방법
 

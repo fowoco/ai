@@ -9,8 +9,7 @@ from app.documents import DocumentConversionService, DocumentFormat
 from app.documents.conversion import (
     ConversionNotSupportedError,
     HwpToHwpxConverter,
-    HwpxToHwpConverter,
-    LibreOfficeEngine,
+    RhwpEngine,
 )
 
 
@@ -112,15 +111,14 @@ def test_pdf_converters_are_registered_only_when_enabled(
             hwpx_to_hwp_enabled=False,
             rhwp_path="rhwp",
             hwpx_pdf_enabled=True,
-            soffice_path="soffice",
             document_conversion_timeout_seconds=120,
             document_snapshot_dir=Path(tempfile.gettempdir()) / "fowoco-test-snapshots",
         ),
     )
     monkeypatch.setattr(
-        LibreOfficeEngine,
+        RhwpEngine,
         "require_available",
-        lambda self: Path("/runtime/soffice"),
+        lambda self: Path("/runtime/rhwp"),
     )
     dependencies.get_document_conversion_service.cache_clear()
     try:
@@ -170,7 +168,6 @@ def test_hwp_to_hwpx_converter_is_registered_only_when_enabled(
             hwpx_to_hwp_enabled=False,
             rhwp_path="rhwp",
             hwpx_pdf_enabled=False,
-            soffice_path="soffice",
             document_conversion_timeout_seconds=120,
             document_snapshot_dir=Path(tempfile.gettempdir()) / "fowoco-test-snapshots",
         ),
@@ -201,13 +198,12 @@ def test_hwpx_to_hwp_converter_is_registered_only_when_enabled(
             hwpx_to_hwp_enabled=True,
             rhwp_path="rhwp",
             hwpx_pdf_enabled=False,
-            soffice_path="soffice",
             document_conversion_timeout_seconds=120,
             document_snapshot_dir=Path(tempfile.gettempdir()) / "fowoco-test-snapshots",
         ),
     )
     monkeypatch.setattr(
-        HwpxToHwpConverter,
+        RhwpEngine,
         "require_available",
         lambda self: Path("/runtime/rhwp"),
     )

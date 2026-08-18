@@ -62,18 +62,42 @@ _BUILTIN_CATALOG: dict[str, dict[str, object]] = {
         "name": "근로자 등록·정보변경",
         "intent": "WORKER_ONBOARDING",
         "sensitivity": "high",
-        "required_slots": ["worker_id"],
+        "required_slots": ["source_document_id"],
+        "context_slots": [],
         "input_modes": ["AGENT_TASK", "INTERNAL_REQUEST"],
     },
     "WF-STY-001": {
         "name": "체류기간 연장 준비",
         "intent": "EXPIRY_RENEWAL",
         "sensitivity": "high",
-        "required_slots": [
+        "required_slots": ["worker_id", "due_at"],
+        "context_slots": [
             "worker_id",
+            "due_at",
             "stay_expiry_date",
             "passport_status",
             "arc_status",
+        ],
+        "input_modes": ["AGENT_TASK", "INTERNAL_REQUEST"],
+    },
+    "WF-STY-EXC-001": {
+        "name": "체류기간 만료 경과 상태 확인",
+        "intent": "EXPIRY_RENEWAL",
+        "sensitivity": "critical",
+        "required_slots": [
+            "worker_id",
+            "stay_expiry_date",
+            "stay_verification_status",
+        ],
+        "context_slots": [
+            "worker_id",
+            "stay_expiry_date",
+            "stay_verification_status",
+            "status_checked_at",
+            "extension_receipt_document_id",
+            "approval_result_document_id",
+            "new_stay_expiry_date",
+            "employment_end_confirmed_at",
         ],
         "input_modes": ["AGENT_TASK", "INTERNAL_REQUEST"],
     },
@@ -81,42 +105,53 @@ _BUILTIN_CATALOG: dict[str, dict[str, object]] = {
         "name": "근로계약 갱신 준비",
         "intent": "EXPIRY_RENEWAL",
         "sensitivity": "high",
-        "required_slots": ["worker_id", "contract_end_date"],
+        "required_slots": ["worker_id", "due_at"],
+        "context_slots": ["worker_id", "due_at", "contract_end_date"],
         "input_modes": ["AGENT_TASK", "INTERNAL_REQUEST"],
     },
     "WF-DOC-001": {
         "name": "서류 요청·확인",
         "intent": "DOCUMENT_REQUEST",
         "sensitivity": "medium",
-        "required_slots": ["worker_id", "document_type"],
+        "required_slots": [
+            "worker_id",
+            "document_type",
+            "due_at",
+            "submission_channel",
+        ],
+        "context_slots": ["worker_id"],
         "input_modes": ["AGENT_TASK", "INTERNAL_REQUEST", "WORKER_MESSAGE"],
     },
     "WF-PAY-001": {
         "name": "급여·공제 설명",
         "intent": "PAYROLL_EXPLANATION",
         "sensitivity": "high",
-        "required_slots": ["worker_id", "pay_period"],
+        "required_slots": ["worker_id", "pay_period", "source_document_id"],
+        "context_slots": ["worker_id", "source_document_id"],
         "input_modes": ["AGENT_TASK", "INTERNAL_REQUEST", "WORKER_MESSAGE"],
     },
     "WF-INS-001": {
         "name": "업무·근무일정 안내",
         "intent": "WORK_INSTRUCTION",
         "sensitivity": "medium",
-        "required_slots": ["worker_id"],
+        "required_slots": ["worker_id", "effective_at", "work_action"],
+        "context_slots": ["worker_id"],
         "input_modes": ["AGENT_TASK", "INTERNAL_REQUEST"],
     },
     "WF-CHG-001": {
         "name": "고용변동·이탈 후속조치",
         "intent": "EMPLOYMENT_CHANGE",
         "sensitivity": "critical",
-        "required_slots": ["worker_id", "change_type"],
+        "required_slots": ["worker_id", "change_type", "incident_at"],
+        "context_slots": ["worker_id"],
         "input_modes": ["AGENT_TASK", "INTERNAL_REQUEST"],
     },
     "WF-ADM-001": {
         "name": "행정 서류 발급·제출",
         "intent": "DOCUMENT_REQUEST",
         "sensitivity": "medium",
-        "required_slots": ["worker_id", "document_type"],
+        "required_slots": ["worker_id", "document_type", "due_at"],
+        "context_slots": ["worker_id"],
         "input_modes": ["AGENT_TASK", "INTERNAL_REQUEST"],
     },
 }
@@ -171,6 +206,7 @@ class WorkflowInfo:
     intent: str
     sensitivity: str
     required_slots: list[str] = field(default_factory=list)
+    context_slots: list[str] = field(default_factory=list)
     input_modes: list[str] = field(default_factory=list)
 
 
@@ -192,6 +228,7 @@ class WorkflowAgent:
             intent=str(entry.get("intent", "")),
             sensitivity=str(entry.get("sensitivity", "medium")),
             required_slots=list(entry.get("required_slots", [])),  # type: ignore[arg-type]
+            context_slots=list(entry.get("context_slots", [])),  # type: ignore[arg-type]
             input_modes=list(entry.get("input_modes", [])),  # type: ignore[arg-type]
         )
 

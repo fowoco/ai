@@ -9,7 +9,14 @@ def test_get_known_workflow() -> None:
     assert wf is not None
     assert wf.name == "체류기간 연장 준비"
     assert wf.sensitivity == "high"
-    assert "worker_id" in wf.required_slots
+    assert wf.required_slots == ["worker_id", "due_at"]
+    assert wf.context_slots == [
+        "worker_id",
+        "due_at",
+        "stay_expiry_date",
+        "passport_status",
+        "arc_status",
+    ]
 
 
 def test_get_unknown_workflow() -> None:
@@ -20,7 +27,8 @@ def test_get_unknown_workflow() -> None:
 def test_list_workflows() -> None:
     agent = WorkflowAgent()
     workflows = agent.list_workflows()
-    assert len(workflows) == 8
+    assert len(workflows) == 9
+    assert any(workflow.workflow_id == "WF-STY-EXC-001" for workflow in workflows)
 
 
 def test_resolve_workflow_by_intent() -> None:
@@ -58,6 +66,19 @@ def test_resolve_employment_extension_as_contract_workflow() -> None:
     )
     assert wf is not None
     assert wf.workflow_id == "WF-CON-001"
+
+
+def test_e2e_011_keeps_stay_representative_for_composite_request() -> None:
+    agent = WorkflowAgent()
+    wf = agent.resolve_workflow(
+        "EXPIRY_RENEWAL",
+        instruction="응웬반A가 3년 만료 예정이야. 재계약하고 체류연장 준비해줘",
+    )
+
+    assert wf is not None
+    # AI PLAN은 대표 Workflow 한 건을 고르고, Server가 Knowledge 매핑으로
+    # WF-CON-001과 WF-STY-001 업무를 확장한다.
+    assert wf.workflow_id == "WF-STY-001"
 
 
 def test_resolve_document_and_administration_workflows() -> None:

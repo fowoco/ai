@@ -4,8 +4,8 @@
   "contextRequirement": null,
   "questions": [
     {
-      "slotKey": "monthly_wage",
-      "prompt": "월 급여를 입력해 주세요."
+      "slotKey": "due_at",
+      "prompt": "업무 준비를 마칠 날짜와 시간을 입력해 주세요."
     }
   ],
   "candidates": [],
@@ -16,8 +16,8 @@
     "modelName": "planned-intent",
     "modelVersion": "reused",
     "promptVersion": "not-applicable",
-    "contextPackVersion": "0.2.0",
-    "workflowCatalogVersion": "0.2.0",
+    "contextPackVersion": "0.3.0",
+    "workflowCatalogVersion": "0.3.0",
     "contractVersion": "1.1.0"
   },
   "providerAttemptCount": 0,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -87,6 +87,8 @@ class RenewalRunRequest(BaseModel):
     worker_id: str | None = Field(None, alias="workerId")
     company_id: str | None = Field(None, alias="companyId")
     task_id: str | None = Field(None, alias="taskId")
+    variant: Literal["EXPIRED_STAY_EXCEPTION"] | None = None
+    stay_verification_status: str | None = Field(None, alias="stayVerificationStatus")
     slots: dict[str, Any] = Field(default_factory=dict)
     documents: list[RenewalDocumentInput] = Field(default_factory=list)
     # Server가 CLOVA OCR API 후 DB에서 읽어 실어 보낼 선행 OCR 스냅샷
@@ -106,6 +108,13 @@ class RenewalRunResponse(BaseModel):
     task_id: str = Field(..., alias="taskId")
     intent: str
     workflow_id: str = Field(..., alias="workflowId")
+    variant: str | None = None
+    next_action: str | None = Field(None, alias="nextAction")
+    legal_conclusion: str | None = Field(None, alias="legalConclusion")
+    questions: list[dict[str, str]] = Field(default_factory=list)
+    suggested_workflow_ids: list[str] = Field(
+        default_factory=list, alias="suggestedWorkflowIds"
+    )
     confidence: float
     status: str
     outcome: str

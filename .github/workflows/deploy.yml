@@ -48,4 +48,26 @@ jobs:
           kubectl -n fowoco set image deployment/ai \
             ai=ghcr.io/fowoco/ai:${{ github.sha }} \
             --record=false
-          kubectl -n fowoco rollout status deployment/ai --timeout=180s
+          kubectl -n fowoco rollout status deployment/ai --timeout=600s
+
+      - name: Rollout diagnostics
+        if: failure()
+        run: |
+          echo "::group::pods"
+          kubectl -n fowoco get pods -o wide -l app=ai
+          echo "::endgroup::"
+          echo "::group::describe deployment"
+          kubectl -n fowoco describe deployment/ai
+          echo "::endgroup::"
+          echo "::group::describe pods"
+          kubectl -n fowoco describe pods -l app=ai
+          echo "::endgroup::"
+          echo "::group::logs (current)"
+          kubectl -n fowoco logs deployment/ai --tail=200 --all-containers
+          echo "::endgroup::"
+          echo "::group::logs (previous, if crashed)"
+          kubectl -n fowoco logs deployment/ai --tail=200 --all-containers --previous || true
+          echo "::endgroup::"
+          echo "::group::events"
+          kubectl -n fowoco get events --sort-by=.lastTimestamp | tail -40
+          echo "::endgroup::"

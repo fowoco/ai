@@ -1,0 +1,32 @@
+[
+  {
+    "caseId": "E2E-012",
+    "status": "APPROVED",
+    "nextAction": "REVIEW_UPDATED_EXPIRY_DATE",
+    "suggestedWorkflowIds": []
+  },
+  {
+    "caseId": "E2E-013",
+    "status": "APPLICATION_PENDING",
+    "nextAction": "TRACK_APPLICATION_RESULT",
+    "suggestedWorkflowIds": []
+  },
+  {
+    "caseId": "E2E-014",
+    "status": "UNKNOWN",
+    "nextAction": "REQUEST_HR_STATUS_CONFIRMATION",
+    "suggestedWorkflowIds": []
+  },
+  {
+    "caseId": "E2E-015",
+    "status": "NOT_APPLIED",
+    "nextAction": "REQUEST_HR_STATUS_CONFIRMATION",
+    "suggestedWorkflowIds": []
+  },
+  {
+    "caseId": "E2E-016",
+    "status": "EMPLOYMENT_ENDED",
+    "nextAction": "REVIEW_EMPLOYMENT_CHANGE",
+    "suggestedWorkflowIds": ["WF-CHG-001"]
+  }
+]

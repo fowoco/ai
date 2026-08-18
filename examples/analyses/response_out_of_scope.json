@@ -11,8 +11,8 @@
     "modelName": "fowoco/klue-roberta-base-intent-classifier",
     "modelVersion": "BERT",
     "promptVersion": "not-applicable",
-    "contextPackVersion": "0.2.0",
-    "workflowCatalogVersion": "0.2.0",
+    "contextPackVersion": "0.3.0",
+    "workflowCatalogVersion": "0.3.0",
     "contractVersion": "1.1.0"
   },
   "providerAttemptCount": 1,
