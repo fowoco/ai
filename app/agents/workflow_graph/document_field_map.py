@@ -93,6 +93,35 @@ def _passthrough_known_fields(
     return {k: v for k, v in slots.items() if k in field_names and v not in (None, "")}
 
 
+def _contract_period_fields(value: Any) -> dict[str, object]:
+    normalized = _as_str(value)
+    if not normalized:
+        return {}
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}\s*~\s*\d{4}-\d{2}-\d{2}", normalized):
+        start, end = (part.strip() for part in normalized.split("~", 1))
+        return {"contract_period": f"{start} ~ {end}"}
+    return {"contract_months": normalized}
+
+
+def _working_hours_summary(value: Any) -> str | None:
+    normalized = _as_str(value)
+    if not normalized:
+        return None
+    if re.fullmatch(r"\d+(?:\.\d+)?", normalized):
+        return f"주 {normalized}시간 (시작·종료 시각 HR 확인 필요)"
+    return normalized
+
+
+def _format_won(value: Any) -> str | None:
+    normalized = _as_str(value)
+    if not normalized:
+        return None
+    compact = normalized.replace(",", "")
+    if compact.isdigit():
+        return f"{int(compact):,}"
+    return normalized
+
+
 # 표준근로계약서에 넣을 값
 def map_standard_labor_contract(state: RenewalState) -> dict[str, object]:
     slots = _slots(state)
@@ -111,6 +140,10 @@ def map_standard_labor_contract(state: RenewalState) -> dict[str, object]:
         "business_description",
         "job_description",
         "contract_date",
+        "work_place",
+        "working_hours_summary",
+        "monthly_normal_wage",
+        "accommodation_summary",
     }
     values: dict[str, object] = _passthrough_known_fields(slots, fields)
     _put(values, "employee_name", _first(slots.get("full_name"), slots.get("employee_name")))
@@ -123,13 +156,17 @@ def map_standard_labor_contract(state: RenewalState) -> dict[str, object]:
     _put(
         values,
         "enterprise_address",
-        _first(slots.get("work_location"), company.get("address"), slots.get("enterprise_address")),
+        _first(company.get("address"), slots.get("enterprise_address")),
     )
-    _put(
-        values,
-        "contract_months",
-        _first(slots.get("contract_period"), slots.get("contract_months")),
+    values.update(
+        _contract_period_fields(
+            _first(slots.get("contract_period"), slots.get("contract_months"))
+        )
     )
+    _put(values, "work_place", slots.get("work_location"))
+    _put(values, "working_hours_summary", _working_hours_summary(slots.get("working_hours")))
+    _put(values, "monthly_normal_wage", _format_won(slots.get("wage")))
+    _put(values, "accommodation_summary", slots.get("lodging"))
     _put(values, "enterprise_name", _first(company.get("name"), slots.get("enterprise_name")))
     _put(
         values,
@@ -233,7 +270,11 @@ def map_employment_extension_application(state: RenewalState) -> dict[str, objec
     _put(
         values,
         "representative",
-        _first(company.get("employer_name"), slots.get("representative"), slots.get("employer_name")),
+        _first(
+            company.get("employer_name"),
+            slots.get("representative"),
+            slots.get("employer_name"),
+        ),
     )
     _put(values, "business_type", _first(slots.get("industry"), slots.get("business_type")))
     _put(
@@ -265,7 +306,11 @@ def map_employment_extension_application(state: RenewalState) -> dict[str, objec
     _put(
         values,
         "applicant_name",
-        _first(company.get("employer_name"), slots.get("applicant_name"), slots.get("employer_name")),
+        _first(
+            company.get("employer_name"),
+            slots.get("applicant_name"),
+            slots.get("employer_name"),
+        ),
     )
     _put(values, "application_date", slots.get("application_date"))
     return values
@@ -314,14 +359,22 @@ def map_identity_guaranty(state: RenewalState) -> dict[str, object]:
     _put(
         values,
         "foreign_korea_address",
-        _first(slots.get("lodging"), slots.get("work_location"), slots.get("foreign_korea_address")),
+        _first(
+            slots.get("lodging"),
+            slots.get("work_location"),
+            slots.get("foreign_korea_address"),
+        ),
     )
     _put(values, "foreign_phone", slots.get("phone"))
     _put(values, "stay_purpose", _first(slots.get("stay_purpose"), "취업"))
     _put(
         values,
         "guarantor_name",
-        _first(company.get("employer_name"), slots.get("guarantor_name"), slots.get("employer_name")),
+        _first(
+            company.get("employer_name"),
+            slots.get("guarantor_name"),
+            slots.get("employer_name"),
+        ),
     )
     _put(values, "workplace", _first(company.get("name"), slots.get("workplace")))
     _put(
