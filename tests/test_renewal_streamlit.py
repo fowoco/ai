@@ -2,8 +2,12 @@ import scripts.renewal_streamlit as renewal_streamlit
 from scripts.renewal_streamlit import (
     DEMO_SERVER_COMPANY_ID,
     DEMO_SERVER_WORKER_ID,
+    SCENARIO_TWO_DOCUMENT_REQUESTS,
+    SCENARIO_TWO_IDENTITY_DEFAULTS,
     build_renewal_payload,
     build_scenario_one_payload,
+    build_scenario_two_language_request,
+    build_scenario_two_payload,
     template_statuses_for_response,
 )
 
@@ -55,6 +59,65 @@ def test_scenario_one_maps_company_snapshot_to_labor_contract() -> None:
     assert payload["company"]["employer_name"] == "김민수"
     assert status["values"]["employer_name"] == "김민수"
     assert status["values"]["business_number"] == "123-45-67890"
+
+
+def test_scenario_two_starts_without_identity_documents() -> None:
+    payload = build_scenario_two_payload(
+        request_id="req-scenario-two-request",
+        instruction="체류기간 연장 갱신",
+    )
+
+    assert payload["workerId"] == DEMO_SERVER_WORKER_ID
+    assert payload["companyId"] == DEMO_SERVER_COMPANY_ID
+    assert payload["documents"] == []
+    assert "ocrResult" not in payload
+    assert payload["slots"]["passport_status"] == "MISSING"
+    assert payload["slots"]["arc_status"] == "MISSING"
+
+
+def test_scenario_two_received_documents_are_sent_as_ocr_context() -> None:
+    payload = build_scenario_two_payload(
+        request_id="req-scenario-two-received",
+        instruction="체류기간 연장 갱신",
+        received_identity=SCENARIO_TWO_IDENTITY_DEFAULTS,
+        supplemental_slots=renewal_streamlit.DEMO_FORM_DEFAULTS,
+    )
+
+    assert [document["documentType"] for document in payload["documents"]] == [
+        "PASSPORT_COPY",
+        "ARC",
+    ]
+    assert payload["documents"][0]["hints"]["source"] == "language_assistant_demo"
+    assert payload["documents"][1]["fields"]["alien_registration_number"] == (
+        "900101-1234567"
+    )
+    assert payload["ocrResult"]["passport_number"] == "P1234567"
+    assert payload["slots"]["passport_status"] == "VERIFIED"
+    assert payload["slots"]["arc_status"] == "VERIFIED"
+    assert "passport_number" not in payload["slots"]
+
+
+def test_scenario_two_requests_both_identity_documents() -> None:
+    assert [request["document_type"] for request in SCENARIO_TWO_DOCUMENT_REQUESTS] == [
+        "PASSPORT_COPY",
+        "ARC",
+    ]
+
+
+def test_scenario_two_language_request_uses_worker_language_context() -> None:
+    payload = build_scenario_two_language_request()
+
+    assert payload["worker_id"] == DEMO_SERVER_WORKER_ID
+    assert payload["preferred_language"] == "vi"
+    assert payload["nationality_code"] == "VN"
+    assert payload["request_context"] == {
+        "request_reason": "체류기간 연장 신청",
+        "requested_items": ["여권 사본 1부", "외국인등록증 사본 1부"],
+        "deadline": renewal_streamlit._scenario_two_server_context()["worker"][
+            "stayExpiryDate"
+        ],
+        "submission_method": "담당자(HR)에게 제출",
+    }
 
 
 def test_demo_defaults_cover_renewal_and_labor_contract_body() -> None:
