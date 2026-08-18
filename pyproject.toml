@@ -21,6 +21,7 @@ dependencies = [
   "ms-cfb==0.0.6",
   "Pillow>=11.3,<12",
   "hwp2hwpx==1.0.1",
+  "pypdf>=6.0,<7",
   "langgraph>=0.2,<1",
 ]
 
@@ -79,6 +80,7 @@ asyncio_mode = "auto"
 markers = [
     "qdrant_integration: mark test as requiring Qdrant integration",
     "language_models: mark test as requiring language model cache",
+    "rhwp_integration: mark test as requiring the rhwp executable",
 ]
 
 

@@ -26,7 +26,6 @@ class Settings(BaseSettings):
     hwpx_to_hwp_enabled: bool = False
     rhwp_path: str = "rhwp"
     hwpx_pdf_enabled: bool = False
-    soffice_path: str = "soffice"
     document_conversion_timeout_seconds: int = 120
     document_upload_max_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
     document_snapshot_dir: Path = Field(
