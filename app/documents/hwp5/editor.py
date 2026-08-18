@@ -28,6 +28,7 @@ HWP5_SIGNATURE = b"HWP Document File"
 HWPTAG_PARA_HEADER = 66
 HWPTAG_PARA_TEXT = 67
 HWPTAG_PARA_CHAR_SHAPE = 68
+HWPTAG_PARA_LINE_SEG = 69
 HWPTAG_LIST_HEADER = 72
 HWPTAG_ID_MAPPINGS = 17
 HWPTAG_BIN_DATA = 18
@@ -250,6 +251,15 @@ def _is_plain_para_payload(payload: bytes) -> bool:
     return all(code >= 32 or code == 13 for code in units)
 
 
+def _is_text_with_line_breaks_payload(payload: bytes) -> bool:
+    """Allow a soft line break while rejecting opaque inline HWP controls."""
+
+    if len(payload) % 2:
+        return False
+    units = struct.unpack(f"<{len(payload) // 2}H", payload) if payload else ()
+    return all(code >= 32 or code in (10, 13) for code in units)
+
+
 def _set_header_character_count(payload: bytes, count: int) -> bytes:
     if len(payload) < 4:
         raise Hwp5Error("PARA_HEADER payload is too short")
@@ -305,6 +315,40 @@ def _adjust_char_shape_positions(
             adjusted.append((new_position, shape_id))
         payload = b"".join(struct.pack("<II", *run) for run in adjusted)
         records[index] = HwpRecord(record.tag_id, record.level, payload)
+
+
+def _adjust_line_segment_positions(
+    records: list[HwpRecord],
+    first_child: int,
+    last_child: int,
+    start: int,
+    end: int,
+    replacement_end: int,
+) -> None:
+    """Move cached line-start offsets after a text replacement."""
+
+    if end == start:
+        return
+    delta = replacement_end - end
+    old_width = end - start
+    new_width = replacement_end - start
+    for index in range(first_child, last_child):
+        record = records[index]
+        if record.tag_id != HWPTAG_PARA_LINE_SEG:
+            continue
+        if len(record.payload) % 36:
+            raise UnsupportedHwpError("PARA_LINE_SEG has an invalid payload size")
+        payload = bytearray(record.payload)
+        for offset in range(0, len(payload), 36):
+            position = struct.unpack_from("<I", payload, offset)[0]
+            if position <= start:
+                adjusted = position
+            elif position < end:
+                adjusted = start + round((position - start) * new_width / old_width)
+            else:
+                adjusted = position + delta
+            struct.pack_into("<I", payload, offset, adjusted)
+        records[index] = HwpRecord(record.tag_id, record.level, bytes(payload))
 
 
 def _encode_chid(value: str) -> bytes:
@@ -521,6 +565,14 @@ class Hwp5BinaryDocument:
                 old_units,
                 new_units,
             )
+            _adjust_line_segment_positions(
+                records,
+                target.record_index + 1,
+                next_header_index,
+                0,
+                old_units,
+                new_units,
+            )
             records[text_index] = HwpRecord(HWPTAG_PARA_TEXT, old_text_record.level, payload)
         else:
             records.insert(
@@ -579,7 +631,7 @@ class Hwp5BinaryDocument:
             )
         text_index = text_indices[0]
         text_record = records[text_index]
-        if not _is_plain_para_payload(text_record.payload):
+        if not _is_text_with_line_breaks_payload(text_record.payload):
             raise UnsupportedHwpError(f"paragraph {target.index} contains inline controls")
         source_text = text_record.payload.decode("utf-16-le")
         if not source_text.endswith("\r"):
@@ -605,7 +657,15 @@ class Hwp5BinaryDocument:
             end_units,
             replacement_end,
         )
-        payload = _plain_text_payload(result)
+        _adjust_line_segment_positions(
+            records,
+            target.record_index + 1,
+            next_header_index,
+            start_units,
+            end_units,
+            replacement_end,
+        )
+        payload = (result + "\r").encode("utf-16-le")
         records[text_index] = HwpRecord(text_record.tag_id, text_record.level, payload)
         records[target.record_index] = HwpRecord(
             header.tag_id,
@@ -614,7 +674,7 @@ class Hwp5BinaryDocument:
         )
         self._modified_sections.add(section)
         changed = self.paragraphs(section)[target.index]
-        if changed.text != result:
+        if changed.text != result.replace("\n", ""):
             raise Hwp5Error(
                 f"paragraph verification failed: expected {result!r}, got {changed.text!r}"
             )
@@ -640,6 +700,9 @@ class Hwp5BinaryDocument:
             )
         match = candidates[occurrence]
         token = match.group(0)
+        token_occurrence = sum(
+            candidate.group(0) == token for candidate in candidates[:occurrence]
+        )
         if token in {"□", "☐", "☑"}:
             replacement = "☑" if checked else "☐"
         else:
@@ -650,7 +713,7 @@ class Hwp5BinaryDocument:
             ParagraphSelector(index=target.index, require_empty=False),
             token,
             replacement,
-            occurrence=0,
+            occurrence=token_occurrence,
             section=section,
         )
 

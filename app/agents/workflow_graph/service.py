@@ -20,11 +20,13 @@ def _seed_ocr_result(state: RenewalState, ocr_result: dict[str, Any] | None) -> 
         return
     from .ocr_bridge import normalize_ocr_fields
 
-    normalized = normalize_ocr_fields(dict(ocr_result))
+    raw = dict(ocr_result)
+    normalized = normalize_ocr_fields(raw)
     if not normalized:
-        state["ocr_result"] = dict(ocr_result)
+        state["ocr_result"] = raw
         return
-    state["ocr_result"] = normalized
+    # Server가 보낸 OCR 원본 필드는 템플릿 보충에 쓸 수 있으므로 버리지 않는다.
+    state["ocr_result"] = {**raw, **normalized}
     state["slots"] = {**state.get("slots", {}), **normalized}
     missing = [m for m in state.get("missing_slots", []) if not state["slots"].get(m)]
     state["missing_slots"] = missing

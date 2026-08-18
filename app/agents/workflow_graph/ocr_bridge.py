@@ -16,6 +16,7 @@ _FIELD_ALIASES: dict[str, str] = {
     "full_name": "full_name",
     "legal_name": "full_name",
     "stay_expiration_date": "stay_expiry_date",
+    "residence_address_1": "address_in_korea",
 }
 
 
