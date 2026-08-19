@@ -8,7 +8,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.agents.workflow_graph import RenewalOrchestrator
 from app.agents.workflow_graph.nodes.document_generator import (
-    EditingServiceDocumentGenerator,
+    HwpxDocumentGenerator,
 )
 from app.agents.workflow_graph.nodes.language_stub import CONTRACT_SLOTS
 from app.agents.workflow_graph.state import IDENTITY_SLOTS, RenewalState
@@ -153,7 +153,7 @@ async def test_renewal_run_resumes_same_task_from_approved_ocr_to_generated_draf
         guide_node=successful_guide,
         lookup=db,
         store=db,
-        document_generator=EditingServiceDocumentGenerator(output_dir=tmp_path),
+        document_generator=HwpxDocumentGenerator(output_dir=tmp_path),
         task_store=InMemoryTaskStore(),
     )
     app.dependency_overrides[get_renewal_orchestrator] = lambda: orchestrator
@@ -215,7 +215,7 @@ async def test_renewal_run_resumes_same_task_from_approved_ocr_to_generated_draf
         document["status"] == "generated"
         for document in data["generatedDocuments"]
     )
-    assert all(document["format"] == "hwp" for document in data["generatedDocuments"])
+    assert all(document["format"] == "hwpx" for document in data["generatedDocuments"])
     immigration = next(
         document
         for document in data["generatedDocuments"]

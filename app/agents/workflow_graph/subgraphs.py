@@ -111,7 +111,7 @@ def build_ocr_subgraph(
     return g.compile()
 
 
-# Document 서브그래프 컴파일 (HWP 초안)
+# Document 서브그래프 컴파일 (HWPX 초안)
 def build_document_subgraph(
     *, document_generator: DocumentGenerator | None = None
 ) -> Any:

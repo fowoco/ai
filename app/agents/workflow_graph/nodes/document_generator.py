@@ -1,4 +1,4 @@
-# 문서생성 훅 — DB·OCR 병합 후 HWP 초안 생성 (필수 4종)
+# 문서생성 훅 — DB·OCR 병합 후 HWPX 초안 생성 (필수 4종)
 
 from __future__ import annotations
 
@@ -7,9 +7,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol
 
-from app.documents.common import DocumentFormat
-from app.documents.editing import DocumentEditingService
 from app.documents.editing.template_names import template_display_name
+from app.documents.records import DocumentRecordGenerationService
 
 from ..document_field_map import values_for_template
 from ..state import RenewalState
@@ -54,7 +53,7 @@ class StubDocumentGenerator:
                 {
                     "template_id": tid,
                     "name": template_display_name(tid),
-                    "format": "hwp",
+                    "format": "hwpx",
                     "status": "stub",
                     "mapped_fields": sorted(values.keys()),
                     "values": values,
@@ -63,22 +62,24 @@ class StubDocumentGenerator:
         return results
 
 
-# DocumentEditingService로 초안 생성 시도 실패 시 stub 메타
-class EditingServiceDocumentGenerator:
+# 고정 셀 규칙으로 HWPX 초안 생성 시도, 실패 시 stub 메타
+class HwpxDocumentGenerator:
 
-    # 편집 서비스·출력 경로·템플릿 목록 주입
+    # 레코드 생성 서비스·출력 경로·템플릿 목록 주입
     def __init__(
         self,
-        editing: DocumentEditingService | None = None,
+        record_generation: DocumentRecordGenerationService | None = None,
         *,
         output_dir: Path | None = None,
         template_ids: Sequence[str] | None = None,
     ) -> None:
-        self._editing = editing or DocumentEditingService()
+        self._record_generation = (
+            record_generation or DocumentRecordGenerationService()
+        )
         self._output_dir = output_dir
         self._template_ids = tuple(template_ids) if template_ids else None
 
-    # 템플릿별 필드 매핑으로 HWP 생성 시도
+    # 템플릿별 canonical 필드 매핑으로 HWPX 생성 시도
     def __call__(self, state: RenewalState) -> list[dict[str, Any]]:
         out_dir = self._output_dir or Path(tempfile.mkdtemp(prefix="fowoco-renewal-"))
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -86,14 +87,13 @@ class EditingServiceDocumentGenerator:
         plans = state.get("document_field_values") or {}
         results: list[dict[str, Any]] = []
         for tid in template_ids:
-            dest = out_dir / f"{tid}.hwp"
+            dest = out_dir / f"{tid}.hwpx"
             values = dict(plans[tid]) if tid in plans else values_for_template(tid, state)
             try:
-                mutation = self._editing.generate(
-                    tid,
-                    DocumentFormat.HWP,
+                mutation = self._record_generation.generate(
+                    values,
                     dest,
-                    values=values or None,
+                    template_id=tid,
                 )
                 results.append(
                     {
@@ -112,7 +112,7 @@ class EditingServiceDocumentGenerator:
                     {
                         "template_id": tid,
                         "name": template_display_name(tid),
-                        "format": "hwp",
+                        "format": "hwpx",
                         "status": "stub",
                         "error": str(exc),
                         "mapped_fields": sorted(values.keys()),
@@ -120,3 +120,7 @@ class EditingServiceDocumentGenerator:
                     }
                 )
         return results
+
+
+# 기존 내부 import를 사용하는 코드가 깨지지 않도록 한 릴리스 동안 별칭을 유지한다.
+EditingServiceDocumentGenerator = HwpxDocumentGenerator

@@ -11,7 +11,7 @@ from app.agents.workflow_graph.document_field_map import (
     values_for_template,
 )
 from app.agents.workflow_graph.nodes import document_generator
-from app.agents.workflow_graph.nodes.document_generator import EditingServiceDocumentGenerator
+from app.agents.workflow_graph.nodes.document_generator import HwpxDocumentGenerator
 from app.agents.workflow_graph.state import empty_renewal_state
 from app.documents.common import DocumentFormat
 from app.documents.editing.models import DocumentMutationResult
@@ -115,6 +115,8 @@ def test_extension_and_guaranty_mapping() -> None:
 
     guaranty = map_identity_guaranty(state)
     assert guaranty["foreign_name"] == "NGUYEN VAN AN"
+    assert guaranty["foreign_family_name"] == "NGUYEN"
+    assert guaranty["foreign_given_name"] == "VAN AN"
     assert guaranty["foreign_passport"] == "P1234567"
     assert guaranty["stay_purpose"] == "취업"
     assert guaranty["guarantor_name"] == "김민수"
@@ -150,7 +152,7 @@ def test_document_field_statuses_exclude_assets_and_expose_empty_text_fields() -
 
 # 실생성기가 필수 4종 초안을 만들고 매핑 필드를 남긴다
 def test_editing_generator_maps_and_generates_or_stubs(tmp_path: Path) -> None:
-    gen = EditingServiceDocumentGenerator(output_dir=tmp_path)
+    gen = HwpxDocumentGenerator(output_dir=tmp_path)
     docs = gen(_sample_state())
     assert len(docs) == 4
     by_id = {d["template_id"]: d for d in docs}
@@ -167,22 +169,20 @@ def test_editing_generator_maps_and_generates_or_stubs(tmp_path: Path) -> None:
 
 
 def test_editing_generator_reports_generated_document_format(tmp_path: Path) -> None:
-    class SuccessfulEditing:
+    class SuccessfulRecordGeneration:
         def generate(
             self,
-            template_id: str,
-            document_format: DocumentFormat,
+            values: dict[str, object],
             destination: Path,
             *,
-            values: dict[str, object] | None = None,
-            **_: object,
+            template_id: str,
         ) -> DocumentMutationResult:
             destination.touch()
             return DocumentMutationResult(
                 destination,
-                document_format,
+                DocumentFormat.HWPX,
                 template_id,
-                tuple(values or {}),
+                tuple(values),
             )
 
     state = empty_renewal_state(
@@ -191,14 +191,15 @@ def test_editing_generator_reports_generated_document_format(tmp_path: Path) -> 
         instruction="체류기간 연장 갱신",
         slots={"full_name": "NGUYEN VAN AN"},
     )
-    docs = EditingServiceDocumentGenerator(
-        SuccessfulEditing(),
+    docs = HwpxDocumentGenerator(
+        SuccessfulRecordGeneration(),
         output_dir=tmp_path,
         template_ids=("standard_labor_contract_v6",),
     )(state)
 
     assert docs[0]["status"] == "generated"
-    assert docs[0]["format"] == "hwp"
+    assert docs[0]["format"] == "hwpx"
+    assert Path(docs[0]["path"]).suffix == ".hwpx"
 
 
 # 사전 계산된 템플릿 계획이 있으면 재매핑하지 않고 그대로 생성에 쓴다
@@ -207,7 +208,7 @@ def test_generator_uses_precomputed_document_field_values(tmp_path: Path) -> Non
     state["document_field_values"] = {
         "standard_labor_contract_v6": {"employee_name": "PLAN VALUE"}
     }
-    generator = EditingServiceDocumentGenerator(
+    generator = HwpxDocumentGenerator(
         output_dir=tmp_path,
         template_ids=("standard_labor_contract_v6",),
     )
@@ -227,7 +228,7 @@ def test_generator_derives_values_when_no_precomputed_plan(
         "values_for_template",
         lambda template_id, renewal_state: {"derived_field": "DERIVED VALUE"},
     )
-    generator = EditingServiceDocumentGenerator(
+    generator = HwpxDocumentGenerator(
         output_dir=tmp_path,
         template_ids=("standard_labor_contract_v6",),
     )

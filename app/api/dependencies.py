@@ -24,7 +24,7 @@ from app.agents.workflow import WorkflowAgent
 from app.agents.workflow_graph import RenewalOrchestrator
 from app.agents.workflow_graph.language_bridge import build_renewal_language_guide
 from app.agents.workflow_graph.nodes.document_generator import (
-    EditingServiceDocumentGenerator,
+    HwpxDocumentGenerator,
 )
 from app.agents.workflow_graph.nodes.language_stub import StubLanguageNode
 from app.agents.workflow_graph.ocr_bridge import DocumentOcrNode
@@ -110,9 +110,7 @@ def get_renewal_orchestrator() -> RenewalOrchestrator:
         guide_node=build_renewal_language_guide(language_service),
         lookup=db,
         store=db,
-        document_generator=EditingServiceDocumentGenerator(
-            get_document_editing_service()
-        ),
+        document_generator=HwpxDocumentGenerator(),
         task_store=get_task_store(),
     )
 

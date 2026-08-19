@@ -19,7 +19,7 @@ E-9 외국인근로자를 고용한 사업장의 재계약·체류기간 연장 
 | Renewal Agent | LangGraph로 HR 질문·근로자 요청·OCR·문서 생성 분기 | Server가 검증된 Worker·Company·Task Context 제공 |
 | Language Assistant | 표준 한국어·쉬운 한국어·15개 대상 언어 안내 초안과 검토 경고 | OpenAI 호환 LLM, 선택적으로 Qdrant 필요 |
 | OCR | 여권·외국인등록증 Template OCR 결과 정규화 | CLOVA OCR URL·Secret 필요 |
-| 문서 처리 | 재갱신 HWP 초안 4종, HWP/HWPX 검사·편집·변환 | 변환별 Java·rhwp·LibreOffice 실행환경 필요 |
+| 문서 처리 | 재갱신 HWPX 초안 4종, HWP/HWPX 검사·편집·변환 | 변환별 Java·rhwp·LibreOffice 실행환경 필요 |
 | 안전 처리 | 누락정보·낮은 신뢰도·Provider 실패를 HR 검토 상태로 반환 | 자동 승인·자동 발송·업무 DB 직접 수정 금지 |
 
 환경변수를 설정하지 않은 선택 기능은 Stub 또는 명시적인 `503`으로 동작합니다.
