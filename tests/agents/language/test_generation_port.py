@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 from pydantic import ValidationError
@@ -177,6 +179,50 @@ def test_adapter_sends_json_schema_response_contract() -> None:
     assert req_json["response_format"]["json_schema"]["strict"] is True
     assert req_json["response_format"]["json_schema"]["name"] == "EasyKoreanDraft"
     assert "temperature" not in req_json
+
+
+def test_adapter_normalizes_defaulted_fields_for_strict_schema() -> None:
+    captured: list[httpx.Request] = []
+
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "status": "passed",
+                                    "failed_checks": [],
+                                    "inconclusive_checks": [],
+                                }
+                            )
+                        }
+                    }
+                ]
+            },
+        )
+
+    port = OpenAICompatibleGenerationPort(
+        base_url="https://api.fake-llm.com/v1",
+        api_key="secret",
+        model="gpt-5.6-luna",
+        transport=httpx.MockTransport(handle_request),
+    )
+
+    result = port.generate(
+        operation="semantic_validation",
+        payload={},
+        response_model=SemanticValidationDraft,
+    )
+
+    schema = json.loads(captured[0].content)["response_format"]["json_schema"]["schema"]
+    assert schema["required"] == ["status", "failed_checks", "inconclusive_checks"]
+    assert "default" not in schema["properties"]["failed_checks"]
+    assert "default" not in schema["properties"]["inconclusive_checks"]
+    assert result.status == "passed"
 
 
 def test_adapter_parses_valid_json() -> None:

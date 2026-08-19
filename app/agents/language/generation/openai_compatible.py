@@ -36,6 +36,26 @@ def _sanitize_payload(payload: Mapping[str, object]) -> dict[str, object]:
     return result
 
 
+def _strict_json_schema(response_model: type[BaseModel]) -> dict[str, object]:
+    """Normalize Pydantic JSON Schema to the OpenAI strict-output subset."""
+    schema = response_model.model_json_schema(mode="validation")
+
+    def normalize(node: object) -> None:
+        if isinstance(node, dict):
+            node.pop("default", None)
+            properties = node.get("properties")
+            if isinstance(properties, dict):
+                node["required"] = list(properties)
+            for value in node.values():
+                normalize(value)
+        elif isinstance(node, list):
+            for value in node:
+                normalize(value)
+
+    normalize(schema)
+    return schema
+
+
 class GenerationError(Exception):
     """Base exception for generation errors."""
 
@@ -173,7 +193,7 @@ class OpenAICompatibleGenerationPort(StructuredGenerationPort):
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        json_schema = response_model.model_json_schema(mode="validation")
+        json_schema = _strict_json_schema(response_model)
         request_body = {
             "model": self.model,
             "messages": [
