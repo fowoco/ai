@@ -10,6 +10,7 @@ from app.agents.language.generation.models import (
 from app.agents.language.generation.openai_compatible import (
     GenerationError,
     GenerationHTTPError,
+    GenerationRefusalError,
     GenerationResponseTooLargeError,
     GenerationSchemaError,
     GenerationTransportError,
@@ -175,6 +176,7 @@ def test_adapter_sends_json_schema_response_contract() -> None:
     assert req_json["response_format"]["type"] == "json_schema"
     assert req_json["response_format"]["json_schema"]["strict"] is True
     assert req_json["response_format"]["json_schema"]["name"] == "EasyKoreanDraft"
+    assert "temperature" not in req_json
 
 
 def test_adapter_parses_valid_json() -> None:
@@ -271,7 +273,17 @@ def test_adapter_maps_429_5xx_and_timeout_to_typed_errors() -> None:
 
 def test_adapter_maps_400_to_http_error() -> None:
     def handle_request_400(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(400, content=b'{"error": "bad request"}')
+        return httpx.Response(
+            400,
+            headers={"x-request-id": "req_test_400"},
+            json={
+                "error": {
+                    "message": "must never leak",
+                    "type": "invalid_request_error",
+                    "code": "unsupported_parameter",
+                }
+            },
+        )
 
     transport = httpx.MockTransport(handle_request_400)
     port = OpenAICompatibleGenerationPort(
@@ -281,12 +293,51 @@ def test_adapter_maps_400_to_http_error() -> None:
         transport=transport,
     )
 
-    with pytest.raises(GenerationHTTPError):
+    with pytest.raises(GenerationHTTPError) as exc_info:
         port.generate(
             operation="easy_korean",
             payload={},
             response_model=EasyKoreanDraft,
         )
+    assert exc_info.value.code == "PROVIDER_REQUEST_INVALID"
+    assert exc_info.value.provider_error_code == "unsupported_parameter"
+    assert exc_info.value.request_id == "req_test_400"
+    assert "must never leak" not in str(exc_info.value)
+
+
+def test_adapter_maps_provider_refusal_to_typed_error() -> None:
+    def handle_request(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"x-request-id": "req_refusal"},
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": None,
+                            "refusal": "provider refusal text must not leak",
+                        }
+                    }
+                ]
+            },
+        )
+
+    port = OpenAICompatibleGenerationPort(
+        base_url="https://api.fake-llm.com/v1",
+        api_key="secret",
+        model="gpt-5.6-luna",
+        transport=httpx.MockTransport(handle_request),
+    )
+
+    with pytest.raises(GenerationRefusalError) as exc_info:
+        port.generate(
+            operation="translation",
+            payload={},
+            response_model=TranslationDraft,
+        )
+    assert exc_info.value.code == "PROVIDER_REFUSED"
+    assert exc_info.value.request_id == "req_refusal"
+    assert "provider refusal text" not in str(exc_info.value)
 
 
 def test_adapter_retries_transport_once_only() -> None:

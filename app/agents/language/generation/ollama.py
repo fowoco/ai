@@ -91,18 +91,14 @@ class OllamaGenerationPort(StructuredGenerationPort):
                     response = client.post(url, headers=headers, json=request_body)
 
                 if len(response.content) > 1_048_576:
-                    raise GenerationResponseTooLargeError(
-                        "Response content exceeds 1 MiB limit"
-                    )
+                    raise GenerationResponseTooLargeError("Response content exceeds 1 MiB limit")
 
                 if response.status_code == 200:
                     try:
                         response_json = response.json()
                         content = response_json.get("message", {}).get("content")
                         if not isinstance(content, str):
-                            raise GenerationSchemaError(
-                                "Content is missing or not a string"
-                            )
+                            raise GenerationSchemaError("Content is missing or not a string")
                     except (json.JSONDecodeError, AttributeError) as err:
                         raise GenerationSchemaError(
                             f"Invalid Ollama response wrapper: {err}"
@@ -124,9 +120,7 @@ class OllamaGenerationPort(StructuredGenerationPort):
                         continue
                     raise last_error
 
-                raise GenerationHTTPError(
-                    f"HTTP generation request failed with status {response.status_code}"
-                )
+                raise GenerationHTTPError(status_code=response.status_code)
             except (httpx.TimeoutException, httpx.NetworkError, httpx.TransportError) as err:
                 last_error = GenerationTransportError(
                     f"Network transport error: {type(err).__name__}"

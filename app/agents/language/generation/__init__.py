@@ -9,6 +9,7 @@ from .ollama import OllamaGenerationPort
 from .openai_compatible import (
     GenerationError,
     GenerationHTTPError,
+    GenerationRefusalError,
     GenerationResponseTooLargeError,
     GenerationSchemaError,
     GenerationTransportError,
@@ -20,6 +21,7 @@ __all__ = [
     "EasyKoreanDraft",
     "GenerationError",
     "GenerationHTTPError",
+    "GenerationRefusalError",
     "GenerationResponseTooLargeError",
     "GenerationSchemaError",
     "GenerationTransportError",
