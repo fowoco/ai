@@ -199,7 +199,10 @@ def build_translation_subgraph(
                 WarningItem(
                     component="translation",
                     code=WarningCode.TRANSLATION_GENERATION_FAILED,
-                    message="Translation generation failed completely",
+                    message=(
+                        "Translation generation failed: "
+                        f"{correction_result.generation_error_code or 'GENERATION_FAILED'}"
+                    ),
                 )
             )
             translation_result = TranslationResult(

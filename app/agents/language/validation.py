@@ -1,3 +1,4 @@
+import logging
 import re
 from collections import Counter
 from collections.abc import Sequence
@@ -24,6 +25,8 @@ from app.agents.language.ports import (
     SemanticValidationDecision,
     SemanticValidationPort,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_date_string(value: str) -> date | None:
@@ -240,6 +243,7 @@ class CorrectionResult:
     warnings: tuple[WarningCode, ...]
     requires_human_review: bool
     time_budget_exceeded: bool
+    generation_error_code: str | None = None
 
 
 class BoundedCorrectionController:
@@ -268,6 +272,7 @@ class BoundedCorrectionController:
         last_inconclusive_checks: tuple[ValidationCheckId, ...] = ()
         warnings: list[WarningCode] = []
         time_budget_exceeded = False
+        generation_error_code: str | None = None
 
         while True:
             # Check remaining time budget before scheduling generation/correction call
@@ -301,18 +306,35 @@ class BoundedCorrectionController:
                 else:
                     break
                 last_draft = current_draft
-            except Exception:
+            except Exception as exc:
+                error_code = getattr(exc, "code", "GENERATION_FAILED")
+                if not isinstance(error_code, str):
+                    error_code = "GENERATION_FAILED"
+                request_id = getattr(exc, "request_id", None)
+                if not isinstance(request_id, str):
+                    request_id = "unavailable"
+                logger.warning(
+                    "language_generation_failed component=%s error_code=%s "
+                    "error_type=%s provider_request_id=%s correction=%s",
+                    component,
+                    error_code,
+                    type(exc).__name__,
+                    request_id,
+                    is_correction,
+                )
+                generation_error_code = error_code
                 if attempts == 0:
                     # Hard generation failure on initial attempt
                     return CorrectionResult(
                         draft=None,
                         status="failed",
                         retry_count=0,
-                        failed_checks=("request_reason.present",),
+                        failed_checks=(),
                         inconclusive_checks=(),
                         warnings=(),
                         requires_human_review=True,
                         time_budget_exceeded=False,
+                        generation_error_code=generation_error_code,
                     )
                 break
 
@@ -401,6 +423,7 @@ class BoundedCorrectionController:
             warnings=tuple(warnings),
             requires_human_review=True,
             time_budget_exceeded=time_budget_exceeded,
+            generation_error_code=generation_error_code,
         )
 
 

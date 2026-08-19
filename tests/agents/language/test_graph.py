@@ -7,6 +7,7 @@ from app.agents.language.contracts import (
     LanguageAssistantOutput,
     LanguageExecutionPolicy,
     RequestContext,
+    WarningCode,
 )
 from app.agents.language.generation.models import (
     EasyKoreanDraft,
@@ -171,6 +172,12 @@ def test_translation_failure_preserves_easy_and_standard(
     assert output.requires_human_review is True
     assert output.standard_korean_text != ""
     assert output.easy_korean_text != ""
+    translation_failure = next(
+        warning
+        for warning in output.warnings
+        if warning.code == WarningCode.TRANSLATION_GENERATION_FAILED
+    )
+    assert translation_failure.message.endswith("GENERATION_FAILED")
 
 
 def test_parallel_execution_without_inter_branch_dependency(

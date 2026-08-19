@@ -185,7 +185,10 @@ def build_easy_korean_subgraph(
                     WarningItem(
                         component="easy_korean",
                         code=WarningCode.EASY_KOREAN_GENERATION_FAILED,
-                        message="Easy Korean generation failed",
+                        message=(
+                            "Easy Korean generation failed: "
+                            f"{correction_result.generation_error_code or 'GENERATION_FAILED'}"
+                        ),
                     ),
                     WarningItem(
                         component="easy_korean",

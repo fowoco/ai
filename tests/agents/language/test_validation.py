@@ -108,9 +108,7 @@ def test_extra_requested_item_fails(sample_context: RequestContext) -> None:
         requested_items=("여권 사본 1부", "근로계약서 사본 1부", "추가 서류 1부"),
         submission_method="방문 제출",
     )
-    checks = validate_deterministic(
-        request_context=sample_context, candidate=draft_extra_item
-    )
+    checks = validate_deterministic(request_context=sample_context, candidate=draft_extra_item)
     assert "requested_items.cardinality" in checks
 
 
@@ -445,8 +443,12 @@ def test_retry_exhaustion_sets_human_review(sample_context: RequestContext) -> N
 
 
 def test_hard_generation_failure_has_no_candidate(sample_context: RequestContext) -> None:
+    class ProviderRequestError(RuntimeError):
+        code = "PROVIDER_REQUEST_INVALID"
+        request_id = "req_safe_identifier"
+
     def failing_generate_fn(is_correction: bool, payload: dict) -> EasyKoreanDraft:
-        raise RuntimeError("Generation failed completely")
+        raise ProviderRequestError("Generation failed completely")
 
     class PassValidator:
         def validate(self, **kwargs: object) -> SemanticValidationDecision:
@@ -463,6 +465,8 @@ def test_hard_generation_failure_has_no_candidate(sample_context: RequestContext
     )
     assert result.draft is None
     assert result.status == "failed"
+    assert result.failed_checks == ()
+    assert result.generation_error_code == "PROVIDER_REQUEST_INVALID"
 
 
 def test_branch_budget_uses_monotonic_clock(sample_context: RequestContext) -> None:
