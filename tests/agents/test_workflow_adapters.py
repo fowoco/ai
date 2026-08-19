@@ -1,12 +1,13 @@
 ﻿"""Language/OCR 어댑터·태스크 재개·문서생성 훅 테스트."""
 
+import zipfile
 from pathlib import Path
 
 from app.agents.workflow_graph import LanguageNodeAdapter, OcrNodeAdapter, RenewalOrchestrator
 from app.agents.workflow_graph.adapters import normalize_language_output, normalize_ocr_output
 from app.agents.workflow_graph.document_field_map import values_for_template
 from app.agents.workflow_graph.nodes.document_generator import (
-    EditingServiceDocumentGenerator,
+    HwpxDocumentGenerator,
     StubDocumentGenerator,
 )
 from app.agents.workflow_graph.nodes.language_stub import CONTRACT_SLOTS
@@ -214,7 +215,7 @@ def test_editing_service_document_generator_writes_files(
     tmp_path: Path,
 ) -> None:
     """실 생성기가 필수 4종 파일을 생성하고 generated 상태를 반환한다."""
-    gen = EditingServiceDocumentGenerator(output_dir=tmp_path)
+    gen = HwpxDocumentGenerator(output_dir=tmp_path)
     state = empty_renewal_state(
         task_id="t",
         request_id="r",
@@ -226,6 +227,20 @@ def test_editing_service_document_generator_writes_files(
     assert all(d["status"] == "generated" for d in docs)
     assert all(Path(d["path"]).is_file() for d in docs)
     assert all(Path(d["path"]).stat().st_size > 0 for d in docs)
+    assert all(Path(d["path"]).suffix == ".hwpx" for d in docs)
+    assert all(d["format"] == "hwpx" for d in docs)
+    section_by_template: dict[str, str] = {}
+    for document in docs:
+        with zipfile.ZipFile(document["path"]) as package:
+            assert package.testzip() is None
+            assert package.read("mimetype") == b"application/hwp+zip"
+            section_by_template[document["template_id"]] = package.read(
+                "Contents/section0.xml"
+            ).decode("utf-8")
+        assert document["changed_fields"]
+    assert "Hong" in section_by_template["standard_labor_contract_v6"]
+    assert "Hong" in section_by_template["identity_guaranty_v129"]
+    assert "1990-01-01" in section_by_template["identity_guaranty_v129"]
     assert all("mapped_fields" in d for d in docs)
     assert all(
         d["values"] == values_for_template(d["template_id"], state) for d in docs

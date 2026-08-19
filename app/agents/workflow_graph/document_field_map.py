@@ -374,6 +374,8 @@ def map_identity_guaranty(state: RenewalState) -> dict[str, object]:
     company = _company(state)
     fields = {
         "foreign_name",
+        "foreign_family_name",
+        "foreign_given_name",
         "foreign_birthdate",
         "foreign_nationality",
         "foreign_passport",
@@ -392,7 +394,19 @@ def map_identity_guaranty(state: RenewalState) -> dict[str, object]:
         "guarantee_date",
     }
     values: dict[str, object] = _passthrough_known_fields(slots, fields)
-    _put(values, "foreign_name", _first(slots.get("full_name"), slots.get("foreign_name")))
+    foreign_name = _first(slots.get("full_name"), slots.get("foreign_name"))
+    family_name, given_name = _split_name(_as_str(foreign_name))
+    _put(values, "foreign_name", foreign_name)
+    _put(
+        values,
+        "foreign_family_name",
+        _first(slots.get("foreign_family_name"), family_name),
+    )
+    _put(
+        values,
+        "foreign_given_name",
+        _first(slots.get("foreign_given_name"), given_name),
+    )
     _put(
         values,
         "foreign_birthdate",
