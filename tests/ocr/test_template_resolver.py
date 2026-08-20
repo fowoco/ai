@@ -47,14 +47,32 @@ def test_arc_ignores_country_code() -> None:
     assert selection.template_ids == (43024, 43025)
 
 
-def test_rejects_missing_passport_country() -> None:
-    with pytest.raises(TemplateResolutionError, match="passport country"):
-        TemplateResolver().resolve(DocumentType.PASSPORT_COPY, None)
+def test_missing_passport_country_defaults_to_vietnam() -> None:
+    selection = TemplateResolver().resolve(DocumentType.PASSPORT_COPY, None)
+
+    assert selection.template_ids == (43038,)
 
 
-def test_rejects_blank_passport_country() -> None:
-    with pytest.raises(TemplateResolutionError, match="passport country"):
-        TemplateResolver().resolve(DocumentType.PASSPORT_COPY, "  ")
+def test_blank_passport_country_defaults_to_vietnam() -> None:
+    selection = TemplateResolver().resolve(DocumentType.PASSPORT_COPY, "  ")
+
+    assert selection.template_ids == (43038,)
+
+
+@pytest.mark.parametrize(
+    ("country", "template_id"),
+    [
+        ("kr", 43019),
+        ("ph", 43021),
+        ("jp", 43022),
+        ("cn", 43023),
+        ("vn", 43038),
+    ],
+)
+def test_normalizes_worker_country_code(country: str, template_id: int) -> None:
+    selection = TemplateResolver().resolve(DocumentType.PASSPORT_COPY, country)
+
+    assert selection.template_ids == (template_id,)
 
 
 def test_rejects_unsupported_passport_country_without_echoing_input() -> None:

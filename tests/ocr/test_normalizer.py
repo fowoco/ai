@@ -86,6 +86,85 @@ def test_normalizes_korean_passport_bilingual_dates() -> None:
     assert result.review_reasons == ()
 
 
+def test_normalizes_vietnamese_passport_fields_and_day_first_dates() -> None:
+    resolver = TemplateResolver()
+    fields = [
+        field("passport_number", " DEMO-P06-NOT-VALID "),
+        field("surname", " NGUYEN "),
+        field("given_names", " VAN   AN "),
+        field("nationality", " VIET NAM "),
+        field("date_of_birth", "12/04/1995"),
+        field("sex", " M "),
+        field("passport_issue_date", "18/08/2025"),
+        field("passport_expiry_date", "18/08/2027"),
+    ]
+
+    result = normalize_clova_response(
+        response(43038, fields),
+        resolver.resolve(DocumentType.PASSPORT_COPY, "VNM"),
+        0.80,
+        resolver,
+    )
+
+    assert result.status is OcrStatus.SUCCEEDED
+    assert result.fields == {
+        "passport_number": "DEMO-P06-NOT-VALID",
+        "surname": "NGUYEN",
+        "given_names": "VAN AN",
+        "nationality": "VIET NAM",
+        "date_of_birth": date(1995, 4, 12),
+        "sex": "M",
+        "passport_issue_date": date(2025, 8, 18),
+        "passport_expiry_date": date(2027, 8, 18),
+    }
+    assert result.review_reasons == ()
+
+
+def test_recovers_vietnamese_name_and_birth_date_from_actual_clova_shape() -> None:
+    resolver = TemplateResolver()
+    raw = response(
+        43038,
+        [
+            field("full_name", "NGUYEN VAN AN", 0.99729997),
+            field("passport_number", "DEMO-P06-NOT-VALID", 0.9687),
+            field("date_of_birth", "Ngav sinh /", 0.89199996),
+            field("sex", "M", 1.0),
+            field("nationality", "VIET NAM/ VIETNAMESE", 0.96786666),
+            field("passport_issue_date", "18/08/2025", 0.997),
+            field("passport_expiry_date", "18/08/2027", 0.996),
+            field(
+                "mrz",
+                "P<VNMNGUYEN<<TVAN<AN<<<<<<<<<<<<<<<<<<<<<<<<\n"
+                "NOTVALID2<0VNM9504120M0000000<0<<<<<<<<<<<<0",
+                0.92275,
+            ),
+        ],
+    )
+
+    result = normalize_clova_response(
+        raw,
+        resolver.resolve(DocumentType.PASSPORT_COPY, "VNM"),
+        0.80,
+        resolver,
+    )
+
+    assert result.status is OcrStatus.SUCCEEDED
+    assert result.fields == {
+        "passport_number": "DEMO-P06-NOT-VALID",
+        "surname": "NGUYEN",
+        "given_names": "VAN AN",
+        "nationality": "VIET NAM/ VIETNAMESE",
+        "date_of_birth": date(1995, 4, 12),
+        "sex": "M",
+        "passport_issue_date": date(2025, 8, 18),
+        "passport_expiry_date": date(2027, 8, 18),
+    }
+    assert result.field_confidences["surname"] == 0.99729997
+    assert result.field_confidences["given_names"] == 0.99729997
+    assert result.field_confidences["date_of_birth"] == 0.92275
+    assert result.review_reasons == ()
+
+
 def test_rejects_korean_passport_date_with_conflicting_months() -> None:
     resolver = TemplateResolver()
     fields = passport_required_fields()

@@ -1,6 +1,6 @@
 import re
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from app.ocr.models import (
@@ -38,6 +38,7 @@ APPROVED_FIELD_NAMES = frozenset(
         "passport_number",
         "surname",
         "given_names",
+        "nationality",
         "date_of_birth",
         "sex",
         "passport_issue_date",
@@ -50,10 +51,18 @@ APPROVED_FIELD_NAMES = frozenset(
 )
 
 _DATE_FORMATS = ("%Y-%m-%d", "%Y.%m.%d", "%Y/%m/%d")
+_VIETNAMESE_PASSPORT_DATE_FORMATS = (
+    "%d-%m-%Y",
+    "%d.%m.%Y",
+    "%d/%m/%Y",
+    "%d %b %Y",
+)
 _PASSPORT_DATE_PATTERN = re.compile(
     r"^(?P<day>\d{1,2})\s+(?P<numeric_month>\d{1,2})월\s*/\s*"
     r"(?P<english_month>[A-Za-z]{3})\s+(?P<year>\d{4})$"
 )
+_VNM_TEMPLATE_ID = 43038
+_VNM_MRZ_BIRTH_PATTERN = re.compile(r"VNM(?P<birth>\d{6})")
 _ENGLISH_MONTHS = {
     "JAN": 1,
     "FEB": 2,
@@ -114,9 +123,24 @@ def normalize_clova_response(
     fields: dict[str, FieldValue] = {}
     confidences: dict[str, float] = {}
     recognized_names: set[str] = set()
+    vietnamese_full_name: tuple[str, float] | None = None
+    vietnamese_mrz: tuple[str, float] | None = None
     for raw_field in _mapping_sequence(image.get("fields")):
         name = raw_field.get("name")
         text = raw_field.get("inferText")
+        if (
+            matched_template_id == _VNM_TEMPLATE_ID
+            and isinstance(name, str)
+            and name in {"full_name", "mrz"}
+            and isinstance(text, str)
+            and text.strip()
+        ):
+            value = (text.strip(), _confidence(raw_field.get("inferConfidence")))
+            if name == "full_name":
+                vietnamese_full_name = value
+            else:
+                vietnamese_mrz = value
+            continue
         if not isinstance(name, str) or name not in APPROVED_FIELD_NAMES:
             continue
         if not isinstance(text, str) or not text.strip():
@@ -129,7 +153,10 @@ def normalize_clova_response(
         confidences[name] = confidence
 
         if name in DATE_FIELDS:
-            parsed = _parse_date(text.strip())
+            parsed = _parse_date(
+                text.strip(),
+                allow_day_first=matched_template_id == _VNM_TEMPLATE_ID,
+            )
             if parsed is None:
                 fields.pop(name, None)
                 confidences.pop(name, None)
@@ -142,6 +169,25 @@ def normalize_clova_response(
             fields[name] = re.sub(r"\s+", "", text)
         else:
             fields[name] = " ".join(text.split())
+
+    if matched_template_id == _VNM_TEMPLATE_ID:
+        if vietnamese_full_name is not None:
+            name_parts = vietnamese_full_name[0].split()
+            if len(name_parts) >= 2:
+                fields.setdefault("surname", name_parts[0])
+                fields.setdefault("given_names", " ".join(name_parts[1:]))
+                recognized_names.update({"surname", "given_names"})
+                confidences.setdefault("surname", vietnamese_full_name[1])
+                confidences.setdefault("given_names", vietnamese_full_name[1])
+        if "date_of_birth" not in fields and vietnamese_mrz is not None:
+            mrz_birth_date = _parse_vietnamese_mrz_birth_date(vietnamese_mrz[0])
+            if mrz_birth_date is not None:
+                fields["date_of_birth"] = mrz_birth_date
+                recognized_names.add("date_of_birth")
+                confidences["date_of_birth"] = vietnamese_mrz[1]
+                invalid_reason = "invalid_date:date_of_birth"
+                if invalid_reason in review_reasons:
+                    review_reasons.remove(invalid_reason)
 
     required = _required_fields(selection.expected_document_type, side)
     for name in sorted(required):
@@ -212,8 +258,11 @@ def _required_fields(
     return frozenset()
 
 
-def _parse_date(value: str):
-    for date_format in _DATE_FORMATS:
+def _parse_date(value: str, *, allow_day_first: bool = False):
+    date_formats = _DATE_FORMATS
+    if allow_day_first:
+        date_formats += _VIETNAMESE_PASSPORT_DATE_FORMATS
+    for date_format in date_formats:
         try:
             return datetime.strptime(value, date_format).date()
         except ValueError:
@@ -234,6 +283,24 @@ def _parse_date(value: str):
         ).date()
     except ValueError:
         return None
+
+
+def _parse_vietnamese_mrz_birth_date(value: str) -> date | None:
+    match = _VNM_MRZ_BIRTH_PATTERN.search(re.sub(r"\s+", "", value).upper())
+    if match is None:
+        return None
+    compact = match.group("birth")
+    year = 2000 + int(compact[:2])
+    today = date.today()
+    if year > today.year:
+        year -= 100
+    try:
+        parsed = date(year, int(compact[2:4]), int(compact[4:6]))
+    except ValueError:
+        return None
+    if parsed > today:
+        return None
+    return parsed
 
 
 def _confidence(value: object) -> float:

@@ -114,6 +114,7 @@ async def test_success_calls_clova_and_returns_normalized_result() -> None:
         "passport_number": "M00000000",
         "surname": "TEST",
         "given_names": "USER",
+        "nationality": "KOR",
         "date_of_birth": date(2000, 1, 2),
         "passport_expiry_date": date(2030, 1, 2),
     }

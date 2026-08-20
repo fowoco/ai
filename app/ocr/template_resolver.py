@@ -12,6 +12,14 @@ PASSPORT_TEMPLATE_IDS = {
     "CHN": 43023,
     "VNM": 43038,
 }
+PASSPORT_COUNTRY_ALIASES = {
+    "KR": "KOR",
+    "PH": "PHL",
+    "JP": "JPN",
+    "CN": "CHN",
+    "VN": "VNM",
+}
+DEFAULT_PASSPORT_COUNTRY = "VNM"
 ARC_TEMPLATE_IDS = (43024, 43025)
 ARC_TEMPLATE_SIDES = {
     43024: DocumentSide.FRONT,
@@ -33,7 +41,11 @@ class TemplateResolver:
 
         normalized_country = (country_code or "").strip().upper()
         if not normalized_country:
-            raise TemplateResolutionError("passport country is required")
+            normalized_country = DEFAULT_PASSPORT_COUNTRY
+        normalized_country = PASSPORT_COUNTRY_ALIASES.get(
+            normalized_country,
+            normalized_country,
+        )
 
         template_id = PASSPORT_TEMPLATE_IDS.get(normalized_country)
         if template_id is None:

@@ -9,7 +9,6 @@ from app.core.config import get_settings
 from app.main import create_app
 from app.ocr.models import (
     DocumentSide,
-    InvalidOcrRequest,
     OcrFileTooLarge,
     OcrProcessResult,
     OcrStatus,
@@ -46,8 +45,6 @@ class FakeOcrService:
 
     async def process(self, command):
         self.commands.append(command)
-        if command.document_type.value == "PASSPORT_COPY" and not command.country_code:
-            raise InvalidOcrRequest("passport country is required")
         if self.error:
             raise self.error
         return self.result
@@ -231,14 +228,28 @@ def test_invalid_x_request_id_returns_422(authenticated_client) -> None:
     assert service.commands == []
 
 
-def test_missing_passport_country_returns_400(authenticated_client) -> None:
-    client, _ = authenticated_client
+def test_missing_passport_country_is_forwarded_for_vietnam_fallback(
+    authenticated_client,
+) -> None:
+    client, service = authenticated_client
     data = request_data()
     data.pop("country_code")
 
     response = post_ocr(client, data=data)
 
-    assert response.status_code == 400
+    assert response.status_code == 200
+    assert service.commands[0].country_code is None
+
+
+def test_blank_passport_country_is_forwarded_for_vietnam_fallback(
+    authenticated_client,
+) -> None:
+    client, service = authenticated_client
+
+    response = post_ocr(client, data=request_data(country_code=""))
+
+    assert response.status_code == 200
+    assert service.commands[0].country_code is None
 
 
 @pytest.mark.parametrize(
