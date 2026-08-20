@@ -1,5 +1,6 @@
 ﻿import io
 import json
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
@@ -158,6 +159,75 @@ async def test_generate_hwpx_with_values_and_application_options() -> None:
     assert "PARK" in section
     assert "API" in section
     assert "[v]" in section
+
+
+@pytest.mark.asyncio
+async def test_generate_hwpx_with_canonical_values() -> None:
+    payload = {
+        "template_id": "immigration_integrated_application_v34",
+        "format": "hwpx",
+        "values": {
+            "family_name": "NGUYEN",
+            "given_names": "VAN A",
+            "birth_year": "1995",
+            "birth_month": "03",
+            "birth_day": "15",
+            "passport_number": "P1234567",
+        },
+    }
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/documents/generate",
+            data={"payload": json.dumps(payload)},
+        )
+
+    assert response.status_code == 200, response.text
+    with zipfile.ZipFile(io.BytesIO(response.content)) as package:
+        root = ET.fromstring(package.read("Contents/section0.xml"))
+    hp = "{http://www.hancom.co.kr/hwpml/2011/paragraph}"
+    table = next(root.iter(f"{hp}tbl"))
+    cells = {}
+    for cell in table.iter(f"{hp}tc"):
+        address = cell.find(f"{hp}cellAddr")
+        if address is not None:
+            coordinates = (
+                int(address.attrib["rowAddr"]),
+                int(address.attrib["colAddr"]),
+            )
+            cells[coordinates] = "".join(
+                text.text or "" for text in cell.iter(f"{hp}t")
+            )
+    assert cells[(14, 3)] == "NGUYEN"
+    assert cells[(14, 19)] == "VAN A"
+    assert cells[(16, 5)] == "1995"
+    assert cells[(16, 15)] == "03"
+    assert cells[(16, 19)] == "15"
+    assert cells[(18, 3)] == "P1234567"
+
+
+@pytest.mark.asyncio
+async def test_generate_hwpx_rejects_unknown_value_key() -> None:
+    payload = {
+        "template_id": "immigration_integrated_application_v34",
+        "format": "hwpx",
+        "values": {"definitely_unknown_field": "x"},
+    }
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/documents/generate",
+            data={"payload": json.dumps(payload)},
+        )
+
+    assert response.status_code == 422
+    assert "fields were not found in the HWPX template" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
