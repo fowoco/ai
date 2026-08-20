@@ -35,7 +35,14 @@ class XmlCellRule:
 TEMPLATE_RULES: dict[str, tuple[XmlCellRule, ...]] = {
     "identity_guaranty_v129": (
         XmlCellRule("foreign_family_name", 0, 3, 1, "append"),
-        XmlCellRule("foreign_given_name", 0, 3, 2, "append"),
+        XmlCellRule(
+            "foreign_given_name",
+            0,
+            3,
+            2,
+            "append",
+            record_keys=("foreign_name",),
+        ),
         XmlCellRule("foreign_name_hanja", 0, 3, 5, "append"),
         XmlCellRule("foreign_birthdate", 0, 4, 1, "append"),
         XmlCellRule(

@@ -8,6 +8,8 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from PIL import Image, ImageDraw
 
+from app.agents.workflow_graph.document_field_map import values_for_template
+from app.agents.workflow_graph.state import empty_renewal_state
 from app.documents.hwp5 import Hwp5BinaryDocument, Hwp5DocumentService
 from app.documents.hwpx import HwpxDocumentService
 from app.main import app
@@ -207,6 +209,74 @@ async def test_generate_hwpx_with_canonical_values() -> None:
     assert cells[(16, 15)] == "03"
     assert cells[(16, 19)] == "15"
     assert cells[(18, 3)] == "P1234567"
+
+
+@pytest.mark.asyncio
+async def test_generate_stay_extension_hwpx_documents_from_renewal_values() -> None:
+    state = empty_renewal_state(
+        task_id="task-stay-extension",
+        request_id="request-stay-extension",
+        instruction="체류기간 연장 갱신",
+        slots={
+            "full_name": "NGUYEN VAN AN",
+            "date_of_birth": "1995-03-21",
+            "nationality": "베트남",
+            "passport_number": "P1234567",
+            "alien_registration_number": "900101-1234567",
+            "stay_expiry_date": "2026-12-31",
+            "lodging": "기숙사 A동",
+            "phone": "010-1234-5678",
+            "employer_name": "김민수",
+        },
+    )
+    state["company_record"] = {
+        "name": "주식회사 한빛정밀",
+        "phone": "031-000-0000",
+        "address": "경기도 안산시 단원구",
+        "employer_name": "김민수",
+    }
+    template_ids = (
+        "immigration_integrated_application_v34",
+        "identity_guaranty_v129",
+    )
+    values_by_template = {
+        template_id: values_for_template(template_id, state)
+        for template_id in template_ids
+    }
+    guaranty_values = values_by_template["identity_guaranty_v129"]
+    assert guaranty_values["foreign_name"] == "NGUYEN VAN AN"
+    assert guaranty_values["foreign_family_name"] == "NGUYEN"
+    assert guaranty_values["foreign_given_name"] == "VAN AN"
+
+    sections = {}
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        for template_id, values in values_by_template.items():
+            response = await client.post(
+                "/api/v1/documents/generate",
+                data={
+                    "payload": json.dumps(
+                        {
+                            "template_id": template_id,
+                            "format": "hwpx",
+                            "values": values,
+                        },
+                        ensure_ascii=False,
+                    )
+                },
+            )
+            assert response.status_code == 200, f"{template_id}: {response.text}"
+            with zipfile.ZipFile(io.BytesIO(response.content)) as package:
+                sections[template_id] = package.read(
+                    "Contents/section0.xml"
+                ).decode("utf-8")
+
+    for section in sections.values():
+        assert "NGUYEN" in section
+        assert "VAN AN" in section
+        assert "P1234567" in section
 
 
 @pytest.mark.asyncio
