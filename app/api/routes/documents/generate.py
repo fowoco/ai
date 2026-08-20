@@ -61,6 +61,10 @@ def generate_document(
     editing_service: Annotated[
         DocumentEditingService, Depends(get_document_editing_service)
     ],
+    record_service: Annotated[
+        DocumentRecordGenerationService,
+        Depends(get_document_record_generation_service),
+    ],
     settings: Annotated[Settings, Depends(get_settings)],
     assets: Annotated[
         list[UploadFile] | None,
@@ -80,14 +84,32 @@ def generate_document(
             temporary_directory / f"output.{command.format.value}"
         )
         try:
-            result = editing_service.generate(
-                command.template_id,
-                command.format,
-                destination_path,
-                values=command.values,
-                application_options=command.application_options,
-                assets=asset_paths,
-            )
+            record_keys = {
+                key
+                for rule in record_service.rules.get(command.template_id, ())
+                for key in (rule.source_key, *rule.record_keys)
+            }
+            if (
+                command.format is DocumentFormat.HWPX
+                and command.values
+                and set(command.values) <= record_keys
+                and not command.application_options
+                and not asset_paths
+            ):
+                result = record_service.generate(
+                    command.values,
+                    destination_path,
+                    template_id=command.template_id,
+                )
+            else:
+                result = editing_service.generate(
+                    command.template_id,
+                    command.format,
+                    destination_path,
+                    values=command.values,
+                    application_options=command.application_options,
+                    assets=asset_paths,
+                )
         except DocumentEditingError as exc:
             raise_editing_http_error(exc)
         return mutation_file_response(
