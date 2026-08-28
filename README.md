@@ -1,8 +1,13 @@
 # FOWOCO AI
 
 <p align="center">
-  <a href="https://github.com/fowoco/ai/actions/workflows/ci.yml"><img alt="AI CI" src="https://github.com/fowoco/ai/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://github.com/fowoco/ai/actions/workflows/deploy.yml"><img alt="AI Deploy" src="https://github.com/fowoco/ai/actions/workflows/deploy.yml/badge.svg?branch=main"></a>
+  <a href="https://www.python.org/"><img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white"></a>
+  <a href="https://fastapi.tiangolo.com/"><img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white"></a>
+  <a href="https://www.langchain.com/langgraph"><img alt="LangGraph" src="https://img.shields.io/badge/LangGraph-1C3C3C?style=flat-square&logo=langgraph&logoColor=white"></a>
+  <a href="https://qdrant.tech/"><img alt="Qdrant" src="https://img.shields.io/badge/Qdrant-DC244C?style=flat-square&logo=qdrant&logoColor=white"></a>
+  <a href="https://www.ncloud.com/product/aiService/ocr"><img alt="CLOVA OCR" src="https://img.shields.io/badge/CLOVA_OCR-03C75A?style=flat-square&logo=naver&logoColor=white"></a>
+  <a href="https://modelcontextprotocol.io/"><img alt="HWPX MCP" src="https://img.shields.io/badge/HWPX_MCP-111111?style=flat-square&logo=modelcontextprotocol&logoColor=white"></a>
+  <a href="https://www.docker.com/"><img alt="Docker" src="https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white"></a>
 </p>
 
 FOWOCO AI는 E-9 외국인근로자를 고용한 사업장의 재계약·체류기간 연장 업무를
