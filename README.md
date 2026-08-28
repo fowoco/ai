@@ -11,7 +11,34 @@ E-9 외국인근로자를 고용한 사업장의 재계약·체류기간 연장 
 > 초안**이며, 사용자·사업장 권한, 공식 업무 상태, 파일 저장, 승인과 감사 이력은
 > FOWOCO Server가 통제합니다.
 
-## 프로젝트 한눈에 보기
+## 빠른 탐색
+
+- [아키텍처](#아키텍처)
+- [핵심 기능](#핵심-기능)
+- [저장소 경계](#저장소-경계)
+- [런타임 설계 세부사항](#런타임-설계-세부사항)
+- [주요 API](#주요-api)
+- [빠른 시작](#빠른-시작)
+- [주요 문서](#주요-문서)
+
+## 아키텍처
+
+### 전체 시스템 흐름
+
+![FOWOCO Client, Server, AI Runtime, HR 검토로 이어지는 전체 시스템 흐름](docs/assets/architecture/system-flow.png)
+
+AI Runtime은 Server가 전달한 업무 요청을 분석하고 초안을 반환합니다. 업무 상태와
+승인 여부는 Server가 통제하며, 최종 확정은 HR 검토를 거칩니다.
+
+### AI 팀 런타임 상세
+
+![FastAPI, Intent PLAN, Renewal Supervisor, Language Assistant, CLOVA OCR, Document Engine, HWPX MCP로 구성된 AI 팀 런타임](docs/assets/architecture/ai-runtime-detail.png)
+
+이 저장소는 **FOWOCO AI 팀이 공동으로 관리하는 FastAPI Runtime**입니다. 문서 처리
+경로에서는 Document Engine이 HWPX MCP를 호출하고, 편집 결과를 다시 받은 뒤 문서
+초안을 Server·HR 검토 경계로 전달합니다.
+
+## 핵심 기능
 
 | 영역 | 구현 내용 | 실제 Provider 조건 |
 | --- | --- | --- |
@@ -54,21 +81,7 @@ AI는 운영 DB에 SQL을 만들거나 직접 접근하지 않습니다. PLAN에
 이 경계 덕분에 Provider가 실패하거나 모델 판단이 바뀌어도 승인·증빙·업무 상태는
 Server에서 일관되게 유지됩니다.
 
-## 대표 실행 흐름
-
-```text
-HR 원문 입력
-→ Server가 AiRun 생성
-→ AI PLAN: 대표 Intent·Workflow와 필요한 field 결정
-→ Server가 PLAN 결정을 저장하고 허용된 Context만 조회
-→ AI ANALYZE: 저장된 결정을 재사용해 질문 또는 Candidate 생성
-→ Server가 Workflow 일치 여부를 검증
-→ HR이 Candidate 채택
-→ Server가 Renewal 실행 요청
-→ Agent가 HR 질문 / 근로자 요청 / OCR / 안내 / 문서 생성 분기
-→ Server가 초안과 파일을 저장
-→ HR 검토·승인 후에만 다음 업무 진행
-```
+## 런타임 설계 세부사항
 
 ### PLAN과 ANALYZE를 나눈 이유
 
@@ -146,7 +159,9 @@ docs/                       API·Provider·운영 계약
 tests/                      단위·계약·통합 테스트
 ```
 
-## 로컬 검증
+## 빠른 시작
+
+Python 3.11 이상에서 로컬 Runtime을 실행합니다.
 
 ```bash
 python -m venv .venv
@@ -156,7 +171,14 @@ cp .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
-별도 터미널에서 다음을 실행합니다.
+애플리케이션이 시작되면 OpenAPI 문서 또는 스키마로 첫 실행을 확인합니다.
+
+```bash
+open http://localhost:8000/docs
+curl http://localhost:8000/openapi.json
+```
+
+별도 터미널에서 테스트와 정적 검사를 실행합니다.
 
 ```bash
 pytest
